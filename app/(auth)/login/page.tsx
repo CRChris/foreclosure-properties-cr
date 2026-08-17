@@ -1,0 +1,179 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Scale, ArrowRight, Mail, Lock, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isMagicLink, setIsMagicLink] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!email) {
+      setErrorMsg('Por favor ingresa tu correo electrónico.');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      // Offline / Simulation mode: log in locally and redirect
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user_session', JSON.stringify({ email, name: email.split('@')[0] }));
+      }
+      setSuccessMsg('Accediendo a la plataforma...');
+      setTimeout(() => {
+        router.push('/auctions');
+      }, 700);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+
+      if (isMagicLink) {
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auctions`,
+          },
+        });
+        if (error) throw error;
+        setSuccessMsg('¡Enlace de acceso enviado! Revisa tu bandeja de entrada.');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        router.push('/auctions');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al iniciar sesión. Verifica tus credenciales.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 backdrop-blur-md">
+        {/* Logo Header */}
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white mx-auto shadow-lg shadow-emerald-950/50">
+            <Scale className="w-6 h-6" />
+          </div>
+          <h1 className="text-2xl font-extrabold text-white tracking-tight">
+            Remates<span className="text-emerald-400">CR</span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Portal de Inteligencia Inmobiliaria Judicial y Remates en Costa Rica
+          </p>
+        </div>
+
+        {/* Feedback Messages */}
+        {errorMsg && (
+          <div className="p-3 bg-rose-950/60 border border-rose-800/60 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="p-3 bg-emerald-950/60 border border-emerald-800/60 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        {/* Auth Mode Switch */}
+        <div className="flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs">
+          <button
+            type="button"
+            onClick={() => setIsMagicLink(false)}
+            className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
+              !isMagicLink ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Contraseña
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsMagicLink(true)}
+            className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
+              isMagicLink ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Magic Link (Sin clave)
+          </button>
+        </div>
+
+        {/* Form */}
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300">Correo Electrónico</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="inversionista@ejemplo.com"
+              icon={<Mail className="w-4 h-4 text-slate-500" />}
+              required
+            />
+          </div>
+
+          {!isMagicLink && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-300">Contraseña</label>
+              </div>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                icon={<Lock className="w-4 h-4 text-slate-500" />}
+                required
+              />
+            </div>
+          )}
+
+          <Button type="submit" disabled={isLoading} className="w-full font-bold h-10">
+            {isLoading ? 'Verificando...' : isMagicLink ? 'Enviar Enlace de Acceso' : 'Iniciar Sesión'}
+          </Button>
+        </form>
+
+        {/* Footer Navigation */}
+        <div className="pt-2 flex flex-col items-center gap-3 text-center border-t border-slate-800/80">
+          <p className="text-xs text-slate-400">
+            ¿No tienes cuenta?{' '}
+            <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-bold">
+              Registrarse como Inversionista
+            </Link>
+          </p>
+
+          <Link
+            href="/auctions"
+            className="text-xs text-slate-400 hover:text-slate-200 font-medium inline-flex items-center gap-1"
+          >
+            <span>Explorar remates sin registrarse</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
