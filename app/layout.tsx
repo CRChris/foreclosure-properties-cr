@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { LanguageProvider } from '@/lib/i18n/LanguageContext';
 
 export const metadata: Metadata = {
   title: 'Remates Judiciales Costa Rica | Rastreador de Subastas y Oportunidades',
   description: 'Plataforma líder para rastrear, analizar y calcular rendimientos de remates judiciales y subastas inmobiliarias en Costa Rica con datos del Boletín Judicial.',
-  keywords: ['Remates Judiciales Costa Rica', 'Subastas Inmobiliarias CR', 'Boletin Judicial Remates', 'Subaxa Costa Rica', 'Propiedades Baratas Costa Rica'],
+  keywords: ['Remates Judiciales Costa Rica', 'Subastas Inmobiliarias CR', 'Boletin Judicial Remates', 'Foreclosure Properties Costa Rica', 'Costa Rica Judicial Auctions'],
 };
 
 export default function RootLayout({
@@ -23,7 +24,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500 selection:text-white">
-        {children}
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );

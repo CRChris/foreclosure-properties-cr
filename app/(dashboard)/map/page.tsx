@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { fetchAuctions } from '@/lib/supabase/db';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import Link from 'next/link';
 import { 
   MapPin, 
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function MapExplorerPage() {
+  const { t, language } = useLanguage();
   const [auctions, setAuctions] = useState<Auction[]>([]);
   const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,16 +74,18 @@ export default function MapExplorerPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
             <Compass className="w-6 h-6 text-emerald-400" />
-            <span>Explorador Geoespacial de Remates</span>
+            <span>{language === 'es' ? 'Explorador Geoespacial de Remates' : 'Geospatial Foreclosure Explorer'}</span>
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Georreferenciación de subastas judiciales en Costa Rica con coordenadas PostGIS.
+            {language === 'es'
+              ? 'Georreferenciación de subastas judiciales en Costa Rica con coordenadas PostGIS.'
+              : 'PostGIS geospatial mapping of Costa Rican court foreclosures and property auctions.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Badge variant="success" size="sm">
-            {filteredAuctions.length} Marcadores en Mapa
+            {filteredAuctions.length} {language === 'es' ? 'Marcadores en Mapa' : 'Map Markers'}
           </Badge>
         </div>
       </div>
@@ -95,7 +99,7 @@ export default function MapExplorerPage() {
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar cantón o folio..."
+              placeholder={t.filters.searchPlaceholder}
               icon={<Search className="w-4 h-4" />}
               className="text-xs py-1.5"
             />
@@ -104,7 +108,7 @@ export default function MapExplorerPage() {
               onChange={(e) => setSelectedProvince(e.target.value as any)}
               className="text-xs py-1.5"
             >
-              <option value="all">Todas las Provincias</option>
+              <option value="all">{t.filters.allProvinces}</option>
               <option value="San José">San José</option>
               <option value="Alajuela">Alajuela</option>
               <option value="Cartago">Cartago</option>
@@ -145,7 +149,7 @@ export default function MapExplorerPage() {
                       </span>
                       {auction.estimated_margin_pct && (
                         <span className="text-[11px] font-semibold text-emerald-300">
-                          +{auction.estimated_margin_pct}% Margen
+                          +{auction.estimated_margin_pct}% {t.card.estimatedMargin}
                         </span>
                       )}
                     </div>
@@ -165,9 +169,9 @@ export default function MapExplorerPage() {
             ) : (
               <div className="p-8 text-center space-y-2 text-slate-400">
                 <Scale className="w-6 h-6 mx-auto text-slate-500" />
-                <p className="text-xs font-semibold text-white">Base de datos lista</p>
+                <p className="text-xs font-semibold text-white">{t.empty.waitingTitle}</p>
                 <p className="text-[11px] text-slate-500">
-                  Esperando nueva publicación judicial del Boletín Oficial.
+                  {t.empty.waitingDesc}
                 </p>
               </div>
             )}
@@ -215,7 +219,7 @@ export default function MapExplorerPage() {
                 href={`/auctions/${selectedAuction.id}`}
                 className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors shadow-md"
               >
-                <span>Ver Análisis y Expediente Completo</span>
+                <span>{t.card.viewDossier}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

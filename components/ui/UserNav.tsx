@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { WatchlistDrawer } from '@/components/watchlist/WatchlistDrawer';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   User,
   LogOut,
@@ -17,6 +18,7 @@ import {
 
 export function UserNav() {
   const router = useRouter();
+  const { t, language } = useLanguage();
   const [user, setUser] = useState<{ id?: string; email?: string; name?: string } | null>(null);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [watchlistCount, setWatchlistCount] = useState(0);
@@ -104,10 +106,10 @@ export function UserNav() {
           type="button"
           onClick={() => setIsWatchlistOpen(true)}
           className="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all hover:border-amber-500/50 shadow-sm"
-          title="Abrir Lista de Seguimiento"
+          title={t.nav.myWatchlist}
         >
           <Bookmark className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
-          <span className="hidden sm:inline">Mi Lista</span>
+          <span className="hidden sm:inline">{t.nav.myWatchlist}</span>
           {watchlistCount > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black">
               {watchlistCount}
@@ -139,7 +141,7 @@ export function UserNav() {
                   <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
                   <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
                     <Shield className="w-3 h-3" />
-                    <span>Inversionista Verificado</span>
+                    <span>{t.nav.verifiedInvestor}</span>
                   </div>
                 </div>
 
@@ -152,7 +154,7 @@ export function UserNav() {
                   className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left"
                 >
                   <Bookmark className="w-4 h-4 text-amber-400" />
-                  <span>Mi Lista de Remates ({watchlistCount})</span>
+                  <span>{t.nav.myWatchlist} ({watchlistCount})</span>
                 </button>
 
                 <button
@@ -161,7 +163,7 @@ export function UserNav() {
                   className="w-full flex items-center gap-2 p-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors text-left"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Cerrar Sesión</span>
+                  <span>{t.nav.logout}</span>
                 </button>
               </div>
             )}
@@ -173,7 +175,7 @@ export function UserNav() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/40"
           >
             <LogIn className="w-3.5 h-3.5" />
-            <span>Acceso Inversionista</span>
+            <span>{t.nav.investorAccess}</span>
           </Link>
         )}
       </div>

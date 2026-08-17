@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
 import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction, calculateInvestorMetrics } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   Calendar,
   MapPin,
@@ -35,6 +36,7 @@ export function AuctionCard({
   onSelect,
   compact = false,
 }: AuctionCardProps) {
+  const { t, language } = useLanguage();
   const [isSaved, setIsSaved] = useState(false);
 
   // Initialize saved state from localStorage if available
@@ -122,11 +124,11 @@ export function AuctionCard({
                 className={`px-2.5 py-1 text-xs font-black rounded-lg border backdrop-blur-md flex items-center gap-1 shadow-lg ${marginBadgeClass}`}
               >
                 <TrendingUp className="w-3.5 h-3.5" />
-                +{marginPct}% Margen Est.
+                +{marginPct}% {t.card.estimatedMargin}
               </span>
             ) : (
               <span className="px-2 py-0.5 text-xs font-bold rounded-lg bg-slate-950/80 border border-slate-700 text-slate-300">
-                Oportunidad
+                {language === 'es' ? 'Oportunidad' : 'Opportunity'}
               </span>
             )}
           </div>
@@ -136,7 +138,7 @@ export function AuctionCard({
             <button
               type="button"
               onClick={handleToggleSave}
-              title={isSaved ? 'Guardado en Favoritos' : 'Guardar propiedad'}
+              title={isSaved ? t.card.bookmarkAdded : t.card.bookmarkRemoved}
               className={`p-2 rounded-xl backdrop-blur-md border transition-all ${
                 isSaved
                   ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-lg shadow-amber-950/50 scale-105'
@@ -180,7 +182,7 @@ export function AuctionCard({
           <div className="pt-2.5 flex items-baseline justify-between gap-2">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                1er Remate (Base)
+                {t.card.firstCall} (Base)
               </p>
               <p className="text-xl font-extrabold tracking-tight text-white">
                 {formatCurrency(auction.base_price_call_1, auction.currency)}
@@ -189,7 +191,7 @@ export function AuctionCard({
             {auction.estimated_market_value && (
               <div className="text-right">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Valor Mercado Est.
+                  {t.card.marketValue}
                 </p>
                 <p className="text-xs font-bold text-slate-400 line-through">
                   {formatCurrency(auction.estimated_market_value, auction.currency)}
@@ -198,59 +200,54 @@ export function AuctionCard({
             )}
           </div>
 
-          {/* Area & Calculated Price/m² */}
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-slate-800/80 text-xs">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <Maximize2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <span>{formatArea(auction.area_m2)}</span>
+          {/* Key Metrics: Area & Price/m² */}
+          <div className="grid grid-cols-2 gap-2 pt-2.5">
+            <div className="bg-slate-950/80 p-2 rounded-xl border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block font-medium">
+                {t.card.area}
+              </span>
+              <span className="text-xs font-bold text-slate-200 font-mono">
+                {formatArea(auction.area_m2)}
+              </span>
             </div>
-            <div className="flex items-center justify-end gap-1 text-slate-400 font-mono text-[11px]">
-              <span>
-                {formatCurrency(metrics.pricePerM2, auction.currency)}/m²
+            <div className="bg-slate-950/80 p-2 rounded-xl border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block font-medium">
+                Precio {t.card.pricePerM2}
+              </span>
+              <span className="text-xs font-bold text-slate-200 font-mono">
+                {formatCurrency(metrics.pricePerM2, auction.currency)}
               </span>
             </div>
           </div>
 
-          {/* Legal Expediente */}
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-            <Scale className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span className="truncate" title={auction.court_name}>
-              {auction.expediente_number}
-            </span>
-          </div>
-        </div>
-
-        {/* 3-Call Timeline & Auction Date Indicator */}
-        <div className="bg-slate-950/70 rounded-xl p-2.5 border border-slate-800/80 text-[11px] space-y-1.5">
-          <div className="flex justify-between items-center">
-            <span className="flex items-center gap-1.5 text-amber-400 font-bold">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>{countdown.label}</span>
-            </span>
-            <span className="font-mono text-slate-400">
-              {formatDateCR(auction.auction_date_call_1).split(',')[0]}
-            </span>
-          </div>
-
-          {auction.base_price_call_2 && (
-            <div className="flex justify-between items-center text-slate-400 pt-1 border-t border-slate-900 text-[10.5px]">
-              <span>2do Remate (-25%):</span>
-              <span className="font-mono font-medium text-slate-200">
-                {formatCurrency(auction.base_price_call_2, auction.currency)}
+          {/* Legal Case info */}
+          <div className="pt-2.5 space-y-1">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono">{t.card.docket}: {auction.expediente_number}</span>
+              <span className="truncate max-w-[140px] text-slate-300 font-medium" title={auction.plaintiff}>
+                {auction.plaintiff}
               </span>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="pt-1">
+        {/* Card Footer Strip */}
+        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+          {/* Relative countdown chip */}
+          <div className="flex items-center gap-1.5 text-xs font-bold">
+            <Calendar className={`w-3.5 h-3.5 ${countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400 animate-bounce' : 'text-slate-400'}`} />
+            <span className={countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400' : 'text-slate-300'}>
+              {countdown.label}
+            </span>
+          </div>
+
+          {/* Action Link */}
           <Link
             href={`/auctions/${auction.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full inline-flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-emerald-600 text-slate-200 hover:text-white text-xs font-bold py-2.5 px-3 rounded-xl border border-slate-700 hover:border-emerald-500 transition-all duration-200 shadow-md group-hover:bg-slate-800"
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 group-hover:translate-x-0.5 transition-all bg-emerald-950/40 hover:bg-emerald-900/60 px-2.5 py-1.5 rounded-lg border border-emerald-800/50"
           >
-            <span>Ver Expediente y Avalúo</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            <span>{t.card.viewDossier}</span>
+            <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

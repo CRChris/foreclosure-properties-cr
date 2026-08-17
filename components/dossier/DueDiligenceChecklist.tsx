@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Auction } from '@/lib/types/auction';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   ShieldAlert,
   CheckSquare,
@@ -24,13 +25,14 @@ interface ChecklistItem {
   id: string;
   category: string;
   title: string;
-  criticality: 'CRÍTICO' | 'ALTO' | 'MEDIO';
+  criticality: 'CRÍTICO' | 'ALTO' | 'MEDIO' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
   description: string;
   legalBasis: string;
   actionGuidance: string;
 }
 
 export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
+  const { t, language } = useLanguage();
   const [completedItems, setCompletedItems] = useState<Record<string, boolean>>({});
 
   const storageKey = `due_diligence_${auction.id}`;
@@ -59,176 +61,224 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
     }
   };
 
-  const CHECKLIST_ITEMS: ChecklistItem[] = [
+  const CHECKLIST_ITEMS: ChecklistItem[] = language === 'es' ? [
     {
-      id: 'mortgage_priority',
-      category: 'Prioridad Registral & Gravámenes',
-      title: 'Verificación de Grado Hipotecario (1° vs 2° Hipoteca)',
+      id: 'mortgage_seniority',
+      category: 'Gravámenes & Rango Hipotecario',
+      title: 'Verificación de Grado Hipotecario (Purga de Gravámenes)',
       criticality: 'CRÍTICO',
       description:
-        'Confirmar si el banco ejecutante remata en 1° Grado Hipotecario. En Costa Rica, el remate por primer acreedor hipotecario purga y cancela todos los gravámenes y embargos posteriores (Art. 160 CPC). Si el remate es por 2° hipoteca, la 1° hipoteca subsiste a cargo del adjudicatario.',
-      legalBasis: 'Art. 160 y 161 del Código Procesal Civil de Costa Rica',
+        'Confirmar que el ejecutante es acreedor hipotecario de 1° Grado. En Costa Rica, el remate por hipoteca preferente purga (extingue) automáticamente hipotecas de 2° grado, embargos y anotaciones posteriores.',
+      legalBasis: 'Art. 160 Código Procesal Civil y Art. 411 Código Civil',
       actionGuidance:
-        'Solicitar estudio registral actualizado del Folio Real en el Registro Nacional para verificar el orden cronológico de las hipotecas.',
+        'Revisar la certificación literal de gravámenes en el Registro Nacional para descartar hipotecas de grado anterior que no se cancelen con el remate.',
     },
     {
-      id: 'cadastral_match',
-      category: 'Catastro & Linderos',
-      title: 'Concordancia Plano Catastrado vs. Folio Real',
+      id: 'cadastral_survey_match',
+      category: 'Catastro & Linderos Físicos',
+      title: 'Concordancia de Plano Catastrado con Folio Real',
       criticality: 'ALTO',
-      description:
-        'Comprobar que el área descrita en el Folio Real coincida con el Plano Catastrado oficial y que no existan inconsistencias catastrales o traslapes con fincas colindantes.',
-      legalBasis: 'Ley de Catastro Nacional N° 6545 y Sistema SIRI',
-      actionGuidance: `Descargar el plano catastrado (${auction.plano_catastrado || 'Plano Registrado'}) y contrastarlo con imágenes satelitales y mojones físicos en el terreno.`,
-    },
-    {
-      id: 'possession_status',
-      category: 'Posesión Física & Desalojo',
-      title: 'Inspección Perimetral y Estado de Ocupación',
-      criticality: 'ALTO',
-      description:
-        'Los remates judiciales se venden "ad corpus" (en el estado material en que se encuentran) sin derecho a inspección previa del interior. En caso de estar ocupado por el deudor o terceros, el adjudicatario debe solicitar la puesta en posesión judicial al despacho.',
-      legalBasis: 'Art. 162 del Código Procesal Civil (Puesta en Posesión)',
+      description: `Verificar que el plano catastrado (${auction.plano_catastrado || 'indicado en edicto'}) coincida exactamente en cabida (${auction.area_m2} m²), linderos y ubicación con la finca registral ${auction.folio_real}.`,
+      legalBasis: 'Ley de Catastro Nacional N° 6545 & Art. 468 Código Civil',
       actionGuidance:
-        'Realizar visita física exterior al inmueble para evaluar el estado de conservación de la fachada, accesos y ocupación real.',
+        'Descargar el plano en la base digital del Registro Nacional (SIRI) y verificar que no tenga traslapes o advertencias administrativas.',
     },
     {
-      id: 'municipal_hoa_debt',
-      category: 'Obligaciones Preferentes & Municipales',
-      title: 'Revisión de Impuestos Territoriales y Cuotas Condominales',
+      id: 'physical_possession',
+      category: 'Posesión Física & Ocupación',
+      title: 'Inspección Física y Estado de Ocupación del Inmueble',
+      criticality: 'CRÍTICO',
+      description:
+        'Determinar si el inmueble está ocupado por el deudor, inquilinos con contrato inscrito, o precaristas. Si está ocupado, se requerirá solicitar la puesta en posesión judicial (desahucio judicial).',
+      legalBasis: 'Art. 162 Código Procesal Civil (Puesta en Posesión)',
+      actionGuidance:
+        'Realizar visita de campo al inmueble para evaluar el estado de conservación física y entablar diálogo preliminar.',
+    },
+    {
+      id: 'municipal_dues',
+      category: 'Obligaciones Municipales & Condominales',
+      title: 'Solvencia de Impuestos Municipales y Cuotas Condominales',
       criticality: 'MEDIO',
       description:
-        'Las deudas de Impuesto sobre Bienes Inmuebles (IBI) de la Municipalidad y las cuotas de mantenimiento en propiedades en condominio constituyen gravámenes preferentes de ley que persiguen a la finca.',
-      legalBasis: 'Ley N° 7509 (Bienes Inmuebles) y Ley N° 7933 (Propiedad en Condominio)',
-      actionGuidance: `Consultar estado de cuenta en la Municipalidad de ${auction.canton} y con la administración del condominio/residencial.`,
+        'Verificar si existen deudas acumuladas de Impuesto sobre Bienes Inmuebles (IBI) en la Municipalidad de ' +
+        auction.canton +
+        (auction.property_category === 'Condo' ? ' o cuotas condominales de mantenimiento atrasadas.' : '.'),
+      legalBasis: 'Ley 7509 (Impuesto sobre Bienes Inmuebles) y Ley 7933 (Propiedad en Condominio)',
+      actionGuidance:
+        'Solicitar estado de cuenta en la municipalidad respectiva y consultar a la administración del condominio.',
+    },
+    {
+      id: 'pending_appeals',
+      category: 'Expediente Judicial',
+      title: 'Revisión de Incidentes de Nulidad o Suspensiones en Juzgado',
+      criticality: 'ALTO',
+      description:
+        'Revisar en el Sistema de Gestión Judicial si el demandado ha presentado incidentes de nulidad de notificación, recursos de apelación o tercerías que puedan suspender el remate a última hora.',
+      legalBasis: 'Art. 154 Código Procesal Civil',
+      actionGuidance:
+        'Consultar el expediente digital (' + auction.expediente_number + ') 24 horas antes de la subasta para confirmar que el remate sigue en pie.',
+    },
+  ] : [
+    {
+      id: 'mortgage_seniority',
+      category: 'Liens & Mortgage Seniority',
+      title: 'Mortgage Seniority Verification (Lien Purge & Extinction)',
+      criticality: 'CRITICAL',
+      description:
+        'Confirm that the foreclosing plaintiff holds 1st-degree mortgage seniority. In Costa Rica, an auction triggered by a first mortgage legally extinguishes all junior mortgages and lower-ranked attachments.',
+      legalBasis: 'Art. 160 Civil Procedure Code & Art. 411 Civil Code',
+      actionGuidance:
+        'Verify title abstract on National Registry to confirm no senior liens precede this foreclosure.',
+    },
+    {
+      id: 'cadastral_survey_match',
+      category: 'Survey & Cadastral Match',
+      title: 'Cadastral Survey Concordance with Property Registry',
+      criticality: 'HIGH',
+      description: `Verify that the official registered survey (${auction.plano_catastrado || 'indicated in docket'}) matches the registered area (${auction.area_m2} m²) and boundary descriptions for folio ${auction.folio_real}.`,
+      legalBasis: 'National Cadastre Act No. 6545 & Art. 468 Civil Code',
+      actionGuidance:
+        'Inspect digital survey map in National Registry (SIRI) to verify absence of overlaps or administrative boundary conflicts.',
+    },
+    {
+      id: 'physical_possession',
+      category: 'Physical Possession & Tenancy',
+      title: 'Physical Site Inspection & Occupancy Status',
+      criticality: 'CRITICAL',
+      description:
+        'Determine whether the premises are occupied by debtor or tenants. If occupied, petitioning the court for a judicial writ of possession will be required upon final title recording.',
+      legalBasis: 'Art. 162 Civil Procedure Code (Judicial Writ of Possession)',
+      actionGuidance:
+        'Perform in-person site visit to inspect building structural integrity and occupancy condition.',
+    },
+    {
+      id: 'municipal_dues',
+      category: 'Municipal Taxes & HOA Dues',
+      title: 'Municipal Property Tax & Condominium Dues Audit',
+      criticality: 'MEDIUM',
+      description:
+        'Verify unpaid municipal property tax balances with the Municipality of ' +
+        auction.canton +
+        (auction.property_category === 'Condo' ? ' or delinquent HOA maintenance dues.' : '.'),
+      legalBasis: 'Act 7509 (Real Estate Property Tax) & Act 7933 (Condominium Property Act)',
+      actionGuidance:
+        'Request account balance with local municipality and verify with condo HOA administration.',
+    },
+    {
+      id: 'pending_appeals',
+      category: 'Judicial Docket Audit',
+      title: 'Audit of Docket for Motions of Nullity or Injunctions',
+      criticality: 'HIGH',
+      description:
+        'Review the electronic court docket to ensure debtor has not filed last-minute motions to nullify notification or 3rd-party claims that could stay the auction.',
+      legalBasis: 'Art. 154 Civil Procedure Code',
+      actionGuidance:
+        'Check digital court file (' + auction.expediente_number + ') 24 hours prior to auction to confirm proceeding is active.',
     },
   ];
 
-  const totalItems = CHECKLIST_ITEMS.length;
-  const completedCount = Object.values(completedItems).filter(Boolean).length;
-  const progressPct = Math.round((completedCount / totalItems) * 100);
+  const completedCount = CHECKLIST_ITEMS.filter((i) => completedItems[i.id]).length;
+  const progressPct = Math.round((completedCount / CHECKLIST_ITEMS.length) * 100);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-6">
-      {/* Header & Progress Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-amber-950/80 border border-amber-800/50 text-amber-400">
-            <ShieldAlert className="w-5 h-5" />
+    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              Protocolo de Debida Diligencia Legal (Costa Rica)
+            <h2 className="text-xl font-bold text-white tracking-tight">
+              {t.dossier.dueDiligenceChecklist}
             </h2>
-            <p className="text-xs text-slate-400">
-              Verificaciones críticas antes de depositar la postura legal y pujar en el juzgado.
+            <p className="text-xs text-slate-400 mt-0.5">
+              {t.dossier.dueDiligenceDesc}
             </p>
           </div>
         </div>
 
         {/* Progress Bar & Counter */}
-        <div className="bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 flex items-center gap-3">
-          <div className="space-y-1 text-right">
-            <p className="text-[10px] uppercase font-bold text-slate-400">Progreso Verificación</p>
-            <p className="text-xs font-bold text-emerald-400 font-mono">
-              {completedCount} de {totalItems} ítems ({progressPct}%)
-            </p>
-          </div>
-          <div className="w-12 h-12 relative flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <path
-                className="text-slate-800"
-                strokeWidth="3.5"
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                className="text-emerald-500 transition-all duration-500 ease-out"
-                strokeDasharray={`${progressPct}, 100`}
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                stroke="currentColor"
-                fill="none"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-            </svg>
-            <span className="absolute text-[10px] font-black text-white font-mono">
-              {progressPct}%
+        <div className="bg-slate-950 px-4 py-2 rounded-2xl border border-slate-800 space-y-1 min-w-[180px]">
+          <div className="flex justify-between items-center text-xs font-bold">
+            <span className="text-slate-400">{t.dossier.checklistProgress}:</span>
+            <span className="text-emerald-400 font-mono">
+              {completedCount} / {CHECKLIST_ITEMS.length} ({progressPct}%)
             </span>
+          </div>
+          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300 rounded-full"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
       </div>
 
-      {/* Checklist items */}
-      <div className="space-y-4">
+      {/* Checklist Items List */}
+      <div className="space-y-3">
         {CHECKLIST_ITEMS.map((item) => {
-          const isDone = !!completedItems[item.id];
+          const isDone = Boolean(completedItems[item.id]);
+
           return (
             <div
               key={item.id}
               onClick={() => toggleItem(item.id)}
-              className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+              className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer ${
                 isDone
-                  ? 'bg-emerald-950/20 border-emerald-800/60 shadow-sm'
-                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 hover:bg-slate-950/90'
+                  ? 'bg-emerald-950/20 border-emerald-500/50 shadow-md shadow-emerald-950/20'
+                  : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 hover:bg-slate-950'
               }`}
             >
               <div className="flex items-start gap-3.5">
                 {/* Checkbox Icon */}
-                <button
-                  type="button"
-                  className={`mt-0.5 shrink-0 transition-transform ${
-                    isDone ? 'text-emerald-400 scale-110' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
+                <div className="mt-0.5 shrink-0">
                   {isDone ? (
-                    <CheckSquare className="w-5 h-5 fill-emerald-950 text-emerald-400" />
+                    <CheckSquare className="w-5 h-5 text-emerald-400" />
                   ) : (
-                    <Square className="w-5 h-5" />
+                    <Square className="w-5 h-5 text-slate-500 hover:text-slate-300 transition-colors" />
                   )}
-                </button>
+                </div>
 
                 {/* Content */}
                 <div className="space-y-1.5 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-extrabold text-white flex items-center gap-2">
-                      <span className={isDone ? 'line-through text-slate-400' : ''}>
-                        {item.title}
-                      </span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                      {item.category}
                     </span>
-
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-[9.5px] font-black uppercase px-2 py-0.5 rounded-full ${
-                          item.criticality === 'CRÍTICO'
-                            ? 'bg-rose-950 text-rose-300 border border-rose-800/60'
-                            : item.criticality === 'ALTO'
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
-                            : 'bg-sky-950 text-sky-300 border border-sky-800/60'
-                        }`}
-                      >
-                        {item.criticality}
-                      </span>
-                    </div>
+                    <span
+                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                        item.criticality === 'CRÍTICO' || item.criticality === 'CRITICAL'
+                          ? 'bg-rose-950/80 text-rose-300 border-rose-800/80'
+                          : item.criticality === 'ALTO' || item.criticality === 'HIGH'
+                          ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}
+                    >
+                      {item.criticality}
+                    </span>
                   </div>
+
+                  <h3
+                    className={`text-sm font-bold tracking-tight transition-colors ${
+                      isDone ? 'text-emerald-200 line-through' : 'text-white'
+                    }`}
+                  >
+                    {item.title}
+                  </h3>
 
                   <p className="text-xs text-slate-300 leading-relaxed">
                     {item.description}
                   </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                    <div className="p-2 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5 text-slate-400">
-                      <Scale className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate">
-                        <strong>Base Legal:</strong> {item.legalBasis}
-                      </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 text-[11px]">
+                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800/80 text-slate-400">
+                      <strong className="text-slate-300 block">{language === 'es' ? 'Fundamento Jurídico:' : 'Legal Basis:'}</strong>
+                      <span>{item.legalBasis}</span>
                     </div>
-                    <div className="p-2 rounded bg-slate-900/90 border border-slate-800 flex items-center gap-1.5 text-slate-300">
-                      <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span className="truncate">
-                        <strong>Acción:</strong> {item.actionGuidance}
-                      </span>
+                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800/80 text-slate-400">
+                      <strong className="text-slate-300 block">{language === 'es' ? 'Acción Recomendada:' : 'Recommended Action:'}</strong>
+                      <span>{item.actionGuidance}</span>
                     </div>
                   </div>
                 </div>
@@ -236,17 +286,6 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
             </div>
           );
         })}
-      </div>
-
-      {/* Safety Warning */}
-      <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 flex items-start gap-3 text-xs text-slate-400">
-        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold text-slate-200">Recomendación para Inversionistas Judiciales:</p>
-          <p>
-            Siempre verifique el expediente físico o electrónico en el sistema <em>Gestión en Línea</em> del Poder Judicial antes de constituir el depósito judicial.
-          </p>
-        </div>
       </div>
     </div>
   );

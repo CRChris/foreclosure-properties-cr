@@ -4,15 +4,12 @@ import React from 'react';
 import { Auction } from '@/lib/types/auction';
 import { formatCurrency, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   Calendar,
   Clock,
   DollarSign,
   ShieldAlert,
-  ArrowDownRight,
-  Sparkles,
-  CheckCircle2,
-  AlertTriangle,
 } from 'lucide-react';
 
 interface AuctionCallLadderProps {
@@ -26,6 +23,7 @@ export function AuctionCallLadder({
   selectedCall,
   onSelectCall,
 }: AuctionCallLadderProps) {
+  const { t, language } = useLanguage();
   const countdown1 = getDaysUntilAuction(auction.auction_date_call_1);
   const countdown2 = auction.auction_date_call_2
     ? getDaysUntilAuction(auction.auction_date_call_2)
@@ -55,11 +53,11 @@ export function AuctionCallLadder({
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-emerald-400" />
           <h2 className="text-lg font-bold text-white tracking-tight">
-            Cronograma Judicial de 3 Señalamientos
+            {t.dossier.auctionCallSchedule}
           </h2>
         </div>
         <span className="text-xs text-slate-400 font-medium">
-          Ley de Cobro Judicial & Código Procesal Civil de Costa Rica
+          {t.dossier.auctionCallScheduleDesc}
         </span>
       </div>
 
@@ -76,14 +74,14 @@ export function AuctionCallLadder({
         >
           {activeCallNumber === 1 && (
             <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-              Señalamiento Actual
+              {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
             </div>
           )}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black tracking-wider uppercase text-emerald-400 flex items-center gap-1">
-                <span>1er Remate</span>
+                <span>{t.card.firstCall}</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800/60 text-emerald-300">
                   100% Base
                 </span>
@@ -106,13 +104,13 @@ export function AuctionCallLadder({
 
           <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5 text-xs">
             <div className="flex justify-between items-center text-slate-400">
-              <span>Postura Legal (50% Depósito):</span>
+              <span>{t.dossier.legalDeposit}:</span>
               <span className="font-mono font-bold text-slate-200">
                 {formatCurrency(depositCall1, auction.currency)}
               </span>
             </div>
             <p className="text-[10px] text-slate-500">
-              Art. 159 CPC: Depósito judicial obligatorio para postular.
+              {t.dossier.legalDepositNotice}
             </p>
           </div>
         </div>
@@ -129,16 +127,16 @@ export function AuctionCallLadder({
           >
             {activeCallNumber === 2 && (
               <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-                Señalamiento Actual
+                {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
               </div>
             )}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black tracking-wider uppercase text-amber-400 flex items-center gap-1">
-                  <span>2do Remate</span>
+                  <span>{t.card.secondCall}</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950 border border-amber-800/60 text-amber-300">
-                    -25% Descuento
+                    -25%
                   </span>
                 </span>
                 {countdown2 && (
@@ -161,21 +159,22 @@ export function AuctionCallLadder({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5 text-xs">
               <div className="flex justify-between items-center text-slate-400">
-                <span>Postura Legal (50% Depósito):</span>
+                <span>{t.dossier.legalDeposit}:</span>
                 <span className="font-mono font-bold text-slate-200">
                   {formatCurrency(depositCall2, auction.currency)}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500">
-                Se abre automáticamente si el 1er remate queda desierto.
+                {language === 'es'
+                  ? 'Se abre automáticamente si el 1er remate queda desierto.'
+                  : 'Triggers automatically if the 1st call receives no qualifying bids.'}
               </p>
             </div>
           </div>
         ) : (
           <div className="p-5 rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 flex flex-col items-center justify-center text-center text-slate-500 text-xs">
             <Calendar className="w-6 h-6 mb-2 opacity-50" />
-            <p className="font-medium">2do Señalamiento no fijado</p>
-            <p className="text-[10px] mt-1">Sujeto a declaratoria de desierto en 1er remate.</p>
+            <p className="font-medium">{language === 'es' ? '2do Señalamiento no fijado' : '2nd Call Not Scheduled'}</p>
           </div>
         )}
 
@@ -191,16 +190,16 @@ export function AuctionCallLadder({
           >
             {activeCallNumber === 3 && (
               <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-rose-500 text-white font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-                Señalamiento Actual
+                {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
               </div>
             )}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black tracking-wider uppercase text-rose-400 flex items-center gap-1">
-                  <span>3er Remate</span>
+                  <span>{t.card.thirdCall}</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-950 border border-rose-800/60 text-rose-300">
-                    25% Liquidación
+                    25% Base
                   </span>
                 </span>
                 {countdown3 && (
@@ -223,21 +222,22 @@ export function AuctionCallLadder({
 
             <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-1.5 text-xs">
               <div className="flex justify-between items-center text-slate-400">
-                <span>Postura Legal (50% Depósito):</span>
+                <span>{t.dossier.legalDeposit}:</span>
                 <span className="font-mono font-bold text-slate-200">
                   {formatCurrency(depositCall3, auction.currency)}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500">
-                Remate al mejor postor sobre la base mínima legal del 25%.
+                {language === 'es'
+                  ? 'Remate al mejor postor sobre la base mínima legal del 25%.'
+                  : 'Auction to highest bidder starting from 25% statutory baseline.'}
               </p>
             </div>
           </div>
         ) : (
           <div className="p-5 rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 flex flex-col items-center justify-center text-center text-slate-500 text-xs">
             <Calendar className="w-6 h-6 mb-2 opacity-50" />
-            <p className="font-medium">3er Señalamiento no fijado</p>
-            <p className="text-[10px] mt-1">Sujeto a declaratoria de desierto en 2do remate.</p>
+            <p className="font-medium">{language === 'es' ? '3er Señalamiento no fijado' : '3rd Call Not Scheduled'}</p>
           </div>
         )}
       </div>
@@ -246,7 +246,9 @@ export function AuctionCallLadder({
       <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl flex items-center gap-3 text-xs text-slate-400">
         <ShieldAlert className="w-4 h-4 text-emerald-400 shrink-0" />
         <span>
-          Haz clic en cualquiera de los señalamientos para recalcular los costos de traspaso, timbres e impuestos proyectados.
+          {language === 'es'
+            ? 'Haz clic en cualquiera de los señalamientos para recalcular los costos de traspaso, timbres e impuestos proyectados.'
+            : 'Click on any of the auction stages above to automatically recompute statutory closing taxes and ROI.'}
         </span>
       </div>
     </div>

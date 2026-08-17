@@ -1,13 +1,19 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
-import { Scale, Compass, Filter } from 'lucide-react';
+import { Scale, Compass } from 'lucide-react';
 import { UserNav } from '@/components/ui/UserNav';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
       {/* Dashboard Topbar */}
@@ -28,23 +34,26 @@ export default function DashboardLayout({
                 href="/auctions"
                 className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition-colors"
               >
-                Catálogo de Remates
+                {t.nav.catalog}
               </Link>
               <Link
                 href="/map"
                 className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-1.5"
               >
                 <Compass className="w-4 h-4 text-emerald-400" />
-                Mapa PostGIS
+                {t.nav.map}
               </Link>
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="hidden xl:flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Ingestión Boletín Judicial Activa (7:00 AM)
+              {t.nav.dailyIngestionActive}
             </div>
+
+            {/* Language Switcher (ES / EN) */}
+            <LanguageSwitcher />
 
             {/* Investor User Navigation & Watchlist Drawer */}
             <UserNav />
@@ -60,7 +69,7 @@ export default function DashboardLayout({
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-6 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-          Remates Judiciales Costa Rica • Sistema de Inteligencia Inmobiliaria Judicial
+          Remates Judiciales Costa Rica • {t.nav.brandSubtitle}
         </div>
       </footer>
     </div>

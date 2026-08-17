@@ -9,6 +9,7 @@ import { MapWrapper } from '@/components/map/MapWrapper';
 import { formatCurrency } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { fetchAuctions } from '@/lib/supabase/db';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   Search,
   MapPin,
@@ -37,10 +38,11 @@ const INITIAL_FILTERS: FilterState = {
 };
 
 export default function AuctionsPage() {
+  const { t, language } = useLanguage();
   const [auctionsData, setAuctionsData] = useState<Auction[]>(MOCK_AUCTIONS);
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
-  const [selectedAuctionId, setSelectedAuctionId] = useState<string | null>(MOCK_AUCTIONS[0]?.id || null);
+  const [selectedAuctionId, setSelectedAuctionId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list');
 
   // Load live auctions from Supabase or API route on mount
@@ -79,9 +81,7 @@ export default function AuctionsPage() {
           auction.expediente_number.toLowerCase().includes(q) ||
           auction.folio_real.toLowerCase().includes(q) ||
           auction.plaintiff.toLowerCase().includes(q) ||
-          (auction.legal_summary && auction.legal_summary.toLowerCase().includes(q)) ||
-          (auction.address_description && auction.address_description.toLowerCase().includes(q));
-
+          (auction.legal_summary && auction.legal_summary.toLowerCase().includes(q));
         if (!matchesQuery) return false;
       }
 
@@ -95,55 +95,44 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 4. Minimum Margin Filter
-      if (filters.minMargin > 0) {
-        const margin = auction.estimated_margin_pct || 0;
-        if (margin < filters.minMargin) return false;
+      // 4. Price Range Filter
+      if (filters.minPrice && auction.base_price_call_1 < Number(filters.minPrice)) {
+        return false;
       }
-
-      // 5. Category Filter
-      if (filters.category !== 'all' && auction.property_category !== filters.category) {
+      if (filters.maxPrice && auction.base_price_call_1 > Number(filters.maxPrice)) {
         return false;
       }
 
-      // 6. Price Range Filters
-      if (filters.minPrice !== '') {
-        const minVal = parseFloat(filters.minPrice);
-        if (!isNaN(minVal) && auction.base_price_call_1 < minVal) {
+      // 5. Discount Margin Filter (Slider)
+      if (filters.minMargin > 0) {
+        const margin = auction.estimated_margin_pct || 0;
+        if (margin < filters.minMargin) {
           return false;
         }
       }
-      if (filters.maxPrice !== '') {
-        const maxVal = parseFloat(filters.maxPrice);
-        if (!isNaN(maxVal) && auction.base_price_call_1 > maxVal) {
-          return false;
-        }
+
+      // 6. Property Category Filter
+      if (filters.category !== 'all' && auction.property_category !== filters.category) {
+        return false;
       }
 
       // 7. Timeframe Filter
       if (filters.timeframe !== 'all') {
         const auctionDate = new Date(auction.auction_date_call_1).getTime();
-        const now = new Date().getTime();
-        const diffDays = (auctionDate - now) / (1000 * 60 * 60 * 24);
+        const now = Date.now();
+        const daysDiff = (auctionDate - now) / (1000 * 60 * 60 * 24);
 
-        if (filters.timeframe === '7_days' && (diffDays < 0 || diffDays > 7)) return false;
-        if (filters.timeframe === '15_days' && (diffDays < 0 || diffDays > 15)) return false;
-        if (filters.timeframe === '30_days' && (diffDays < 0 || diffDays > 30)) return false;
-        if (filters.timeframe === '60_days' && (diffDays < 0 || diffDays > 60)) return false;
+        if (filters.timeframe === '7_days' && (daysDiff < 0 || daysDiff > 7)) return false;
+        if (filters.timeframe === '15_days' && (daysDiff < 0 || daysDiff > 15)) return false;
+        if (filters.timeframe === '30_days' && (daysDiff < 0 || daysDiff > 30)) return false;
+        if (filters.timeframe === '60_days' && (daysDiff < 0 || daysDiff > 60)) return false;
       }
-
-      // 8. Auction Call Stage Filter
-      if (filters.callStage === 'call_2' && !auction.base_price_call_2) return false;
-      if (filters.callStage === 'call_3' && !auction.base_price_call_3) return false;
 
       return true;
     }).sort((a, b) => {
       // Sorting
       if (filters.sortBy === 'date_asc') {
         return new Date(a.auction_date_call_1).getTime() - new Date(b.auction_date_call_1).getTime();
-      }
-      if (filters.sortBy === 'date_desc') {
-        return new Date(b.auction_date_call_1).getTime() - new Date(a.auction_date_call_1).getTime();
       }
       if (filters.sortBy === 'margin_desc') {
         return (b.estimated_margin_pct || 0) - (a.estimated_margin_pct || 0);
@@ -204,30 +193,30 @@ export default function AuctionsPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
             <Scale className="w-7 h-7 text-emerald-400" />
-            <span>Remates Judiciales Costa Rica</span>
+            <span>{language === 'es' ? 'Remates Judiciales Costa Rica' : 'Costa Rica Judicial Foreclosures'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Plataforma de inteligencia inmobiliaria judicial con georreferenciación PostGIS y análisis de márgenes de descuento.
+            {t.nav.brandSubtitle}
           </p>
         </div>
 
         {/* Quick KPI Badges */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm text-xs">
-            <span className="text-slate-400">Total Listados: </span>
+            <span className="text-slate-400">{t.kpi.activeForeclosures}: </span>
             <strong className="text-emerald-400 font-mono">{kpiStats.total}</strong>
           </div>
           {kpiStats.avgMargin > 0 && (
             <div className="bg-emerald-950/70 border border-emerald-800/40 rounded-xl px-3 py-1.5 shadow-sm text-xs flex items-center gap-1">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-slate-300">Margen Promedio: </span>
+              <span className="text-slate-300">{t.kpi.avgDiscount}: </span>
               <strong className="text-emerald-300 font-mono">+{kpiStats.avgMargin}%</strong>
             </div>
           )}
           {kpiStats.highestDiscount > 0 && (
             <div className="hidden sm:flex bg-amber-950/70 border border-amber-800/40 rounded-xl px-3 py-1.5 shadow-sm text-xs items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-slate-300">Máx. Descuento: </span>
+              <span className="text-slate-300">{language === 'es' ? 'Máx. Descuento:' : 'Max Discount:'} </span>
               <strong className="text-amber-300 font-mono">+{kpiStats.highestDiscount}%</strong>
             </div>
           )}
@@ -249,33 +238,31 @@ export default function AuctionsPage() {
         <button
           type="button"
           onClick={() => setMobileTab('list')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
             mobileTab === 'list'
-              ? 'bg-emerald-600 text-white shadow-md'
+              ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Columns2 className="w-4 h-4" />
-          <span>Lista ({filteredAuctions.length})</span>
+          {t.filters.listTab} ({filteredAuctions.length})
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('map')}
-          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
             mobileTab === 'map'
-              ? 'bg-emerald-600 text-white shadow-md'
+              ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <MapIcon className="w-4 h-4" />
-          <span>Mapa Interactivo</span>
+          {t.filters.mapTab}
         </button>
       </div>
 
-      {/* Main Content Layout based on View Mode */}
+      {/* Main Content Layout based on ViewMode */}
       {filteredAuctions.length > 0 ? (
         <>
-          {/* 1. SPLIT VIEW (Desktop default: Left scrollable list 42% + Right Sticky Map 58%) */}
+          {/* 1. SPLIT VIEW (Default: Scrollable Left Card Feed + Sticky Interactive Right Map) */}
           {viewMode === 'split' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
               {/* Left Column: Scrollable List of Auction Cards */}
@@ -338,7 +325,7 @@ export default function AuctionsPage() {
 
           {/* 3. FULL MAP VIEW (Expanded map with floating property preview cards) */}
           {viewMode === 'map' && (
-            <div className="relative h-[calc(100vh-210px)] min-h-[580px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+            <div className="relative h-[calc(100vh-230px)] min-h-[580px] rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
               <MapWrapper
                 auctions={filteredAuctions}
                 selectedAuctionId={selectedAuctionId}
@@ -352,8 +339,8 @@ export default function AuctionsPage() {
                 height="100%"
               />
 
-              {/* Bottom Quick-Carousel Overlay of Cards */}
-              <div className="absolute bottom-4 left-4 right-4 z-[400] flex gap-3 overflow-x-auto pb-2 pointer-events-auto snap-x">
+              {/* Floating Bottom Preview Strip */}
+              <div className="absolute bottom-4 left-4 right-4 z-[1000] flex gap-3 overflow-x-auto pb-2 snap-x">
                 {filteredAuctions.map((auction) => {
                   const isSelected = selectedAuctionId === auction.id;
                   return (
@@ -396,20 +383,20 @@ export default function AuctionsPage() {
             <Scale className="w-8 h-8" />
           </div>
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold text-white">Esperando Próxima Publicación Judicial</h3>
+            <h3 className="text-lg font-bold text-white">{t.empty.waitingTitle}</h3>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
-              La base de datos está lista. El extractor automatizado monitorea y procesa nuevos edictos de remate de los Juzgados de Cobro y Civiles de Costa Rica de lunes a viernes a las 7:00 AM.
+              {t.empty.waitingDesc}
             </p>
           </div>
           {filters.search || filters.province !== 'all' || filters.currency !== 'all' ? (
             <Button variant="secondary" size="sm" onClick={handleResetFilters} className="font-semibold text-xs">
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-              Restablecer Filtros
+              {t.empty.resetFilters}
             </Button>
           ) : (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-[11px] text-slate-300 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Extractor conectado a La Imprenta Nacional</span>
+              <span>{t.empty.connectedStatus}</span>
             </div>
           )}
         </div>
