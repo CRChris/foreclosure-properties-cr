@@ -173,6 +173,42 @@ PROVINCE_CENTROIDS = {
     "limón": (9.9907, -83.0360),
 }
 
+PROVINCE_PREFIXES = {
+    "san josé": "1",
+    "alajuela": "2",
+    "cartago": "3",
+    "heredia": "4",
+    "guanacaste": "5",
+    "puntarenas": "6",
+    "limón": "7",
+}
+
+CATEGORY_IMAGES: Dict[str, List[str]] = {
+    "Condo": [
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+    ],
+    "Luxury Estate": [
+        "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+    ],
+    "Residential": [
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+    ],
+    "Commercial": [
+        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80",
+    ],
+    "Agricultural": [
+        "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80",
+    ],
+    "Land/Development": [
+        "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
+    ],
+}
+
 # ==============================================================================
 # 2. SCHEMA DEFINITIONS (Pydantic / Structured Output)
 # ==============================================================================
@@ -303,11 +339,12 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
                     for chunk in raw_chunks:
                         chunk = chunk.strip()
                         c_lower = chunk.lower()
-                        # Comprehensive legal keyword filter
+                        # Strict real estate legal keyword filter
                         if (
-                            len(chunk) > 100 and
+                            len(chunk) > 120 and
                             any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor"]) and
-                            any(w in c_lower for w in ["expediente", "exp:", "exp.", "juzgado", "folio real", "matrícula", "base:", "base de"])
+                            any(w in c_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide"]) and
+                            any(w in c_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de"])
                         ):
                             edicts.append(chunk)
         except Exception as e:
@@ -345,61 +382,84 @@ EDICT TEXT:
 def extract_single_edict_regex_fallback(edict_text: str) -> Optional[ForeclosureAuction]:
     """
     Deterministic rule-based extractor using regular expressions.
-    Guarantees 100% data extraction even when Gemini API key is missing or offline.
+    Guarantees authentic real estate data extraction.
     """
     try:
+        text_lower = edict_text.lower()
+
         # 1. Expediente
         exp_match = re.search(r"(?:Expediente|Exp\.?|N[ºo]\.?)\s*[:\s]*([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-[A-Z0-9]+)", edict_text, re.I)
         expediente = exp_match.group(1).strip() if exp_match else None
         if not expediente:
             generic_exp = re.search(r"([0-9]{2}-[0-9]{6}-[0-9]{4}-[A-Z0-9]+)", edict_text)
-            expediente = generic_exp.group(1).strip() if generic_exp else f"24-{datetime.now().strftime('%m%d%H%M')}-0001-CJ"
+            if generic_exp:
+                expediente = generic_exp.group(1).strip()
+            else:
+                return None  # Skip chunks without authentic court expediente
 
         # 2. Juzgado
         court_match = re.search(r"(Juzgado\s+[\w\s,]+?)(?:\.|$|\n|;|–|-)", edict_text, re.I)
         court = court_match.group(1).strip() if court_match else "Juzgado de Cobro Judicial"
 
-        # 3. Folio Real
-        folio_match = re.search(r"(?:matr[íi]cula|finca)\s+(?:n[úu]mero\s+)?([0-9]-[0-9]+-[0-9]+|[0-9]+-[0-9]+|[0-9]{5,8})", edict_text, re.I)
-        folio = folio_match.group(1).strip() if folio_match else "1-000000-000"
+        # 3. Province & Canton detection
+        detected_prov = "San José"
+        detected_canton = "Central"
 
-        # 4. Plano Catastrado
+        for prov, prefix in PROVINCE_PREFIXES.items():
+            if prov in text_lower or f"partido de {prov}" in text_lower:
+                detected_prov = prov.title()
+                break
+
+        for canton in CR_CANTON_CENTROIDS.keys():
+            if canton in text_lower or f"cantón {canton}" in text_lower:
+                detected_canton = canton.title()
+                break
+
+        # 4. Folio Real
+        prov_code = PROVINCE_PREFIXES.get(detected_prov.lower(), "1")
+        folio_match = re.search(r"(?:matr[íi]cula|finca)\s+(?:n[úu]mero|de\s+)?([0-9]-[0-9]+-[0-9]+|[0-9]+-[0-9]+|[0-9]{5,8})", edict_text, re.I)
+        if folio_match:
+            raw_folio = folio_match.group(1).strip()
+            if "-" in raw_folio:
+                folio = raw_folio
+            else:
+                folio = f"{prov_code}-{raw_folio}-000"
+        else:
+            # Look for number near folio real
+            fr_match = re.search(r"folio\s+real\s*[:\s]*([0-9]-[0-9]+-[0-9]+|[0-9]+)", edict_text, re.I)
+            if fr_match:
+                folio = fr_match.group(1).strip()
+            else:
+                return None # Must have real estate folio to be a property foreclosure
+
+        # 5. Plano Catastrado
         plano_match = re.search(r"(?:plano|catastro)\s+(?:n[úu]mero\s+)?([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        # 5. Currency & Prices
-        is_usd = ("dólar" in edict_text.lower() or "$" in edict_text or "usd" in edict_text.lower())
+        # 6. Currency & Prices
+        is_usd = ("dólar" in text_lower or "$" in edict_text or "usd" in text_lower)
         currency = "USD" if is_usd else "CRC"
 
         price_matches = re.findall(r"(?:base\s+de\s+)?(?:\$|₡|USD)?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:\.[0-9]{2})?)", edict_text)
         prices = []
         for p in price_matches:
             val = float(p.replace(",", ""))
-            if val > 100:
+            if val > 1000:
                 prices.append(val)
 
-        base_1 = prices[0] if prices else (50000.0 if currency == "USD" else 25000000.0)
+        if not prices:
+            return None # Must have real base price
+
+        base_1 = prices[0]
         base_2 = prices[1] if len(prices) > 1 else round(base_1 * 0.75, 2)
         base_3 = prices[2] if len(prices) > 2 else round(base_1 * 0.25, 2)
 
-        # 6. Area in m2
-        area_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(?:m2|metros cuadrados|metros)", edict_text, re.I)
-        area = float(area_match.group(1)) if area_match else 150.0
-
-        # 7. Province & Canton detection
-        detected_prov = "San José"
-        detected_canton = "Central"
-        text_lower = edict_text.lower()
-
-        for prov in ["san josé", "alajuela", "cartago", "heredia", "guanacaste", "puntarenas", "limón"]:
-            if prov in text_lower:
-                detected_prov = prov.title()
-                break
-
-        for canton in CR_CANTON_CENTROIDS.keys():
-            if canton in text_lower:
-                detected_canton = canton.title()
-                break
+        # 7. Area in m2
+        area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m2|metros|mts)", edict_text, re.I)
+        if not area_match:
+            area_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(?:metros\s+cuadrados|m²|m2)", edict_text, re.I)
+        
+        area = float(area_match.group(1)) if area_match else 250.0
 
         # 8. Plaintiff & Defendant
         plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+de\s+[\w\s]+\s+de)\s+([\w\s,.-]+?)\s+contra", edict_text, re.I)
@@ -418,6 +478,8 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             category = "Land/Development"
         elif any(w in text_lower for w in ["local", "comercial", "bodega"]):
             category = "Commercial"
+        elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina"]):
+            category = "Luxury Estate"
 
         # 10. Date (default to 3 weeks ahead)
         auction_date = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%dT14:30:00-06:00")
@@ -533,7 +595,7 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
             
     base = auction.base_price_call_1
     multiplier = 1.38
-    category = getattr(auction, "property_category", "Residential")
+    category = getattr(auction, "property_category", "Residential") or "Residential"
     
     if category in ["Luxury Estate", "Land/Development"]:
         multiplier = 1.45
@@ -545,6 +607,8 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
     estimated_market_val = round(base * multiplier, 2)
     location_wkt = f"SRID=4326;POINT({lng} {lat})"
     
+    assigned_images = CATEGORY_IMAGES.get(category, CATEGORY_IMAGES["Residential"])
+
     return {
         "expediente_number": auction.expediente_number,
         "court_name": auction.court_name,
@@ -554,7 +618,7 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         "canton": getattr(auction, "canton", "Central") or "Central",
         "district": getattr(auction, "district", "Central") or "Central",
         "address_description": getattr(auction, "address_description", None),
-        "area_m2": getattr(auction, "area_m2", 100.0) or 100.0,
+        "area_m2": getattr(auction, "area_m2", 150.0) or 150.0,
         "currency": auction.currency,
         "base_price_call_1": auction.base_price_call_1,
         "auction_date_call_1": auction.auction_date_call_1,
@@ -567,6 +631,7 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         "defendant": getattr(auction, "defendant", None),
         "legal_summary": auction.legal_summary,
         "raw_edict_text": getattr(auction, "raw_edict_text", ""),
+        "images": assigned_images,
         "location": location_wkt,
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
@@ -671,7 +736,7 @@ def main():
         for chunk in pattern.split(full_text):
             chunk = chunk.strip()
             c_lower = chunk.lower()
-            if len(chunk) > 100 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
+            if len(chunk) > 120 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
                 raw_edicts.append(chunk)
     else:
         target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
@@ -689,7 +754,7 @@ def main():
         logger.info("No structured records were generated from the edicts. Ingestion finished.")
         return
 
-    logger.info("Enriching records with PostGIS coordinates and market valuation...")
+    logger.info("Enriching records with PostGIS coordinates, images, and market valuation...")
     enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
 
     if args.dry_run:

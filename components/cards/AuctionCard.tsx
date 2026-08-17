@@ -67,7 +67,7 @@ export function AuctionCard({
   const metrics = calculateInvestorMetrics(auction, 1);
   const primaryImage =
     auction.images?.[0] ||
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80';
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
 
   const marginPct = auction.estimated_margin_pct || 0;
 
