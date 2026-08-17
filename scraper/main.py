@@ -213,17 +213,10 @@ class AuctionBatch(BaseModel):
 def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     """
     Fetches the daily judicial edicts publication from La Imprenta Nacional.
-    Chunks the document by individual foreclosure notices (edictos de remate).
+    Scans for official PDF publications and extracts judicial foreclosure notices.
     """
-    if requests is None or BeautifulSoup is None:
-        logger.warning("requests/beautifulsoup4 not installed. Using local chunk parsing mode.")
-        return []
-
     date = target_date or datetime.now()
     date_str = date.strftime("%d_%m_%Y")
-    
-    base_url = "https://www.imprentanacional.go.cr/boletin/"
-    logger.info(f"Checking Boletín Judicial for date: {date_str} at {base_url}")
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -232,33 +225,63 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     
     edicts: List[str] = []
     
-    try:
-        response = requests.get(base_url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            text = soup.get_text(separator="\n")
-            
-            pattern = re.compile(
-                r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho)|Al\s+ser\s+las|A\s+las)\s+[\w\s]+(?:remataré|rematará|en\s+el\s+mejor\s+postor))',
-                re.IGNORECASE
-            )
-            raw_chunks = pattern.split(text)
-            
-            for chunk in raw_chunks:
-                chunk = chunk.strip()
-                if (
-                    len(chunk) > 120 and
-                    ("remataré" in chunk.lower() or "rematará" in chunk.lower() or "mejor postor" in chunk.lower()) and
-                    ("expediente" in chunk.lower() or "exp:" in chunk.lower())
-                ):
-                    edicts.append(chunk)
-            
-            logger.info(f"Extracted {len(edicts)} foreclosure edicts from daily bulletin HTML.")
-        else:
-            logger.warning(f"Failed to fetch bulletin portal (HTTP {response.status_code}).")
-    except Exception as e:
-        logger.warning(f"Boletín portal fetch notice: {e}. Fallback to simulated sample ingestion.")
-        
+    # 1. Search for daily PDFs on Imprenta Nacional
+    portal_urls = [
+        "https://www.imprentanacional.go.cr/gaceta/",
+        "https://www.imprentanacional.go.cr/boletin/",
+    ]
+    
+    pdf_urls: List[str] = []
+    
+    if requests is not None:
+        for portal in portal_urls:
+            try:
+                res = requests.get(portal, headers=headers, timeout=12)
+                if res.status_code == 200:
+                    found = re.findall(r'href=[\"\x27](/[^\"\x27]+\.pdf)[\"\x27]', res.text, re.IGNORECASE)
+                    for f in found:
+                        full_url = f"https://www.imprentanacional.go.cr{f}"
+                        if full_url not in pdf_urls:
+                            pdf_urls.append(full_url)
+            except Exception as e:
+                logger.warning(f"Error checking portal {portal}: {e}")
+                
+    logger.info(f"Discovered {len(pdf_urls)} official publication PDFs to analyze.")
+    
+    # 2. Download and extract text from discovered PDFs
+    for pdf_url in pdf_urls[:3]: # Scan the top daily publications
+        try:
+            logger.info(f"Downloading official PDF: {pdf_url}")
+            res = requests.get(pdf_url, headers=headers, timeout=25)
+            if res.status_code == 200:
+                import io
+                from pypdf import PdfReader
+                pdf_file = io.BytesIO(res.content)
+                reader = PdfReader(pdf_file)
+                logger.info(f"PDF contains {len(reader.pages)} pages. Scanning for judicial foreclosures...")
+                
+                full_text = ""
+                for page in reader.pages:
+                    full_text += (page.extract_text() or "") + "\n"
+                    
+                pattern = re.compile(
+                    r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho)|Al\s+ser\s+las|A\s+las)\s+[\w\s]+(?:remataré|rematará|en\s+el\s+mejor\s+postor))',
+                    re.IGNORECASE
+                )
+                raw_chunks = pattern.split(full_text)
+                
+                for chunk in raw_chunks:
+                    chunk = chunk.strip()
+                    if (
+                        len(chunk) > 120 and
+                        ("remataré" in chunk.lower() or "rematará" in chunk.lower() or "mejor postor" in chunk.lower()) and
+                        ("expediente" in chunk.lower() or "exp:" in chunk.lower())
+                    ):
+                        edicts.append(chunk)
+        except Exception as e:
+            logger.warning(f"Error parsing PDF {pdf_url}: {e}")
+
+    logger.info(f"Extracted {len(edicts)} foreclosure notices from official bulletins.")
     return edicts
 
 # ==============================================================================
