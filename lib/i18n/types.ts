@@ -6,6 +6,7 @@ export interface Translations {
     map: string;
     investorAccess: string;
     myWatchlist: string;
+    helpGuide: string;
     logout: string;
     verifiedInvestor: string;
     dailyIngestionActive: string;

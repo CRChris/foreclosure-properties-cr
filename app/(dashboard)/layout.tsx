@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Scale, Compass } from 'lucide-react';
 import { UserNav } from '@/components/ui/UserNav';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { HelpButton } from '@/components/help/HelpButton';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function DashboardLayout({
@@ -51,6 +52,9 @@ export default function DashboardLayout({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               {t.nav.dailyIngestionActive}
             </div>
+
+            {/* Help & Guide Explainer Button */}
+            <HelpButton />
 
             {/* Language Switcher (ES / EN) */}
             <LanguageSwitcher />

@@ -8,6 +8,7 @@ import { MetricCard } from '@/components/cards/MetricCard';
 import { MapWrapper } from '@/components/map/MapWrapper';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { UserNav } from '@/components/ui/UserNav';
+import { HelpButton } from '@/components/help/HelpButton';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { 
@@ -85,6 +86,9 @@ export default function HomePage() {
               <Compass className="w-4 h-4 text-emerald-400" />
               {t.nav.map}
             </Link>
+
+            {/* Help & Guide Explainer Button */}
+            <HelpButton />
 
             {/* Language Switcher Button (🇨🇷 ES / 🇺🇸 EN) */}
             <LanguageSwitcher />
