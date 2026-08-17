@@ -602,11 +602,103 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
                 <h4 className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{isEn ? 'What happens if there is an appeal or objection by the debtor/owner?' : '¿Qué sucede si el demandado o dueño apela o presenta un recurso?'}</span>
+                </h4>
+                <div className="text-xs text-slate-400 space-y-2 leading-relaxed">
+                  <p>
+                    {isEn
+                      ? 'The debtor/owner has the statutory right under the Civil Procedure Code (Ley N° 9342) to file procedural appeals (recurso de apelación) or claims of defective notification (incidente de nulidad).'
+                      : 'El deudor o propietario tiene derecho procesal a interponer recursos de apelación o incidentes de nulidad (por ejemplo, alegando defectos en la notificación previa al remate).'}
+                  </p>
+                  <ul className="space-y-1.5 pl-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Devolutive Effect:' : 'Efecto Devolutivo:'}</strong>{' '}
+                        {isEn
+                          ? 'Under Costa Rican foreclosure law, appeals are generally admitted with devolutive effect, meaning the auction continues without suspension unless the court specifically orders a stay.'
+                          : 'En ejecuciones hipotecarias, los recursos se tramitan ordinariamente con efecto devolutivo, por lo que no suspenden el trámite del remate salvo resolución cautelar expresa.'}
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Investor Capital Protection:' : 'Protección Total de Fondos:'}</strong>{' '}
+                        {isEn
+                          ? 'If an auction is ever annulled by the court due to a procedural defect caused by the bank or tribunal, 100% of your deposited funds (the 50% deposit and final balance) are promptly refunded by the court. The buyer bears zero liability for lawsuit errors.'
+                          : 'Si un remate llegara a anularse por un defecto procesal imputable al acreedor o al despacho, el 100% de los fondos depositados (postura y saldo) son reintegrados íntegramente por el juzgado. El adjudicatario no asume responsabilidad patrimonial.'}
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Timeline Impact:' : 'Impacto en Tiempos:'}</strong>{' '}
+                        {isEn
+                          ? 'If an appeal is lodged, it may temporarily delay the final protocolization deed by ~2 to 6 months while the Superior Court resolves the motion.'
+                          : 'Una apelación puede diferir la entrega de la escritura de protocolización en firme entre 2 y 6 meses mientras el Tribunal Superior resuelve el recurso.'}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <h4 className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{isEn ? 'What are the closing and title registration costs for purchasing at auction?' : '¿Cuáles son los costos de cierre e inscripción para un remate?'}</span>
+                </h4>
+                <div className="text-xs text-slate-400 space-y-2 leading-relaxed">
+                  <p>
+                    {isEn
+                      ? 'In a judicial foreclosure, the winning bidder (adjudicatario) is legally responsible for 100% of the closing and registration costs. A standard closing budget is approximately 3.50% to 4.00% of the adjudicated price:'
+                      : 'En las subastas judiciales, el adjudicatario asume el 100% de los costos de protocolización e inscripción. El presupuesto estimado de cierre oscila entre el 3.50% y el 4.00% del valor adjudicado:'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="font-bold text-slate-200 block">
+                        1. {isEn ? 'Property Transfer Tax (Ley 7088):' : 'Impuesto de Transferencia (Ley 7088):'}
+                      </span>
+                      <p className="text-[11px] text-emerald-400 font-mono font-bold">1.50%</p>
+                      <p className="text-[10px] text-slate-500">{isEn ? 'Calculated on adjudicated price or fiscal valuation.' : 'Calculado sobre el valor adjudicado o valor fiscal.'}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="font-bold text-slate-200 block">
+                        2. {isEn ? 'National Registry & Legal Stamps:' : 'Timbres Registrales y Fiscales:'}
+                      </span>
+                      <p className="text-[11px] text-emerald-400 font-mono font-bold">~0.84%</p>
+                      <p className="text-[10px] text-slate-500">{isEn ? 'Registry (0.50%), Fiscal, Bar Association, and Education stamps.' : 'Registro (0.50%), Fiscal, Abogados y Educación y Cultura.'}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="font-bold text-slate-200 block">
+                        3. {isEn ? 'Notary Protocolization Fees:' : 'Honorarios de Protocolización Notarial:'}
+                      </span>
+                      <p className="text-[11px] text-emerald-400 font-mono font-bold">~1.25% - 1.50%</p>
+                      <p className="text-[10px] text-slate-500">{isEn ? 'Regulated by the official Costa Rican Notary Fee Schedule.' : 'Regulado por el arancel oficial del Colegio de Abogados.'}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                      <span className="font-bold text-slate-200 block">
+                        4. {isEn ? 'Municipal Taxes & Services:' : 'Impuestos Municipales y Servicios:'}
+                      </span>
+                      <p className="text-[11px] text-emerald-400 font-mono font-bold">Variable</p>
+                      <p className="text-[10px] text-slate-500">{isEn ? 'Back property taxes (0.25% annual) that attach to the land.' : 'Impuesto de Bienes Inmuebles adeudado sobre la finca.'}</p>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 italic pt-1">
+                    {isEn
+                      ? 'Tip: Every property dossier on RematesCR includes an interactive closing cost simulator calculating these exact statutory amounts in real time.'
+                      : 'Nota: Cada ficha de propiedad en RematesCR incluye una calculadora legal interactiva que desglosa automáticamente estos montos estatutarios en tiempo real.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <h4 className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>{isEn ? 'What currency is used in the auction?' : '¿En qué moneda se paga la subasta?'}</span>
                 </h4>
                 <p className="text-xs text-slate-400">
                   {isEn
-                    ? 'The currency (USD $ or CRC ₡) is established by the original mortgage contract and stated in the edict. The 50% deposit and final balance must be paid in the currency specified by the court.'
+                    ? 'The currency (USD $ or CRC ₡) is established by the original mortgage contract and stated in the edict. The 50% deposit and final balance must be paid in the exact currency specified by the court.'
                     : 'La moneda (USD o CRC) viene definida en la escritura de hipoteca y en el edicto. Tanto el 50% de postura legal como el saldo final deben depositarse en la moneda señalada por el tribunal.'}
                 </p>
               </div>
