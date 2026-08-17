@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
 import Link from 'next/link';
 import { 
   MapPin, 
@@ -18,6 +19,7 @@ import {
   Scale, 
   TrendingUp, 
   Compass,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function MapExplorerPage() {
@@ -90,8 +92,18 @@ export default function MapExplorerPage() {
         </div>
       </div>
 
+      {/* Geocoding Centroid Disclaimer Banner */}
+      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200/90 text-xs">
+        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <p>
+          {language === 'en'
+            ? '📍 Approximate location based on district/canton centroids. Judicial foreclosure notices do not include precise GPS coordinates in edicts. Verify registered survey (Plano Catastrado) for exact boundaries.'
+            : '📍 Ubicación aproximada por centroide de distrito/cantón. Los remates judiciales no incluyen coordenadas GPS exactas en el edicto. Verifique el plano catastrado para linderos definitivos.'}
+        </p>
+      </div>
+
       {/* Main Map Layout: 2 Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-210px)] min-h-[600px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-250px)] min-h-[580px]">
         {/* Left Column: Properties Sidebar */}
         <div className="lg:col-span-4 flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
           {/* Search bar inside sidebar */}
@@ -124,6 +136,7 @@ export default function MapExplorerPage() {
             {filteredAuctions.length > 0 ? (
               filteredAuctions.map((auction) => {
                 const isSelected = selectedAuction?.id === auction.id;
+                const propType = auction.property_type || inferPropertyType(`${auction.address_description || ''} ${auction.legal_summary || ''}`);
                 return (
                   <div
                     key={auction.id}
@@ -138,9 +151,7 @@ export default function MapExplorerPage() {
                       <span className="text-xs font-bold text-white truncate">
                         {auction.district}, {auction.canton}
                       </span>
-                      <Badge variant={isSelected ? 'success' : 'default'} size="sm">
-                        {auction.province}
-                      </Badge>
+                      <PropertyTypeBadge type={propType} language={language} size="sm" />
                     </div>
 
                     <div className="flex items-baseline justify-between mt-2">
@@ -159,8 +170,8 @@ export default function MapExplorerPage() {
                         <Maximize2 className="w-3 h-3 text-slate-500" />
                         {formatArea(auction.area_m2)}
                       </span>
-                      <span className="font-mono text-slate-400">
-                        {auction.folio_real}
+                      <span className="font-mono text-slate-400 text-[10.5px]">
+                        Folio: {auction.folio_real}
                       </span>
                     </div>
                   </div>
@@ -191,7 +202,7 @@ export default function MapExplorerPage() {
 
           {/* Floating Action Card for selected property */}
           {selectedAuction && (
-            <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 bg-slate-950/95 border border-slate-800 rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2">
+            <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 bg-slate-950/95 border border-slate-800 rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-[10px] uppercase font-bold text-emerald-400">

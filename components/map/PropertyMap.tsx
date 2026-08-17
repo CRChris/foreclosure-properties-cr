@@ -4,10 +4,11 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
+import { formatCurrency, formatArea, getDaysUntilAuction } from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles } from 'lucide-react';
+import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
 
 export interface PropertyMapProps {
   auctions: Auction[];
@@ -55,6 +56,7 @@ export function PropertyMap({
   className = '',
 }: PropertyMapProps) {
   const { language } = useLanguage();
+
   // Color-coded marker generator based on discount margin:
   // - Green: > 35% Margin (High Discount)
   // - Yellow/Amber: 20% - 35% Margin (Medium Discount)
@@ -103,8 +105,18 @@ export function PropertyMap({
 
   return (
     <div style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner ${className}`}>
-      {/* Interactive Legend Overlay */}
-      <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden sm:block">
+      {/* Persistent Map Centroid Disclaimer Badge (Top-Left) */}
+      <div className="absolute top-3 left-3 z-[400] max-w-xs sm:max-w-sm bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3 py-2 text-[11px] text-amber-200/95 shadow-2xl flex items-start gap-2 pointer-events-auto">
+        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <p className="leading-tight">
+          {language === 'en'
+            ? '📍 Approximate location by district centroid. Edicts do not contain GPS coordinates. Verify registered survey (Plano Catastrado).'
+            : '📍 Ubicación aproximada por centroide de distrito/cantón. Los remates judiciales no incluyen GPS exacto en el edicto. Verifique el plano catastrado.'}
+        </p>
+      </div>
+
+      {/* Interactive Legend Overlay (Top-Right) */}
+      <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden md:block">
         <p className="font-semibold text-slate-200 flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-emerald-400" />
           {language === 'es' ? 'Margen de Oportunidad' : 'Opportunity Margin'}
@@ -141,7 +153,11 @@ export function PropertyMap({
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
           const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
-          const primaryImage = auction.images?.[0] || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80';
+          const propertyType =
+            auction.property_type ||
+            inferPropertyType(
+              `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
+            );
 
           return (
             <Marker
@@ -156,33 +172,30 @@ export function PropertyMap({
             >
               <Popup className="custom-auction-popup">
                 <div className="w-72 space-y-2.5 p-1">
-                  {/* Image thumbnail header */}
-                  <div className="relative aspect-[16/9] w-full rounded-lg overflow-hidden bg-slate-950">
-                    <img
-                      src={primaryImage}
-                      alt={auction.folio_real}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
-                    
-                    {/* Badge on image */}
-                    {auction.estimated_margin_pct && (
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-500/50 text-[10.5px] font-bold text-emerald-300 flex items-center gap-1 shadow-md">
-                        <TrendingUp className="w-3 h-3 text-emerald-400" />
-                        <span>+{Math.round(auction.estimated_margin_pct)}% {language === 'es' ? 'Margen' : 'Margin'}</span>
-                      </div>
-                    )}
-
-                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-slate-950/80 border border-slate-700 text-[10px] font-mono font-bold text-slate-300">
-                      {auction.currency}
+                  {/* Category Pill & Disclaimer Header */}
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between gap-1">
+                      <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+                      {auction.estimated_margin_pct && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10.5px] font-extrabold">
+                          +{Math.round(auction.estimated_margin_pct)}%
+                        </span>
+                      )}
                     </div>
+                    <p className="text-[10px] text-amber-400 font-semibold flex items-center gap-1">
+                      <span>📍</span>
+                      <span>
+                        {language === 'en'
+                          ? 'Estimated District Centroid • Verify Plano Catastrado'
+                          : 'Centroide Distrital Estimado • Consulte el Plano Catastrado'}
+                      </span>
+                    </p>
                   </div>
 
                   {/* Title & Expediente */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-white line-clamp-1">
-                      {auction.district} • Folio {auction.folio_real}
+                      {auction.district}, {auction.canton} • Folio {auction.folio_real}
                     </p>
                     <p className="text-[10px] font-mono text-slate-400 truncate flex items-center gap-1">
                       <Scale className="w-2.5 h-2.5 text-slate-500 shrink-0" />

@@ -1,4 +1,4 @@
-import { Auction, CostaRicaProvince, Currency, PropertyCategory } from '@/lib/types/auction';
+import { Auction, CostaRicaProvince, Currency, PropertyCategory, PropertyType, MortgagePriority } from '@/lib/types/auction';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -165,6 +165,64 @@ function mapRowToAuction(item: any): Auction {
     }
   }
 
+  // Derive PropertyType
+  let propertyType: PropertyType = (item.property_type as PropertyType);
+  if (!propertyType) {
+    if (textSearch.includes('condominio') || textSearch.includes('filial') || textSearch.includes('apartamento') || textSearch.includes('penthouse')) {
+      propertyType = 'condo_apartment';
+    } else if (textSearch.includes('casa') || textSearch.includes('habitación') || textSearch.includes('habitacion') || textSearch.includes('unifamiliar') || textSearch.includes('quinta') || textSearch.includes('villa')) {
+      propertyType = 'single_family_home';
+    } else if (textSearch.includes('comercial') || textSearch.includes('oficina') || textSearch.includes('bodega') || textSearch.includes('industrial') || textSearch.includes('local')) {
+      propertyType = 'commercial_industrial';
+    } else if (textSearch.includes('finca') || textSearch.includes('agrícola') || textSearch.includes('agricola') || textSearch.includes('repasto') || textSearch.includes('ganadera')) {
+      propertyType = 'agricultural_land';
+    } else if (textSearch.includes('lote') || textSearch.includes('terreno') || textSearch.includes('solar') || textSearch.includes('desarrollo') || textSearch.includes('para construir')) {
+      propertyType = 'building_lot';
+    } else {
+      propertyType = 'other';
+    }
+  }
+
+  // Parse linderos if present or extract from text
+  let nNorte = item.lindero_norte || null;
+  let nSur = item.lindero_sur || null;
+  let nEste = item.lindero_este || null;
+  let nOeste = item.lindero_oeste || null;
+
+  if (!nNorte && item.raw_edict_text) {
+    const mNorte = item.raw_edict_text.match(/norte[:\s]+([^;,.\n]+)/i);
+    if (mNorte) nNorte = mNorte[1].trim();
+    const mSur = item.raw_edict_text.match(/sur[:\s]+([^;,.\n]+)/i);
+    if (mSur) nSur = mSur[1].trim();
+    const mEste = item.raw_edict_text.match(/este[:\s]+([^;,.\n]+)/i);
+    if (mEste) nEste = mEste[1].trim();
+    const mOeste = item.raw_edict_text.match(/oeste[:\s]+([^;,.\n]+)/i);
+    if (mOeste) nOeste = mOeste[1].trim();
+  }
+
+  const hasConstruction = typeof item.has_construction === 'boolean'
+    ? item.has_construction
+    : (textSearch.includes('casa') || textSearch.includes('edificio') || textSearch.includes('bodega') || textSearch.includes('filial') || textSearch.includes('mejoras'));
+
+  const hasPublicRoad = typeof item.has_public_road_frontage === 'boolean'
+    ? item.has_public_road_frontage
+    : (textSearch.includes('calle pública') || textSearch.includes('calle publica') || textSearch.includes('frente a calle'));
+
+  const isCondominio = typeof item.is_condominio === 'boolean'
+    ? item.is_condominio
+    : (textSearch.includes('condominio') || textSearch.includes('filial') || textSearch.includes('7933'));
+
+  let mortgagePriority: MortgagePriority = item.mortgage_priority || '1st_mortgage';
+  if (!item.mortgage_priority) {
+    if (textSearch.includes('segundo grado') || textSearch.includes('segunda hipoteca')) {
+      mortgagePriority = '2nd_mortgage';
+    } else if (textSearch.includes('embargo')) {
+      mortgagePriority = 'embargo_judicial';
+    } else {
+      mortgagePriority = '1st_mortgage';
+    }
+  }
+
   // Assign distinct deterministic gallery for each property based on expediente / ID
   const seedString = String(item.expediente_number || item.id || item.folio_real || '0');
   const hash = Math.abs(seedString.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0));
@@ -184,6 +242,17 @@ function mapRowToAuction(item: any): Auction {
     area_m2: Number(item.area_m2) || 100,
     currency: (item.currency || 'USD') as Currency,
     property_category: category,
+    property_type: propertyType,
+    naturaleza_raw: item.naturaleza_raw || item.address_description || null,
+    has_construction: hasConstruction,
+    has_public_road_frontage: hasPublicRoad,
+    is_condominio: isCondominio,
+    lindero_norte: nNorte,
+    lindero_sur: nSur,
+    lindero_este: nEste,
+    lindero_oeste: nOeste,
+    servidumbres_notes: item.servidumbres_notes || null,
+    mortgage_priority: mortgagePriority,
     base_price_call_1: Number(item.base_price_call_1),
     auction_date_call_1: item.auction_date_call_1,
     base_price_call_2: item.base_price_call_2 ? Number(item.base_price_call_2) : null,

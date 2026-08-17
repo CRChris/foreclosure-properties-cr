@@ -3,16 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { Auction } from '@/lib/types/auction';
 import { AuctionCallLadder } from '@/components/dossier/AuctionCallLadder';
+import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, formatDateCR, calculateInvestorMetrics } from '@/lib/utils';
+import { formatCurrency, formatArea, calculateInvestorMetrics } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { fetchAuctionById } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
 import {
   ArrowLeft,
   Calendar,
@@ -21,19 +22,15 @@ import {
   TrendingUp,
   Maximize2,
   Bookmark,
-  Share2,
   Printer,
   Copy,
   Check,
-  Building,
   FileText,
-  ExternalLink,
-  ShieldCheck,
   CalendarPlus,
-  Landmark,
   Layers,
-  ChevronRight,
+  AlertTriangle,
   Info,
+  Building,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -48,24 +45,24 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
-  const [loading, setLoading] = useState(
-    !MOCK_AUCTIONS.some((a) => a.id === params.id)
-  );
-  const [auction, setAuction] = useState<Auction | null>(
-    MOCK_AUCTIONS.find((a) => a.id === params.id) || null
-  );
+  const [auction, setAuction] = useState<Auction | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch live auction if Supabase is active
   useEffect(() => {
-    fetchAuctionById(params.id).then((data) => {
-      if (data) {
+    async function loadAuction() {
+      setLoading(true);
+      try {
+        const data = await fetchAuctionById(params.id);
         setAuction(data);
+      } catch (err) {
+        console.error('Error fetching auction dossier:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    }
+    loadAuction();
   }, [params.id]);
 
-  // Check saved state from localStorage
   useEffect(() => {
     if (!auction) return;
     try {
@@ -82,7 +79,11 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-slate-400">
         <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium">{language === 'es' ? 'Cargando expediente judicial...' : 'Loading judicial foreclosure docket...'}</p>
+        <p className="text-sm font-medium">
+          {language === 'es'
+            ? 'Cargando expediente judicial...'
+            : 'Loading judicial foreclosure docket...'}
+        </p>
       </div>
     );
   }
@@ -120,12 +121,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
     const endDateISO = endDate.toISOString().replace(/-|:|\.\d\d\d/g, '');
 
     const title = encodeURIComponent(
-      `Remate Judicial: Folio ${auction.folio_real} (${auction.canton})`
+      `Remate Judicial: ${auction.expediente_number} (${auction.canton})`
     );
     const details = encodeURIComponent(
-      `Remate Judicial 1er Señalamiento\nExpediente: ${auction.expediente_number}\nJuzgado: ${auction.court_name}\nBase: ${formatCurrency(auction.base_price_call_1, auction.currency)}\nFolio Real: ${auction.folio_real}\nUbicación: ${auction.district}, ${auction.canton}, ${auction.province}`
+      `Remate judicial tramitado en ${auction.court_name}.\nFolio Real: ${auction.folio_real}\nBase 1er Remate: ${auction.currency} ${auction.base_price_call_1}`
     );
-    const location = encodeURIComponent(`${auction.court_name}, Costa Rica`);
+    const location = encodeURIComponent(auction.court_name);
 
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDateISO}/${endDateISO}&details=${details}&location=${location}`;
   };
@@ -161,11 +162,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
     document.body.removeChild(link);
   };
 
-  const primaryImage =
-    auction.images?.[0] ||
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
-
   const marginPct = auction.estimated_margin_pct || 0;
+  const propertyType =
+    auction.property_type ||
+    inferPropertyType(
+      `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
+    );
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
@@ -229,65 +231,62 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         </div>
       </div>
 
-      {/* Hero Header Banner */}
-      <div className="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl">
-        <div className="h-72 sm:h-96 w-full relative">
-          <img
-            src={primaryImage}
-            alt={auction.court_name}
-            className="w-full h-full object-cover object-center"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
+      {/* Executive Judicial Dossier Hero Banner (Zero External Photo Dependency) */}
+      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950 border border-slate-800 p-6 sm:p-10 shadow-2xl space-y-6">
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]" />
 
-          {/* Floating Hero Badges */}
-          <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-            <Badge variant="success" size="md" className="shadow-lg backdrop-blur-md">
-              {auction.property_category || 'Inmueble'}
-            </Badge>
-            {marginPct > 0 && (
-              <span className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-black text-sm shadow-xl flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                +{marginPct}% {t.card.estimatedMargin}
-              </span>
-            )}
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <PropertyTypeBadge type={propertyType} language={language} size="lg" />
+            <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-mono font-bold">
+              Folio Real: {auction.folio_real}
+            </span>
+            <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 text-xs font-mono">
+              Exp: {auction.expediente_number}
+            </span>
           </div>
 
-          {/* Bottom Title & Details */}
-          <div className="absolute bottom-6 left-6 right-6 space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-emerald-400">
-              <span>{t.dossier.folioReal}: {auction.folio_real}</span>
-              <span>•</span>
-              <span>{t.card.docket}: {auction.expediente_number}</span>
-            </div>
+          {marginPct > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-sm shadow-xl self-start md:self-auto">
+              <TrendingUp className="w-4 h-4" />
+              +{marginPct}% {t.card.estimatedMargin}
+            </span>
+          )}
+        </div>
 
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-              {auction.address_description || `${auction.district}, ${auction.canton}`}
-            </h1>
+        <div className="relative z-10 space-y-3">
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+            {auction.address_description || `${auction.district}, ${auction.canton}`}
+          </h1>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-slate-300 pt-1">
-              <span className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-emerald-400" />
-                <span>{auction.district}, {auction.canton}, {auction.province}</span>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-300 pt-1">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                {auction.district}, {auction.canton}, {auction.province}
               </span>
-              <span className="flex items-center gap-1.5">
-                <Maximize2 className="w-4 h-4 text-emerald-400" />
-                <span>{formatArea(auction.area_m2)}</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Scale className="w-4 h-4 text-emerald-400" />
-                <span>{auction.court_name}</span>
-              </span>
-            </div>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Maximize2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{formatArea(auction.area_m2)}</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Scale className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{auction.court_name}</span>
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Primary 3-Call Ladder Section */}
+      {/* Primary 3-Call Statutory Ladder Section */}
       <AuctionCallLadder
         auction={auction}
         selectedCall={selectedCall}
         onSelectCall={setSelectedCall}
       />
+
+      {/* Detailed Property Characteristics & 4-Quadrant Linderos */}
+      <PropertySpecsGrid auction={auction} />
 
       {/* Tabbed Legal Text / Executive Summary Dossier */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
@@ -420,9 +419,9 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       {/* Due Diligence Legal Checklist */}
       <DueDiligenceChecklist auction={auction} />
 
-      {/* Geospatial Map Section */}
+      {/* Geospatial Map Section with Prominent Centroid Warning */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <MapPin className="w-5 h-5 text-emerald-400" />
             <h2 className="text-lg font-bold text-white tracking-tight">
@@ -432,6 +431,16 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <span className="text-xs font-mono text-slate-400">
             {auction.latitude?.toFixed(4)}, {auction.longitude?.toFixed(4)}
           </span>
+        </div>
+
+        {/* Persistent Map Centroid Disclaimer */}
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200/90 text-xs">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p>
+            {language === 'en'
+              ? '📍 Approximate location by district centroid. Judicial foreclosure notices do not contain precise GPS coordinates. Consult the official registered cadastral survey (Plano Catastrado) for exact boundaries.'
+              : '📍 Ubicación aproximada por centroide distrital. Los remates judiciales no incluyen coordenadas GPS exactas en el edicto. Verifique el plano catastrado oficial para linderos definitivos.'}
+          </p>
         </div>
 
         <div className="h-80 w-full rounded-2xl overflow-hidden border border-slate-800">

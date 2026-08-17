@@ -3,24 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction, calculateInvestorMetrics } from '@/lib/utils';
-import { Badge } from '@/components/ui/Badge';
+import { formatCurrency, formatArea, getDaysUntilAuction, calculateInvestorMetrics } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { PropertyTypeBanner, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
 import {
   Calendar,
-  MapPin,
-  Scale,
-  TrendingUp,
-  Maximize2,
   Bookmark,
-  ArrowRight,
-  Sparkles,
-  Building,
-  Home,
-  Trees,
-  Warehouse,
-  Briefcase,
   ChevronRight,
+  TrendingUp,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  Compass,
+  Building,
+  TreePine,
 } from 'lucide-react';
 
 interface AuctionCardProps {
@@ -39,7 +35,7 @@ export function AuctionCard({
   const { t, language } = useLanguage();
   const [isSaved, setIsSaved] = useState(false);
 
-  // Initialize saved state from localStorage if available
+  // Initialize saved state from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`saved_auction_${auction.id}`);
@@ -65,11 +61,31 @@ export function AuctionCard({
 
   const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
   const metrics = calculateInvestorMetrics(auction, 1);
-  const primaryImage =
-    auction.images?.[0] ||
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
-
   const marginPct = auction.estimated_margin_pct || 0;
+
+  // Infer property type if missing
+  const propertyType =
+    auction.property_type ||
+    inferPropertyType(
+      `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
+    );
+
+  const hasConstruction = auction.has_construction ?? (
+    (auction.address_description || '').toLowerCase().includes('casa') ||
+    (auction.address_description || '').toLowerCase().includes('edificio') ||
+    (auction.address_description || '').toLowerCase().includes('condominio')
+  );
+
+  const hasPublicRoad = auction.has_public_road_frontage ?? (
+    (auction.raw_edict_text || '').toLowerCase().includes('calle pública') ||
+    (auction.raw_edict_text || '').toLowerCase().includes('calle publica') ||
+    (auction.raw_edict_text || '').toLowerCase().includes('frente a calle')
+  );
+
+  const isCondominio = auction.is_condominio ?? (
+    (auction.address_description || '').toLowerCase().includes('condominio') ||
+    (auction.address_description || '').toLowerCase().includes('filial')
+  );
 
   // Margin badge color
   let marginBadgeClass = 'bg-sky-950/90 border-sky-500/40 text-sky-300';
@@ -79,23 +95,8 @@ export function AuctionCard({
     marginBadgeClass = 'bg-amber-950/90 border-amber-500/50 text-amber-300';
   }
 
-  // Category Icon helper
-  const getCategoryIcon = (category?: string) => {
-    switch (category) {
-      case 'Condo':
-        return <Building className="w-3 h-3 text-emerald-400" />;
-      case 'Residential':
-      case 'Luxury Estate':
-        return <Home className="w-3 h-3 text-emerald-400" />;
-      case 'Land/Development':
-      case 'Agricultural':
-        return <Trees className="w-3 h-3 text-emerald-400" />;
-      case 'Industrial':
-        return <Warehouse className="w-3 h-3 text-emerald-400" />;
-      default:
-        return <Briefcase className="w-3 h-3 text-emerald-400" />;
-    }
-  };
+  // Priority indicator
+  const priority = auction.mortgage_priority || '1st_mortgage';
 
   return (
     <div
@@ -106,19 +107,23 @@ export function AuctionCard({
           : 'border-slate-800/90 hover:border-emerald-500/50 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-1'
       }`}
     >
-      {/* Property Image Header */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-950">
-        <img
-          src={primaryImage}
-          alt={`Remate judicial en ${auction.canton}, ${auction.province}`}
-          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
-          loading="lazy"
+      {/* Icon-Based Category Hero Banner (Zero External Image Dependency) */}
+      <div className="relative w-full">
+        <PropertyTypeBanner
+          type={propertyType}
+          language={language}
+          canton={auction.canton}
+          district={auction.district}
+          province={auction.province}
+          areaM2={auction.area_m2}
+          isCondominio={isCondominio}
+          hasConstruction={hasConstruction}
+          className="rounded-b-none border-b border-slate-800"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/30 to-transparent" />
 
-        {/* Top Badges & Bookmark */}
-        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-10">
-          <div className="flex items-center gap-1.5">
+        {/* Floating Badges Overlay (Discount Margin & Bookmark) */}
+        <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-20 pointer-events-none">
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             {marginPct > 0 ? (
               <span
                 className={`px-2.5 py-1 text-xs font-black rounded-lg border backdrop-blur-md flex items-center gap-1 shadow-lg ${marginBadgeClass}`}
@@ -133,8 +138,7 @@ export function AuctionCard({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Bookmark toggle */}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
             <button
               type="button"
               onClick={handleToggleSave}
@@ -149,33 +153,60 @@ export function AuctionCard({
             </button>
           </div>
         </div>
-
-        {/* Bottom Tag over Image */}
-        <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between z-10">
-          <span className="text-xs font-semibold text-slate-200 flex items-center gap-1 drop-shadow-md">
-            <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="truncate max-w-[170px] sm:max-w-[200px]">
-              {auction.district}, {auction.canton}
-            </span>
-          </span>
-          <span className="text-[11px] font-bold text-emerald-400 bg-slate-950/85 px-2 py-0.5 rounded-md border border-slate-800 shadow">
-            {auction.province}
-          </span>
-        </div>
       </div>
 
       {/* Card Content Body */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3.5">
         <div>
-          {/* Header Tag / Folio & Category */}
+          {/* Header Tag / Folio Real & Mortgage Status */}
           <div className="flex items-center justify-between text-[11px] text-slate-400 pb-2 border-b border-slate-800/70 font-mono">
-            <span className="flex items-center gap-1 text-slate-300">
-              {getCategoryIcon(auction.property_category)}
-              <span className="font-sans font-medium">{auction.property_category || 'Inmueble'}</span>
-            </span>
-            <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-300">
+            <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-300 font-bold">
               Folio: {auction.folio_real}
             </span>
+            <span className="flex items-center gap-1 text-[10.5px] font-sans font-medium text-emerald-400">
+              {priority === '1st_mortgage' ? (
+                <>
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>1° Hipoteca</span>
+                </>
+              ) : priority === 'embargo_judicial' ? (
+                <>
+                  <AlertTriangle className="w-3 h-3 text-rose-400" />
+                  <span>Embargo</span>
+                </>
+              ) : (
+                <>
+                  <ShieldAlert className="w-3 h-3 text-amber-400" />
+                  <span>2° Hipoteca</span>
+                </>
+              )}
+            </span>
+          </div>
+
+          {/* Quick Legal Specs Chips (Frontage & Construction) */}
+          <div className="pt-2 flex flex-wrap items-center gap-1.5">
+            {hasPublicRoad ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-950/60 border border-sky-600/40 text-sky-300">
+                <Compass className="w-3 h-3 text-sky-400" />
+                <span>{language === 'en' ? 'Public Road Front' : 'Frente a Calle'}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-400">
+                <span>{language === 'en' ? 'Private Access' : 'Vía de Servidumbre'}</span>
+              </span>
+            )}
+
+            {hasConstruction ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-950/60 border border-amber-600/40 text-amber-300">
+                <Building className="w-3 h-3 text-amber-400" />
+                <span>{language === 'en' ? 'Built' : 'Con Mejoras'}</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-600/40 text-emerald-300">
+                <TreePine className="w-3 h-3 text-emerald-400" />
+                <span>{language === 'en' ? 'Unbuilt Land' : 'Sin Construir'}</span>
+              </span>
+            )}
           </div>
 
           {/* Base Price & Valuation */}

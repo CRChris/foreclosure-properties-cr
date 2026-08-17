@@ -212,6 +212,26 @@ CATEGORY_IMAGES: Dict[str, List[str]] = {
 # ==============================================================================
 # 2. SCHEMA DEFINITIONS (Pydantic / Structured Output)
 # ==============================================================================
+class PropertyCharacteristics(BaseModel):
+    # Classification
+    property_type: str = Field("single_family_home", description="'single_family_home' | 'condo_apartment' | 'building_lot' | 'agricultural_land' | 'commercial_industrial' | 'other'")
+    naturaleza_raw: Optional[str] = Field(None, description="Exact legal description: e.g. 'Terreno para construir con una casa de habitación'")
+    
+    # Physical & Access Details
+    has_construction: bool = Field(False, description="True if mentions casa, edificio, bodega, mejoras")
+    has_public_road_frontage: bool = Field(False, description="True if any lindero mentions 'calle pública' or 'frente a calle'")
+    is_condominio: bool = Field(False, description="True if mentions 'finca filial', 'régimen de condominio', 'Ley 7933'")
+    
+    # Boundaries (Linderos)
+    lindero_norte: Optional[str] = Field(None, description="North bordering property")
+    lindero_sur: Optional[str] = Field(None, description="South bordering property")
+    lindero_este: Optional[str] = Field(None, description="East bordering property")
+    lindero_oeste: Optional[str] = Field(None, description="West bordering property")
+    
+    # Legal Encumbrances
+    servidumbres_notes: Optional[str] = Field(None, description="Active registered easements or annotations e.g. 'Servidumbre de paso / acueducto'")
+    mortgage_priority: str = Field("1st_mortgage", description="'1st_mortgage' | '2nd_mortgage' | 'embargo_judicial' | 'unknown'")
+
 class ForeclosureAuction(BaseModel):
     expediente_number: str = Field(description="Court case docket number, format: YY-XXXXXX-XXXX-CJ / CI / CA")
     court_name: str = Field(description="Full name of the judicial court / Juzgado")
@@ -237,6 +257,20 @@ class ForeclosureAuction(BaseModel):
     defendant: Optional[str] = Field(None, description="Debtor / foreclosed party name")
     legal_summary: str = Field(description="2-3 sentence executive investor summary in Spanish")
     property_category: Optional[str] = Field("Residential", description="Residential, Commercial, Land/Development, Agricultural, Industrial, Condo, Luxury Estate")
+    
+    # Detailed Legal Property Characteristics
+    property_type: Optional[str] = Field("single_family_home", description="'single_family_home' | 'condo_apartment' | 'building_lot' | 'agricultural_land' | 'commercial_industrial' | 'other'")
+    naturaleza_raw: Optional[str] = Field(None, description="Exact registered legal description from edict")
+    has_construction: Optional[bool] = Field(False, description="True if property mentions improvements / built structures")
+    has_public_road_frontage: Optional[bool] = Field(False, description="True if any lindero mentions 'calle pública'")
+    is_condominio: Optional[bool] = Field(False, description="True if property is in condominium regime")
+    lindero_norte: Optional[str] = Field(None, description="Registered North boundary")
+    lindero_sur: Optional[str] = Field(None, description="Registered South boundary")
+    lindero_este: Optional[str] = Field(None, description="Registered East boundary")
+    lindero_oeste: Optional[str] = Field(None, description="Registered West boundary")
+    servidumbres_notes: Optional[str] = Field(None, description="Registered easements or annotations")
+    mortgage_priority: Optional[str] = Field("1st_mortgage", description="'1st_mortgage' | '2nd_mortgage' | 'embargo_judicial' | 'unknown'")
+
     raw_edict_text: str = Field(description="Verbatim published legal edict text")
     approx_latitude: Optional[float] = Field(None, description="Latitude in Costa Rica")
     approx_longitude: Optional[float] = Field(None, description="Longitude in Costa Rica")
@@ -373,7 +407,15 @@ Follow these legal parsing rules:
 9. 'plaintiff': Foreclosing bank (BNCR, BCR, BAC, Promerica, Davivienda, Popular, Scotiabank, private lender, etc.).
 10. 'defendant': Debtor / foreclosed party name.
 11. 'legal_summary': 2-3 sentence executive investor overview in Spanish describing the asset, rooms, land, location, and potential.
-12. 'property_category': One of: Condo, Residential, Luxury Estate, Land/Development, Agricultural, Industrial, Commercial.
+12. 'property_type': Classify as one of: 'single_family_home' (casa), 'condo_apartment' (condominio/filial), 'building_lot' (lote), 'agricultural_land' (finca/terreno agrícola), 'commercial_industrial' (local/bodega), or 'other'.
+13. 'naturaleza_raw': Exact legal naturaleza description (e.g. 'Terreno para construir con una casa de habitación').
+14. 'has_construction': True if the property mentions casa, mejoras, edificación, bodega, etc.
+15. 'has_public_road_frontage': True if linderos mention 'calle pública' or 'frente a calle'.
+16. 'is_condominio': True if mentions 'finca filial' or condominium regime.
+17. 'lindero_norte', 'lindero_sur', 'lindero_este', 'lindero_oeste': Extract the 4 bordering boundaries (linderos).
+18. 'servidumbres_notes': Note any registered easements (servidumbre de paso, acueducto, etc.).
+19. 'mortgage_priority': '1st_mortgage' if hipoteca en primer grado, '2nd_mortgage' if segundo grado, 'embargo_judicial' if execution by embargo.
+"""
 
 EDICT TEXT:
 \"\"\"{edict_text}\"\"\"

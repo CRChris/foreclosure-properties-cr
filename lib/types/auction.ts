@@ -18,6 +18,20 @@ export type PropertyCategory =
   | 'Condo'
   | 'Luxury Estate';
 
+export type PropertyType =
+  | 'single_family_home'
+  | 'condo_apartment'
+  | 'building_lot'
+  | 'agricultural_land'
+  | 'commercial_industrial'
+  | 'other';
+
+export type MortgagePriority =
+  | '1st_mortgage'
+  | '2nd_mortgage'
+  | 'embargo_judicial'
+  | 'unknown';
+
 export type AuctionCallStage = 'call_1' | 'call_2' | 'call_3';
 
 export type AuctionStatus =
@@ -54,11 +68,28 @@ export interface Auction {
   estimated_market_value: number | null;
   estimated_margin_pct: number | null;
   
-  // Legal Parties
+  // Legal Parties & Content
   plaintiff: string;
   defendant: string | null;
   legal_summary: string | null;
   raw_edict_text: string;
+
+  // Registered Legal Property Characteristics
+  property_type?: PropertyType;
+  naturaleza_raw?: string | null;
+  has_construction?: boolean;
+  has_public_road_frontage?: boolean;
+  is_condominio?: boolean;
+  
+  // Boundaries (Linderos Registrales)
+  lindero_norte?: string | null;
+  lindero_sur?: string | null;
+  lindero_este?: string | null;
+  lindero_oeste?: string | null;
+
+  // Encumbrances & Priority
+  servidumbres_notes?: string | null;
+  mortgage_priority?: MortgagePriority;
   
   // Geospatial Coordinates (Point)
   latitude: number | null;
