@@ -2,8 +2,8 @@ name: Daily Judicial Foreclosure Ingestion Pipeline
 
 on:
   schedule:
-    # Runs at 13:00 UTC (7:00 AM Costa Rica Time) Monday through Friday
-    - cron: '0 13 * * 1-5'
+    # 14:15 UTC = 8:15 AM Costa Rica Time (UTC-6), Monday - Friday
+    - cron: '15 14 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
 
 jobs:

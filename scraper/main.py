@@ -1,20 +1,22 @@
 """
 Boletín Judicial Legal Edict Ingestion Engine (Costa Rica Remates Judiciales)
-Automated ingestion worker: scrapes, extracts with Gemini Flash, enriches with PostGIS geolocations,
-and upserts into Supabase PostgreSQL.
+Automated ingestion worker: scrapes official publications, extracts structured foreclosure
+data with Gemini 2.5 Flash, enriches with PostGIS geolocations, and upserts into Supabase PostgreSQL.
 """
 
 import os
 import re
+import sys
 import json
+import ssl
 import logging
+import argparse
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timedelta
 
 try:
     from pydantic import BaseModel, Field
 except ImportError:
-    # Graceful fallback when running in minimal local environments
     class BaseModel:
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
@@ -39,6 +41,7 @@ except ImportError:
 try:
     from dotenv import load_dotenv
     load_dotenv()
+    load_dotenv(".env.local")
 except ImportError:
     pass
 
@@ -72,6 +75,7 @@ CR_CANTON_CENTROIDS: Dict[str, Tuple[float, float]] = {
     "turrubares": (9.8000, -84.4833),
     "dota": (9.6542, -83.9278),
     "curridabat": (9.9156, -84.0353),
+    "granadilla": (9.9285, -84.0241),
     "pérez zeledón": (9.3739, -83.7058),
     "león cortés": (9.6806, -84.0806),
 
@@ -118,14 +122,14 @@ CR_CANTON_CENTROIDS: Dict[str, Tuple[float, float]] = {
     "sarapiquí": (10.4500, -84.0167),
 
     # Guanacaste
-    "liberia": (10.6346, -85.4406),
-    "nicoya": (10.1447, -85.4528),
+    "liberia": (10.6333, -85.4333),
+    "nicoya": (10.1444, -85.4542),
     "santa cruz": (10.2625, -85.5853),
     "tamarindo": (10.2993, -85.8402),
-    "bagaces": (10.5333, -85.2500),
+    "bagaces": (10.5167, -85.2500),
     "carrillo": (10.4667, -85.5500),
     "playas del coco": (10.5500, -85.6967),
-    "cañas": (10.4333, -85.1000),
+    "cañas": (10.4333, -85.0833),
     "abangares": (10.2833, -84.9500),
     "tilarán": (10.4667, -84.9667),
     "nandayure": (9.9833, -85.2500),
@@ -136,59 +140,55 @@ CR_CANTON_CENTROIDS: Dict[str, Tuple[float, float]] = {
     "puntarenas": (9.9763, -84.8384),
     "esparza": (9.9944, -84.6667),
     "buenos aires": (9.1667, -83.3333),
-    "montes de oro": (10.1333, -84.7500),
+    "montes de oro": (10.1500, -84.7333),
     "osa": (8.8833, -83.5167),
     "quepos": (9.4319, -84.1619),
     "manuel antonio": (9.3889, -84.1528),
-    "golfito": (8.6389, -83.1639),
+    "golfito": (8.6333, -83.1667),
     "coto brus": (8.9000, -82.9500),
     "parrita": (9.5167, -84.3333),
     "corredores": (8.6000, -82.9500),
     "garabito": (9.6152, -84.6298),
     "jacó": (9.6152, -84.6298),
-    "playa hermosa": (9.5667, -84.6000),
-    "monteverde": (10.3000, -84.8167),
+    "herradura": (9.6450, -84.6380),
     "puerto jiménez": (8.5333, -83.3000),
 
     # Limón
     "limón": (9.9907, -83.0360),
-    "pococí": (10.2167, -83.7833),
-    "guápiles": (10.2167, -83.7833),
+    "pococí": (10.2000, -83.7833),
     "siquirres": (10.1000, -83.5167),
-    "talamanca": (9.6582, -82.7564),
-    "puerto viejo": (9.6582, -82.7564),
-    "cahuita": (9.7333, -82.8333),
-    "matina": (10.0833, -83.2833),
+    "talamanca": (9.6333, -82.8500),
+    "matina": (10.0833, -83.3333),
     "guácimo": (10.2167, -83.6833),
 }
 
-PROVINCE_CENTROIDS: Dict[str, Tuple[float, float]] = {
+PROVINCE_CENTROIDS = {
     "san josé": (9.9281, -84.0907),
     "alajuela": (10.0163, -84.2116),
     "cartago": (9.8644, -83.9194),
     "heredia": (9.9989, -84.1167),
-    "guanacaste": (10.4500, -85.4000),
-    "puntarenas": (9.7500, -84.8000),
+    "guanacaste": (10.4667, -85.5500),
+    "puntarenas": (9.6152, -84.6298),
     "limón": (9.9907, -83.0360),
 }
 
 # ==============================================================================
-# 2. PYDANTIC SCHEMA FOR FORECLOSURE AUCTIONS
+# 2. SCHEMA DEFINITIONS (Pydantic / Structured Output)
 # ==============================================================================
 class ForeclosureAuction(BaseModel):
-    expediente_number: str = Field(description="Judicial docket ID, format YY-XXXXXX-XXXX-CJ/CI/CA")
-    court_name: str = Field(description="Full name of the court / Juzgado")
+    expediente_number: str = Field(description="Court case docket number, format: YY-XXXXXX-XXXX-CJ / CI / CA")
+    court_name: str = Field(description="Full name of the judicial court / Juzgado")
     folio_real: str = Field(description="Property registry Folio Real (Province-Number-Subnumber, e.g. 6-189342-000)")
     plano_catastrado: Optional[str] = Field(None, description="Cadastral plan registration e.g. P-1928374-2022")
     province: str = Field(description="Costa Rican Province (San José, Alajuela, Cartago, Heredia, Guanacaste, Puntarenas, Limón)")
     canton: Optional[str] = Field(None, description="Costa Rican Canton name")
     district: Optional[str] = Field(None, description="Costa Rican District name")
-    address_description: Optional[str] = Field(None, description="Physical location references")
+    address_description: Optional[str] = Field(None, description="Physical location references and landmarks")
     area_m2: Optional[float] = Field(None, description="Property area in square meters")
     currency: str = Field("USD", description="USD or CRC")
     
     base_price_call_1: float = Field(description="1st call base price (100%)")
-    auction_date_call_1: str = Field(description="1st call auction datetime (ISO 8601 string)")
+    auction_date_call_1: str = Field(description="1st call auction datetime (ISO 8601 string, e.g. 2026-09-15T14:30:00-06:00)")
     
     base_price_call_2: Optional[float] = Field(None, description="2nd call base price (75%)")
     auction_date_call_2: Optional[str] = Field(None, description="2nd call auction datetime")
@@ -196,8 +196,8 @@ class ForeclosureAuction(BaseModel):
     base_price_call_3: Optional[float] = Field(None, description="3rd call base price (25%)")
     auction_date_call_3: Optional[str] = Field(None, description="3rd call auction datetime")
     
-    plaintiff: Optional[str] = Field(None, description="Foreclosing creditor/bank")
-    defendant: Optional[str] = Field(None, description="Debtor/borrower party")
+    plaintiff: Optional[str] = Field(None, description="Foreclosing creditor / bank (e.g. BNCR, BCR, BAC, Promerica, Popular)")
+    defendant: Optional[str] = Field(None, description="Debtor / foreclosed party name")
     legal_summary: str = Field(description="2-3 sentence executive investor summary in Spanish")
     property_category: Optional[str] = Field("Residential", description="Residential, Commercial, Land/Development, Agricultural, Industrial, Condo, Luxury Estate")
     raw_edict_text: str = Field(description="Verbatim published legal edict text")
@@ -208,84 +208,118 @@ class AuctionBatch(BaseModel):
     auctions: List[ForeclosureAuction] = Field(default_factory=list)
 
 # ==============================================================================
-# 3. BOLETÍN JUDICIAL FETCHER & CHUNKER
+# 3. ROBUST BOLETÍN JUDICIAL FETCHER & CHUNKER
 # ==============================================================================
+def create_ssl_context():
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
 def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     """
-    Fetches the daily judicial edicts publication from La Imprenta Nacional.
-    Scans for official PDF publications and extracts judicial foreclosure notices.
+    Discovers, downloads, and chunks official Costa Rican judicial foreclosure publications.
+    Searches portals, parses PDFs, and falls back to sliding-window text blocks.
     """
     date = target_date or datetime.now()
-    date_str = date.strftime("%d_%m_%Y")
-    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
     }
-    
-    edicts: List[str] = []
-    
-    # 1. Search for daily PDFs on Imprenta Nacional
-    portal_urls = [
-        "https://www.imprentanacional.go.cr/gaceta/",
-        "https://www.imprentanacional.go.cr/boletin/",
-    ]
     
     pdf_urls: List[str] = []
     
-    if requests is not None:
-        for portal in portal_urls:
-            try:
-                res = requests.get(portal, headers=headers, timeout=12)
-                if res.status_code == 200:
-                    found = re.findall(r'href=[\"\x27](/[^\"\x27]+\.pdf)[\"\x27]', res.text, re.IGNORECASE)
-                    for f in found:
-                        full_url = f"https://www.imprentanacional.go.cr{f}"
-                        if full_url not in pdf_urls:
-                            pdf_urls.append(full_url)
-            except Exception as e:
-                logger.warning(f"Error checking portal {portal}: {e}")
-                
-    logger.info(f"Discovered {len(pdf_urls)} official publication PDFs to analyze.")
+    # 1. Discover PDFs from portals
+    portals = [
+        "https://www.imprentanacional.go.cr/boletin/",
+        "https://www.imprentanacional.go.cr/",
+        "https://www.imprentanacional.go.cr/gaceta/",
+    ]
     
-    # 2. Download and extract text from discovered PDFs
-    for pdf_url in pdf_urls[:3]: # Scan the top daily publications
+    import urllib.request
+    ctx = create_ssl_context()
+    
+    for portal in portals:
         try:
-            logger.info(f"Downloading official PDF: {pdf_url}")
-            res = requests.get(pdf_url, headers=headers, timeout=25)
-            if res.status_code == 200:
-                import io
-                from pypdf import PdfReader
-                pdf_file = io.BytesIO(res.content)
-                reader = PdfReader(pdf_file)
-                logger.info(f"PDF contains {len(reader.pages)} pages. Scanning for judicial foreclosures...")
-                
-                full_text = ""
-                for page in reader.pages:
-                    full_text += (page.extract_text() or "") + "\n"
-                    
-                pattern = re.compile(
-                    r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho)|Al\s+ser\s+las|A\s+las)\s+[\w\s]+(?:remataré|rematará|en\s+el\s+mejor\s+postor))',
-                    re.IGNORECASE
-                )
-                raw_chunks = pattern.split(full_text)
-                
-                for chunk in raw_chunks:
-                    chunk = chunk.strip()
-                    if (
-                        len(chunk) > 120 and
-                        ("remataré" in chunk.lower() or "rematará" in chunk.lower() or "mejor postor" in chunk.lower()) and
-                        ("expediente" in chunk.lower() or "exp:" in chunk.lower())
-                    ):
-                        edicts.append(chunk)
+            req = urllib.request.Request(portal, headers=headers)
+            with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+                if resp.status == 200:
+                    html = resp.read().decode("utf-8", errors="ignore")
+                    found = re.findall(r'href=[\"\x27]([^\"\x27]+\.pdf)[\"\x27]', html, re.IGNORECASE)
+                    for f in found:
+                        if not f.startswith("http"):
+                            f = f"https://www.imprentanacional.go.cr{f if f.startswith('/') else '/' + f}"
+                        if f not in pdf_urls:
+                            pdf_urls.append(f)
         except Exception as e:
-            logger.warning(f"Error parsing PDF {pdf_url}: {e}")
-
-    logger.info(f"Extracted {len(edicts)} foreclosure notices from official bulletins.")
+            logger.debug(f"Portal check {portal}: {e}")
+            
+    # 2. Add direct URL patterns for target date and past 4 business days
+    for days_back in range(5):
+        d = date - timedelta(days=days_back)
+        day = d.strftime("%d")
+        month = d.strftime("%m")
+        year = d.strftime("%Y")
+        
+        candidates = [
+            f"https://www.imprentanacional.go.cr/pub-boletin/{year}/{month}/bol_{day}_{month}_{year}.pdf",
+            f"https://www.imprentanacional.go.cr/pub-boletin/{year}/{month}//bol_{day}_{month}_{year}.pdf",
+            f"https://www.imprentanacional.go.cr/pub-gaceta/{year}/{month}/gac_{day}_{month}_{year}.pdf",
+            f"https://www.imprentanacional.go.cr/gaceta/{year}/{month}/g_{day}_{month}_{year}.pdf",
+        ]
+        for c in candidates:
+            if c not in pdf_urls:
+                pdf_urls.append(c)
+                
+    logger.info(f"Targeting {len(pdf_urls)} candidate publication endpoints.")
+    
+    edicts: List[str] = []
+    
+    # 3. Download and parse PDFs with pypdf
+    for pdf_url in pdf_urls[:6]:
+        try:
+            req = urllib.request.Request(pdf_url, headers=headers)
+            with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+                if resp.status == 200:
+                    import io
+                    from pypdf import PdfReader
+                    data = resp.read()
+                    if len(data) < 2000:
+                        continue
+                    
+                    pdf_file = io.BytesIO(data)
+                    reader = PdfReader(pdf_file)
+                    logger.info(f"Downloaded {pdf_url} ({len(data):,} bytes, {len(reader.pages)} pages).")
+                    
+                    full_text = ""
+                    for page in reader.pages:
+                        full_text += (page.extract_text() or "") + "\n"
+                        
+                    # Broad court foreclosure edict boundary regex
+                    pattern = re.compile(
+                        r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
+                        re.IGNORECASE
+                    )
+                    raw_chunks = pattern.split(full_text)
+                    
+                    for chunk in raw_chunks:
+                        chunk = chunk.strip()
+                        c_lower = chunk.lower()
+                        # Comprehensive legal keyword filter
+                        if (
+                            len(chunk) > 100 and
+                            any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor"]) and
+                            any(w in c_lower for w in ["expediente", "exp:", "exp.", "juzgado", "folio real", "matrícula", "base:", "base de"])
+                        ):
+                            edicts.append(chunk)
+        except Exception as e:
+            logger.debug(f"Candidate {pdf_url} skipped: {e}")
+            
+    logger.info(f"Discovered {len(edicts)} foreclosure edicts matching statutory criteria.")
     return edicts
 
 # ==============================================================================
-# 4. GEMINI FLASH STRUCTURED EXTRACTION ENGINE
+# 4. GEMINI 2.5 FLASH STRUCTURED EXTRACTION ENGINE
 # ==============================================================================
 EXTRACTION_PROMPT = """
 You are an expert Costa Rican judicial real estate analyst.
@@ -298,11 +332,11 @@ Follow these legal parsing rules:
 3. 'plano_catastrado': Cadastral survey code (e.g., 'P-1928374-2022', 'SJ-1489201-2020').
 4. 'currency': USD or CRC. Note 'colones' or '₡' -> CRC, 'dólares' or '$' -> USD.
 5. 'base_price_call_1' & 'auction_date_call_1': 1st call base and ISO datetime (with UTC-6 Costa Rica offset: e.g. '2026-09-15T14:30:00-06:00').
-6. 'base_price_call_2': If not specified, set to 75% of base_price_call_1.
-7. 'base_price_call_3': If not specified, set to 25% of base_price_call_1.
+6. 'base_price_call_2': If not specified, calculate 75% of base_price_call_1.
+7. 'base_price_call_3': If not specified, calculate 25% of base_price_call_1.
 8. 'area_m2': Surface area in square meters. If given in hectares (ha), convert: 1 ha = 10,000 m2.
 9. 'plaintiff': Foreclosing bank (BNCR, BCR, BAC, Promerica, Davivienda, Popular, Scotiabank, private lender, etc.).
-10. 'defendant': Debtor/foreclosed party name.
+10. 'defendant': Debtor / foreclosed party name.
 11. 'legal_summary': 2-3 sentence executive investor overview in Spanish describing the asset, rooms, land, location, and potential.
 12. 'property_category': One of: Condo, Residential, Luxury Estate, Land/Development, Agricultural, Industrial, Commercial.
 
@@ -316,6 +350,7 @@ def extract_single_edict_gemini(edict_text: str, api_key: Optional[str] = None) 
     """
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key:
+        logger.warning("GEMINI_API_KEY missing. Structured extraction skipped.")
         return None
 
     try:
@@ -347,7 +382,7 @@ def extract_auctions_with_gemini(edict_chunks: List[str], api_key: Optional[str]
     results: List[ForeclosureAuction] = []
     
     for idx, chunk in enumerate(edict_chunks):
-        logger.info(f"Extracting edict chunk {idx + 1}/{len(edict_chunks)}...")
+        logger.info(f"Extracting edict chunk {idx + 1}/{len(edict_chunks)} with Gemini 2.5 Flash...")
         extracted = extract_single_edict_gemini(chunk, api_key=api_key)
         
         if extracted:
@@ -374,8 +409,8 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
     lng = getattr(auction, "approx_longitude", None)
     
     if not lat or not lng:
-        canton_key = (getattr(auction, "canton", "") or "").lower().strip()
         district_key = (getattr(auction, "district", "") or "").lower().strip()
+        canton_key = (getattr(auction, "canton", "") or "").lower().strip()
         
         if district_key in CR_CANTON_CENTROIDS:
             lat, lng = CR_CANTON_CENTROIDS[district_key]
@@ -397,8 +432,6 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         multiplier = 1.50
         
     estimated_market_val = round(base * multiplier, 2)
-    margin_pct = round(((estimated_market_val - base) / estimated_market_val) * 100, 2)
-    
     location_wkt = f"SRID=4326;POINT({lng} {lat})"
     
     return {
@@ -449,96 +482,88 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
             "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
+            "Prefer": "resolution=merge-duplicates",
         }
-        url = f"{supabase_url}/rest/v1/auctions"
-        data = json.dumps(records).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-        with urllib.request.urlopen(req) as resp:
-            logger.info(f"Successfully upserted {len(records)} records into Supabase PostGIS table.")
-            return len(records)
+        
+        url = f"{supabase_url}/rest/v1/auctions?on_conflict=expediente_number"
+        payload = json.dumps(records).encode("utf-8")
+        
+        ctx = create_ssl_context()
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+            if resp.status in (200, 201):
+                logger.info(f"✓ Successfully upserted {len(records)} foreclosures into Supabase PostGIS!")
+                return len(records)
+            else:
+                logger.warning(f"Supabase returned status code: {resp.status}")
+                return 0
     except Exception as e:
-        logger.error(f"Error executing Supabase upsert: {e}")
+        logger.error(f"Error during Supabase upsert: {e}")
         return 0
 
 # ==============================================================================
-# 7. PDF / FILE INGESTION HELPER
+# 7. MAIN CLI ORCHESTRATION PIPELINE
 # ==============================================================================
-def extract_edicts_from_file(file_path: str) -> List[str]:
-    """
-    Extracts foreclosure edict chunks from a local PDF or text file.
-    """
-    logger.info(f"Reading edicts from file: {file_path}")
-    text = ""
-    if file_path.lower().endswith(".pdf"):
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(file_path)
-            for page in reader.pages:
-                text += (page.extract_text() or "") + "\n"
-        except Exception as e:
-            logger.error(f"Error reading PDF file {file_path}: {e}")
-            return []
-    else:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
+def main():
+    parser = argparse.ArgumentParser(description="Boletín Judicial Foreclosure Ingestion Engine")
+    parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF file to parse")
+    parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
+    parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
+    args = parser.parse_args()
 
-    pattern = re.compile(
-        r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho)|Al\s+ser\s+las|A\s+las)\s+[\w\s]+(?:remataré|rematará|en\s+el\s+mejor\s+postor))',
-        re.IGNORECASE
-    )
-    raw_chunks = pattern.split(text)
-    edicts = []
-    for chunk in raw_chunks:
-        chunk = chunk.strip()
-        if (
-            len(chunk) > 120 and
-            ("remataré" in chunk.lower() or "rematará" in chunk.lower() or "mejor postor" in chunk.lower()) and
-            ("expediente" in chunk.lower() or "exp:" in chunk.lower())
-        ):
-            edicts.append(chunk)
+    logger.info("=======================================================")
+    logger.info("Starting Costa Rica Judicial Foreclosure Ingestion...")
+    logger.info("=======================================================")
 
-    logger.info(f"Extracted {len(edicts)} edicts from {file_path}")
-    return edicts
+    raw_edicts: List[str] = []
 
-# ==============================================================================
-# 8. MAIN INGESTION ORCHESTRATOR
-# ==============================================================================
-def run_pipeline(target_date: Optional[datetime] = None, file_path: Optional[str] = None, dry_run: bool = False):
-    logger.info("=== Starting Boletín Judicial Ingestion Pipeline ===")
-    
-    if file_path:
-        edict_chunks = extract_edicts_from_file(file_path)
-    else:
-        edict_chunks = fetch_daily_bulletin(target_date)
-    
-    if not edict_chunks:
-        logger.info("No foreclosure notices found to process. Ingestion cycle complete.")
-        return
+    if args.file:
+        if not os.path.exists(args.file):
+            logger.error(f"Specified file does not exist: {args.file}")
+            sys.exit(1)
+        logger.info(f"Reading local PDF file: {args.file}")
+        from pypdf import PdfReader
+        reader = PdfReader(args.file)
+        full_text = ""
+        for page in reader.pages:
+            full_text += (page.extract_text() or "") + "\n"
         
-    logger.info(f"Processing {len(edict_chunks)} raw edicts with Gemini Flash...")
-    extracted_auctions = extract_auctions_with_gemini(edict_chunks)
-    logger.info(f"Extracted {len(extracted_auctions)} structured auction records.")
-    
-    enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
-    
-    if dry_run:
-        logger.info(f"[DRY RUN] Generated {len(enriched_records)} enriched records:")
-        for r in enriched_records:
-            print(json.dumps(r, indent=2, ensure_ascii=False))
+        pattern = re.compile(
+            r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
+            re.IGNORECASE
+        )
+        for chunk in pattern.split(full_text):
+            chunk = chunk.strip()
+            c_lower = chunk.lower()
+            if len(chunk) > 100 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
+                raw_edicts.append(chunk)
+    else:
+        target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+        raw_edicts = fetch_daily_bulletin(target_date)
+
+    if not raw_edicts:
+        logger.info("No judicial foreclosure edicts found for the given target. Ingestion cycle complete.")
         return
 
-    upserted = upsert_to_supabase(enriched_records)
-    logger.info(f"Pipeline finished. Ingested {upserted} records successfully into Supabase.")
+    logger.info(f"Processing {len(raw_edicts)} extracted edicts with Gemini 2.5 Flash...")
+    extracted_auctions = extract_auctions_with_gemini(raw_edicts)
+    logger.info(f"Successfully extracted {len(extracted_auctions)} valid structured auctions.")
+
+    if not extracted_auctions:
+        logger.info("No structured records were generated from the edicts. Ingestion finished.")
+        return
+
+    logger.info("Enriching records with PostGIS coordinates and market valuation...")
+    enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
+
+    if args.dry_run:
+        logger.info(f"[Dry Run] {len(enriched_records)} records prepared:")
+        print(json.dumps(enriched_records, indent=2, ensure_ascii=False))
+        return
+
+    logger.info(f"Upserting {len(enriched_records)} records to Supabase PostGIS...")
+    upsert_to_supabase(enriched_records)
+    logger.info("Foreclosure ingestion pipeline finished successfully.")
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Costa Rica Judicial Foreclosure Ingestion Engine")
-    parser.add_argument("--date", type=str, help="Scrape specific date (format: YYYY-MM-DD)")
-    parser.add_argument("--file", type=str, help="Parse a local PDF or text file of Boletín Judicial")
-    parser.add_argument("--dry-run", action="store_true", help="Extract and display without writing to Supabase")
-
-    args = parser.parse_args()
-    
-    target_dt = datetime.strptime(args.date, "%Y-%m-%d") if args.date else None
-    run_pipeline(target_date=target_dt, file_path=args.file, dry_run=args.dry_run)
+    main()
