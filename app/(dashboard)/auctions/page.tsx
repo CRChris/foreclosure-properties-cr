@@ -6,7 +6,7 @@ import { Auction } from '@/lib/types/auction';
 import { AuctionCard } from '@/components/cards/AuctionCard';
 import { AuctionFilterBar, FilterState, ViewMode } from '@/components/filters/AuctionFilterBar';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, detectPropertyCharacteristics } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -26,13 +26,17 @@ import {
 
 const INITIAL_FILTERS: FilterState = {
   search: '',
+  propertyType: 'all',
   province: 'all',
   currency: 'all',
   minPrice: '',
   maxPrice: '',
+  priceBracket: 'all',
   minMargin: 0,
   callStage: 'all',
-  category: 'all',
+  constructionStatus: 'all',
+  roadFrontage: 'all',
+  mortgagePriority: 'all',
   timeframe: 'all',
   sortBy: 'date_asc',
 };
@@ -71,6 +75,8 @@ export default function AuctionsPage() {
   // Filter & sort auctions based on active filters
   const filteredAuctions = useMemo(() => {
     return auctionsData.filter((auction) => {
+      const chars = detectPropertyCharacteristics(auction);
+
       // 1. Text Search Filter (Canton, District, Province, Expediente, Folio, Bank, Summary)
       if (filters.search.trim()) {
         const q = filters.search.toLowerCase().trim();
@@ -81,29 +87,70 @@ export default function AuctionsPage() {
           auction.expediente_number.toLowerCase().includes(q) ||
           auction.folio_real.toLowerCase().includes(q) ||
           auction.plaintiff.toLowerCase().includes(q) ||
-          (auction.legal_summary && auction.legal_summary.toLowerCase().includes(q));
+          (auction.defendant && auction.defendant.toLowerCase().includes(q)) ||
+          (auction.legal_summary && auction.legal_summary.toLowerCase().includes(q)) ||
+          (auction.address_description && auction.address_description.toLowerCase().includes(q));
         if (!matchesQuery) return false;
       }
 
-      // 2. Province Filter
+      // 2. Type of Property Filter
+      if (filters.propertyType !== 'all' && chars.propertyType !== filters.propertyType) {
+        return false;
+      }
+
+      // 3. Province Filter
       if (filters.province !== 'all' && auction.province !== filters.province) {
         return false;
       }
 
-      // 3. Currency Filter
+      // 4. Currency Filter
       if (filters.currency !== 'all' && auction.currency !== filters.currency) {
         return false;
       }
 
-      // 4. Price Range Filter
-      if (filters.minPrice && auction.base_price_call_1 < Number(filters.minPrice)) {
+      // 5. Price Range Filter (Comparing active base price)
+      let activePrice = auction.base_price_call_1;
+      if (filters.callStage === 'call_2' && auction.base_price_call_2) {
+        activePrice = auction.base_price_call_2;
+      } else if (filters.callStage === 'call_3' && auction.base_price_call_3) {
+        activePrice = auction.base_price_call_3;
+      }
+
+      if (filters.minPrice && activePrice < Number(filters.minPrice)) {
         return false;
       }
-      if (filters.maxPrice && auction.base_price_call_1 > Number(filters.maxPrice)) {
+      if (filters.maxPrice && activePrice > Number(filters.maxPrice)) {
         return false;
       }
 
-      // 5. Discount Margin Filter (Slider)
+      // 6. Call Stage Filter
+      if (filters.callStage !== 'all') {
+        if (filters.callStage === 'call_2' && !auction.base_price_call_2) return false;
+        if (filters.callStage === 'call_3' && !auction.base_price_call_3) return false;
+      }
+
+      // 7. Construction Status Filter
+      if (filters.constructionStatus === 'built' && !chars.hasConstruction) {
+        return false;
+      }
+      if (filters.constructionStatus === 'land' && chars.hasConstruction) {
+        return false;
+      }
+
+      // 8. Road Frontage Filter
+      if (filters.roadFrontage === 'public_road' && !chars.hasPublicRoad) {
+        return false;
+      }
+      if (filters.roadFrontage === 'private' && chars.hasPublicRoad) {
+        return false;
+      }
+
+      // 9. Mortgage Claim Seniority Filter
+      if (filters.mortgagePriority !== 'all' && chars.mortgagePriority !== filters.mortgagePriority) {
+        return false;
+      }
+
+      // 10. Discount Margin Filter (Slider)
       if (filters.minMargin > 0) {
         const margin = auction.estimated_margin_pct || 0;
         if (margin < filters.minMargin) {
@@ -111,12 +158,7 @@ export default function AuctionsPage() {
         }
       }
 
-      // 6. Property Category Filter
-      if (filters.category !== 'all' && auction.property_category !== filters.category) {
-        return false;
-      }
-
-      // 7. Timeframe Filter
+      // 11. Timeframe Filter
       if (filters.timeframe !== 'all') {
         const auctionDate = new Date(auction.auction_date_call_1).getTime();
         const now = Date.now();
@@ -131,17 +173,23 @@ export default function AuctionsPage() {
       return true;
     }).sort((a, b) => {
       // Sorting
-      if (filters.sortBy === 'date_asc') {
-        return new Date(a.auction_date_call_1).getTime() - new Date(b.auction_date_call_1).getTime();
-      }
-      if (filters.sortBy === 'margin_desc') {
-        return (b.estimated_margin_pct || 0) - (a.estimated_margin_pct || 0);
-      }
       if (filters.sortBy === 'price_asc') {
         return a.base_price_call_1 - b.base_price_call_1;
       }
       if (filters.sortBy === 'price_desc') {
         return b.base_price_call_1 - a.base_price_call_1;
+      }
+      if (filters.sortBy === 'date_asc') {
+        return new Date(a.auction_date_call_1).getTime() - new Date(b.auction_date_call_1).getTime();
+      }
+      if (filters.sortBy === 'date_desc') {
+        return new Date(b.auction_date_call_1).getTime() - new Date(a.auction_date_call_1).getTime();
+      }
+      if (filters.sortBy === 'province_asc') {
+        return a.province.localeCompare(b.province) || a.canton.localeCompare(b.canton);
+      }
+      if (filters.sortBy === 'margin_desc') {
+        return (b.estimated_margin_pct || 0) - (a.estimated_margin_pct || 0);
       }
       if (filters.sortBy === 'area_desc') {
         return b.area_m2 - a.area_m2;
