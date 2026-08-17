@@ -440,24 +440,83 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
         return 0
 
 # ==============================================================================
-# 7. MAIN INGESTION ORCHESTRATOR
+# 7. PDF / FILE INGESTION HELPER
 # ==============================================================================
-def run_daily_pipeline():
-    logger.info("=== Starting Daily Boletín Judicial Ingestion Pipeline ===")
+def extract_edicts_from_file(file_path: str) -> List[str]:
+    """
+    Extracts foreclosure edict chunks from a local PDF or text file.
+    """
+    logger.info(f"Reading edicts from file: {file_path}")
+    text = ""
+    if file_path.lower().endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            for page in reader.pages:
+                text += (page.extract_text() or "") + "\n"
+        except Exception as e:
+            logger.error(f"Error reading PDF file {file_path}: {e}")
+            return []
+    else:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+
+    pattern = re.compile(
+        r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho)|Al\s+ser\s+las|A\s+las)\s+[\w\s]+(?:remataré|rematará|en\s+el\s+mejor\s+postor))',
+        re.IGNORECASE
+    )
+    raw_chunks = pattern.split(text)
+    edicts = []
+    for chunk in raw_chunks:
+        chunk = chunk.strip()
+        if (
+            len(chunk) > 120 and
+            ("remataré" in chunk.lower() or "rematará" in chunk.lower() or "mejor postor" in chunk.lower()) and
+            ("expediente" in chunk.lower() or "exp:" in chunk.lower())
+        ):
+            edicts.append(chunk)
+
+    logger.info(f"Extracted {len(edicts)} edicts from {file_path}")
+    return edicts
+
+# ==============================================================================
+# 8. MAIN INGESTION ORCHESTRATOR
+# ==============================================================================
+def run_pipeline(target_date: Optional[datetime] = None, file_path: Optional[str] = None, dry_run: bool = False):
+    logger.info("=== Starting Boletín Judicial Ingestion Pipeline ===")
     
-    edict_chunks = fetch_daily_bulletin()
+    if file_path:
+        edict_chunks = extract_edicts_from_file(file_path)
+    else:
+        edict_chunks = fetch_daily_bulletin(target_date)
     
     if not edict_chunks:
-        logger.info("No new online bulletin notices found today. Ingestion cycle complete.")
+        logger.info("No foreclosure notices found to process. Ingestion cycle complete.")
         return
         
+    logger.info(f"Processing {len(edict_chunks)} raw edicts with Gemini Flash...")
     extracted_auctions = extract_auctions_with_gemini(edict_chunks)
     logger.info(f"Extracted {len(extracted_auctions)} structured auction records.")
     
     enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
     
+    if dry_run:
+        logger.info(f"[DRY RUN] Generated {len(enriched_records)} enriched records:")
+        for r in enriched_records:
+            print(json.dumps(r, indent=2, ensure_ascii=False))
+        return
+
     upserted = upsert_to_supabase(enriched_records)
-    logger.info(f"Pipeline finished. Ingested {upserted} records successfully.")
+    logger.info(f"Pipeline finished. Ingested {upserted} records successfully into Supabase.")
 
 if __name__ == "__main__":
-    run_daily_pipeline()
+    import argparse
+    parser = argparse.ArgumentParser(description="Costa Rica Judicial Foreclosure Ingestion Engine")
+    parser.add_argument("--date", type=str, help="Scrape specific date (format: YYYY-MM-DD)")
+    parser.add_argument("--file", type=str, help="Parse a local PDF or text file of Boletín Judicial")
+    parser.add_argument("--dry-run", action="store_true", help="Extract and display without writing to Supabase")
+
+    args = parser.parse_args()
+    
+    target_dt = datetime.strptime(args.date, "%Y-%m-%d") if args.date else None
+    run_pipeline(target_date=target_dt, file_path=args.file, dry_run=args.dry_run)
