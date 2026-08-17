@@ -100,12 +100,13 @@ export function calculateInvestorMetrics(auction: Auction, callNumber: 1 | 2 | 3
 }
 
 /**
- * Format Date in Spanish/Costa Rican format
+ * Format Date in localized format (Spanish / English)
  */
-export function formatDateCR(dateString: string): string {
+export function formatDateCR(dateString: string, lang: string = 'es'): string {
   try {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('es-CR', {
+    const locale = lang === 'en' ? 'en-US' : 'es-CR';
+    return new Intl.DateTimeFormat(locale, {
       weekday: 'short',
       year: 'numeric',
       month: 'short',
@@ -120,14 +121,27 @@ export function formatDateCR(dateString: string): string {
 }
 
 /**
- * Get remaining days until auction
+ * Get remaining days until auction with bilingual labels
  */
-export function getDaysUntilAuction(dateString: string): { days: number; isPast: boolean; label: string } {
+export function getDaysUntilAuction(dateString: string, lang: string = 'es'): { days: number; isPast: boolean; label: string } {
   try {
     const target = new Date(dateString).getTime();
     const now = new Date().getTime();
     const diffMs = target - now;
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (lang === 'en') {
+      if (diffDays < 0) {
+        return { days: Math.abs(diffDays), isPast: true, label: `Ended ${Math.abs(diffDays)}d ago` };
+      }
+      if (diffDays === 0) {
+        return { days: 0, isPast: false, label: 'Today!' };
+      }
+      if (diffDays === 1) {
+        return { days: 1, isPast: false, label: 'Tomorrow' };
+      }
+      return { days: diffDays, isPast: false, label: `In ${diffDays} days` };
+    }
 
     if (diffDays < 0) {
       return { days: Math.abs(diffDays), isPast: true, label: `Finalizó hace ${Math.abs(diffDays)}d` };
@@ -140,7 +154,7 @@ export function getDaysUntilAuction(dateString: string): { days: number; isPast:
     }
     return { days: diffDays, isPast: false, label: `En ${diffDays} días` };
   } catch {
-    return { days: 0, isPast: false, label: 'Fecha pendiente' };
+    return { days: 0, isPast: false, label: lang === 'en' ? 'Date pending' : 'Fecha pendiente' };
   }
 }
 

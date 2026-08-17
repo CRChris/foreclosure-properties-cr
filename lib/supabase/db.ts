@@ -38,31 +38,80 @@ const CANTON_COORDINATES: Record<string, [number, number]> = {
   'limón': [9.9907, -83.0360],
 };
 
-const CATEGORY_IMAGES: Record<string, string[]> = {
-  'Condo': [
+const UNIQUE_REAL_ESTATE_GALLERIES: string[][] = [
+  // 0: Escazú Los Laureles Condo
+  [
     'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
     'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
   ],
-  'Luxury Estate': [
+  // 1: Jacó Beachfront Penthouse
+  [
+    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 2: Tamarindo Beach Luxury Villa
+  [
     'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1200&q=80',
     'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
   ],
-  'Residential': [
+  // 3: Santa Ana Valle del Sol Residence
+  [
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 4: Los Reyes Golf Country Estate
+  [
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 5: Belén Heredia Gated Residence
+  [
+    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 6: Manuel Antonio Ocean View Parcel
+  [
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 7: Monterán Curridabat Estate
+  [
+    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
     'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
   ],
-  'Commercial': [
+  // 8: Playas del Coco Beach Condo
+  [
+    'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 9: Arenal Volcano San Carlos Eco-Estate
+  [
+    'https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+  ],
+  // 10: Rohrmoser Commercial Plaza & Offices
+  [
     'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
     'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=1200&q=80',
   ],
-  'Agricultural': [
+  // 11: Grecia Quinta Campestre
+  [
     'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
-    'https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
   ],
-  'Land/Development': [
-    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
-  ],
-};
+];
 
 function mapRowToAuction(item: any): Auction {
   let lat = typeof item.latitude === 'number' ? item.latitude : null;
@@ -98,8 +147,29 @@ function mapRowToAuction(item: any): Auction {
     }
   }
 
-  const category = (item.property_category || 'Residential') as PropertyCategory;
-  const defaultImgs = CATEGORY_IMAGES[category] || CATEGORY_IMAGES['Residential'];
+  // Derive smart property category from text if column not present in table
+  let category: PropertyCategory = (item.property_category as PropertyCategory) || 'Residential';
+  const textSearch = `${item.address_description || ''} ${item.legal_summary || ''} ${item.raw_edict_text || ''}`.toLowerCase();
+  
+  if (!item.property_category) {
+    if (textSearch.includes('condominio') || textSearch.includes('penthouse') || textSearch.includes('filial') || textSearch.includes('apartamento')) {
+      category = 'Condo';
+    } else if (textSearch.includes('playa') || textSearch.includes('lujo') || textSearch.includes('villa') || textSearch.includes('quinta') || textSearch.includes('golf') || textSearch.includes('reyes') || textSearch.includes('langosta')) {
+      category = 'Luxury Estate';
+    } else if (textSearch.includes('comercial') || textSearch.includes('oficina') || textSearch.includes('local') || textSearch.includes('bodega')) {
+      category = 'Commercial';
+    } else if (textSearch.includes('finca') || textSearch.includes('agrícola') || textSearch.includes('agricola') || textSearch.includes('ganadera') || textSearch.includes('arenal') || textSearch.includes('fortuna')) {
+      category = 'Agricultural';
+    } else if (textSearch.includes('terreno') || textSearch.includes('lote') || textSearch.includes('solar') || textSearch.includes('desarrollo') || textSearch.includes('parque nacional')) {
+      category = 'Land/Development';
+    }
+  }
+
+  // Assign distinct deterministic gallery for each property based on expediente / ID
+  const seedString = String(item.expediente_number || item.id || item.folio_real || '0');
+  const hash = Math.abs(seedString.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0));
+  const galleryIndex = hash % UNIQUE_REAL_ESTATE_GALLERIES.length;
+  const uniqueGallery = UNIQUE_REAL_ESTATE_GALLERIES[galleryIndex];
 
   return {
     id: String(item.id),
@@ -128,7 +198,7 @@ function mapRowToAuction(item: any): Auction {
     raw_edict_text: item.raw_edict_text || '',
     latitude: lat,
     longitude: lng,
-    images: Array.isArray(item.images) && item.images.length > 0 ? item.images : defaultImgs,
+    images: Array.isArray(item.images) && item.images.length > 0 ? item.images : uniqueGallery,
     created_at: item.created_at || new Date().toISOString(),
     updated_at: item.updated_at || new Date().toISOString(),
   };

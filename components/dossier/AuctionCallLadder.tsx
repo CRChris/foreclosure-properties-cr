@@ -24,12 +24,12 @@ export function AuctionCallLadder({
   onSelectCall,
 }: AuctionCallLadderProps) {
   const { t, language } = useLanguage();
-  const countdown1 = getDaysUntilAuction(auction.auction_date_call_1);
+  const countdown1 = getDaysUntilAuction(auction.auction_date_call_1, language);
   const countdown2 = auction.auction_date_call_2
-    ? getDaysUntilAuction(auction.auction_date_call_2)
+    ? getDaysUntilAuction(auction.auction_date_call_2, language)
     : null;
   const countdown3 = auction.auction_date_call_3
-    ? getDaysUntilAuction(auction.auction_date_call_3)
+    ? getDaysUntilAuction(auction.auction_date_call_3, language)
     : null;
 
   // Under Costa Rican CPC (Art. 159), participation deposit is 50% of the base price
@@ -97,7 +97,7 @@ export function AuctionCallLadder({
               </p>
               <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                <span>{formatDateCR(auction.auction_date_call_1)}</span>
+                <span>{formatDateCR(auction.auction_date_call_1, language)}</span>
               </p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export function AuctionCallLadder({
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{formatDateCR(auction.auction_date_call_2)}</span>
+                  <span>{formatDateCR(auction.auction_date_call_2, language)}</span>
                 </p>
               </div>
             </div>
@@ -215,7 +215,7 @@ export function AuctionCallLadder({
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{formatDateCR(auction.auction_date_call_3)}</span>
+                  <span>{formatDateCR(auction.auction_date_call_3, language)}</span>
                 </p>
               </div>
             </div>

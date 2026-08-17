@@ -7,6 +7,7 @@ import { Auction } from '@/lib/types/auction';
 import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export interface PropertyMapProps {
   auctions: Auction[];
@@ -53,6 +54,7 @@ export function PropertyMap({
   height = '100%',
   className = '',
 }: PropertyMapProps) {
+  const { language } = useLanguage();
   // Color-coded marker generator based on discount margin:
   // - Green: > 35% Margin (High Discount)
   // - Yellow/Amber: 20% - 35% Margin (Medium Discount)
@@ -68,8 +70,8 @@ export function PropertyMap({
       colorClass = 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-950/70';
       ringClass = isSelected ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50 animate-pulse' : 'hover:scale-115';
     } else if (margin >= 20) {
-      colorClass = 'bg-amber-500 border-amber-200 text-slate-950 font-black shadow-amber-950/70';
-      ringClass = isSelected ? 'ring-4 ring-amber-300 ring-offset-2 ring-offset-slate-950 scale-125 z-50 animate-pulse' : 'hover:scale-115';
+      colorClass = 'bg-amber-600 border-amber-300 text-white shadow-amber-950/70';
+      ringClass = isSelected ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
     } else {
       colorClass = 'bg-sky-600 border-sky-300 text-white shadow-sky-950/70';
       ringClass = isSelected ? 'ring-4 ring-sky-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
@@ -105,19 +107,19 @@ export function PropertyMap({
       <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden sm:block">
         <p className="font-semibold text-slate-200 flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-emerald-400" />
-          Margen de Oportunidad
+          {language === 'es' ? 'Margen de Oportunidad' : 'Opportunity Margin'}
         </p>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block ring-2 ring-emerald-500/20" />
-          <span>&gt; 35% Margen Alto</span>
+          <span>{language === 'es' ? '> 35% Margen Alto' : '> 35% High Margin'}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block ring-2 ring-amber-500/20" />
-          <span>20% – 35% Margen Medio</span>
+          <span>{language === 'es' ? '20% – 35% Margen Medio' : '20% – 35% Medium Margin'}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block ring-2 ring-sky-500/20" />
-          <span>&lt; 20% Base Estándar</span>
+          <span>{language === 'es' ? '< 20% Base Estándar' : '< 20% Standard Base'}</span>
         </div>
       </div>
 
@@ -138,8 +140,8 @@ export function PropertyMap({
 
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
-          const countdown = getDaysUntilAuction(auction.auction_date_call_1);
-          const primaryImage = auction.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80';
+          const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
+          const primaryImage = auction.images?.[0] || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80';
 
           return (
             <Marker
@@ -168,15 +170,12 @@ export function PropertyMap({
                     {auction.estimated_margin_pct && (
                       <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-500/50 text-[10.5px] font-bold text-emerald-300 flex items-center gap-1 shadow-md">
                         <TrendingUp className="w-3 h-3 text-emerald-400" />
-                        +{auction.estimated_margin_pct}% Margen Est.
+                        <span>+{Math.round(auction.estimated_margin_pct)}% {language === 'es' ? 'Margen' : 'Margin'}</span>
                       </div>
                     )}
 
-                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-white font-medium">
-                      <span className="truncate drop-shadow">{auction.canton}, {auction.province}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900/90 text-slate-300 text-[10px] font-mono border border-slate-700">
-                        {auction.currency}
-                      </span>
+                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-slate-950/80 border border-slate-700 text-[10px] font-mono font-bold text-slate-300">
+                      {auction.currency}
                     </div>
                   </div>
 
@@ -194,14 +193,14 @@ export function PropertyMap({
                   {/* Price breakdown */}
                   <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800 space-y-1">
                     <div className="flex justify-between items-baseline text-xs">
-                      <span className="text-slate-400 text-[11px]">Base 1er Remate:</span>
+                      <span className="text-slate-400 text-[11px]">{language === 'es' ? 'Base 1er Remate:' : '1st Call Base:'}</span>
                       <span className="font-extrabold text-emerald-400">
                         {formatCurrency(auction.base_price_call_1, auction.currency)}
                       </span>
                     </div>
                     {auction.estimated_market_value && (
                       <div className="flex justify-between items-baseline text-[11px]">
-                        <span className="text-slate-500">Valor Estimado:</span>
+                        <span className="text-slate-500">{language === 'es' ? 'Valor Estimado:' : 'Est. Market Value:'}</span>
                         <span className="text-slate-400 line-through">
                           {formatCurrency(auction.estimated_market_value, auction.currency)}
                         </span>
@@ -226,7 +225,7 @@ export function PropertyMap({
                     href={`/auctions/${auction.id}`}
                     className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded-lg transition-colors shadow-md"
                   >
-                    <span>Ver Expediente y Avalúo</span>
+                    <span>{language === 'es' ? 'Ver Expediente y Avalúo' : 'View Legal Dossier'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>

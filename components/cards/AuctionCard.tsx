@@ -63,7 +63,7 @@ export function AuctionCard({
     }
   };
 
-  const countdown = getDaysUntilAuction(auction.auction_date_call_1);
+  const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
   const metrics = calculateInvestorMetrics(auction, 1);
   const primaryImage =
     auction.images?.[0] ||

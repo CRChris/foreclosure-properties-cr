@@ -9,7 +9,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       myWatchlist: 'Mi Lista',
       logout: 'Cerrar Sesión',
       verifiedInvestor: 'Inversionista Verificado',
-      dailyIngestionActive: 'Ingestión Boletín Judicial Activa (7:00 AM)',
+      dailyIngestionActive: 'Ingestión Boletín Judicial Activa (8:20 AM)',
       brandSubtitle: 'Portal de Inteligencia Inmobiliaria Judicial y Remates en Costa Rica',
     },
     filters: {
@@ -143,7 +143,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     empty: {
       waitingTitle: 'Esperando Próxima Publicación Judicial',
-      waitingDesc: 'La base de datos está lista. El extractor automatizado monitorea y procesa nuevos edictos de remate de los Juzgados de Cobro y Civiles de Costa Rica de lunes a viernes a las 7:00 AM.',
+      waitingDesc: 'La base de datos está lista. El extractor automatizado monitorea y procesa nuevos edictos de remate de los Juzgados de Cobro y Civiles de Costa Rica de lunes a viernes a las 8:20 AM.',
       resetFilters: 'Restablecer Filtros',
       connectedStatus: 'Extractor conectado a La Imprenta Nacional',
     },
@@ -156,7 +156,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       myWatchlist: 'My Watchlist',
       logout: 'Sign Out',
       verifiedInvestor: 'Verified Investor',
-      dailyIngestionActive: 'Daily Gazette Ingestion Active (7:00 AM)',
+      dailyIngestionActive: 'Daily Gazette Ingestion Active (8:20 AM)',
       brandSubtitle: 'Costa Rica Judicial Real Estate Foreclosure & Auction Intelligence',
     },
     filters: {
@@ -290,7 +290,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     },
     empty: {
       waitingTitle: 'Awaiting Next Judicial Publication',
-      waitingDesc: 'The database is ready. The automated ingestion worker monitors and parses new court foreclosure edicts from Costa Rica judicial gazettes Monday through Friday at 7:00 AM.',
+      waitingDesc: 'The database is ready. The automated ingestion worker monitors and parses new court foreclosure edicts from Costa Rica judicial gazettes Monday through Friday at 8:20 AM.',
       resetFilters: 'Reset Filters',
       connectedStatus: 'Ingestion engine connected to Official National Gazette',
     },

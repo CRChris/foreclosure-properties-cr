@@ -151,7 +151,7 @@ export function WatchlistDrawer({
                 const auction = item.auction;
                 if (!auction) return null;
 
-                const countdown = getDaysUntilAuction(auction.auction_date_call_1);
+                const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
                 const isEditing = editingNotesId === auction.id;
 
                 return (
