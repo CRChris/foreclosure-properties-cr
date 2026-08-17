@@ -43,7 +43,7 @@ export default function DashboardLayout({
           <div className="flex items-center gap-3">
             <div className="hidden lg:flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              8 Remates Activos
+              Ingestión Boletín Judicial Activa (7:00 AM)
             </div>
 
             {/* Investor User Navigation & Watchlist Drawer */}

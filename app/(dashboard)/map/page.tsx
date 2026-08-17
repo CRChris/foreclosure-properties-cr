@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
-import { MOCK_AUCTIONS } from '@/lib/mock-data';
+import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, formatDateCR } from '@/lib/utils';
+import { formatCurrency, formatArea } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { fetchAuctions } from '@/lib/supabase/db';
 import Link from 'next/link';
 import { 
   MapPin, 
@@ -16,17 +16,35 @@ import {
   Maximize2, 
   Scale, 
   TrendingUp, 
-  Filter, 
   Compass,
-  Calendar
 } from 'lucide-react';
 
 export default function MapExplorerPage() {
-  const [selectedAuction, setSelectedAuction] = useState<Auction | null>(MOCK_AUCTIONS[0]);
+  const [auctions, setAuctions] = useState<Auction[]>([]);
+  const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvince, setSelectedProvince] = useState<CostaRicaProvince | 'all'>('all');
 
-  const filteredAuctions = MOCK_AUCTIONS.filter((auction) => {
+  useEffect(() => {
+    fetchAuctions().then((data) => {
+      if (data && data.length > 0) {
+        setAuctions(data);
+        setSelectedAuction(data[0]);
+      }
+    });
+
+    fetch('/api/auctions')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res && Array.isArray(res.data) && res.data.length > 0) {
+          setAuctions(res.data);
+          setSelectedAuction(res.data[0]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filteredAuctions = auctions.filter((auction) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match =
@@ -99,50 +117,60 @@ export default function MapExplorerPage() {
 
           {/* Properties Scroll List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800 p-2 space-y-2">
-            {filteredAuctions.map((auction) => {
-              const isSelected = selectedAuction?.id === auction.id;
-              return (
-                <div
-                  key={auction.id}
-                  onClick={() => setSelectedAuction(auction)}
-                  className={`p-3 rounded-xl cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-slate-800/90 border border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
-                      : 'bg-slate-950/40 hover:bg-slate-800/40 border border-transparent'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-white truncate">
-                      {auction.district}, {auction.canton}
-                    </span>
-                    <Badge variant={isSelected ? 'success' : 'default'} size="sm">
-                      {auction.province}
-                    </Badge>
-                  </div>
-
-                  <div className="flex items-baseline justify-between mt-2">
-                    <span className="text-sm font-extrabold text-emerald-400">
-                      {formatCurrency(auction.base_price_call_1, auction.currency)}
-                    </span>
-                    {auction.estimated_margin_pct && (
-                      <span className="text-[11px] font-semibold text-emerald-300">
-                        +{auction.estimated_margin_pct}% Margen
+            {filteredAuctions.length > 0 ? (
+              filteredAuctions.map((auction) => {
+                const isSelected = selectedAuction?.id === auction.id;
+                return (
+                  <div
+                    key={auction.id}
+                    onClick={() => setSelectedAuction(auction)}
+                    className={`p-3 rounded-xl cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-slate-800/90 border border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
+                        : 'bg-slate-950/40 hover:bg-slate-800/40 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-white truncate">
+                        {auction.district}, {auction.canton}
                       </span>
-                    )}
-                  </div>
+                      <Badge variant={isSelected ? 'success' : 'default'} size="sm">
+                        {auction.province}
+                      </Badge>
+                    </div>
 
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800/60">
-                    <span className="flex items-center gap-1">
-                      <Maximize2 className="w-3 h-3 text-slate-500" />
-                      {formatArea(auction.area_m2)}
-                    </span>
-                    <span className="font-mono text-slate-400">
-                      {auction.folio_real}
-                    </span>
+                    <div className="flex items-baseline justify-between mt-2">
+                      <span className="text-sm font-extrabold text-emerald-400">
+                        {formatCurrency(auction.base_price_call_1, auction.currency)}
+                      </span>
+                      {auction.estimated_margin_pct && (
+                        <span className="text-[11px] font-semibold text-emerald-300">
+                          +{auction.estimated_margin_pct}% Margen
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800/60">
+                      <span className="flex items-center gap-1">
+                        <Maximize2 className="w-3 h-3 text-slate-500" />
+                        {formatArea(auction.area_m2)}
+                      </span>
+                      <span className="font-mono text-slate-400">
+                        {auction.folio_real}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="p-8 text-center space-y-2 text-slate-400">
+                <Scale className="w-6 h-6 mx-auto text-slate-500" />
+                <p className="text-xs font-semibold text-white">Base de datos lista</p>
+                <p className="text-[11px] text-slate-500">
+                  Esperando nueva publicación judicial del Boletín Oficial.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
