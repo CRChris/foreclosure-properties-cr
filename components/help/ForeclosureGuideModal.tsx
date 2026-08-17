@@ -71,27 +71,27 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
   const TABS: { id: GuideTab; label: string; icon: any }[] = [
     {
       id: 'process_calls',
-      label: isEn ? 'The 3-Call Process' : 'Las 3 Subastas y Proceso',
+      label: isEn ? 'The 3-Call Process' : 'Las 3 Subastas',
       icon: Scale,
     },
     {
       id: 'eligibility',
-      label: isEn ? 'Who Can Participate' : '¿Quién Puede Participar?',
+      label: isEn ? 'Who Can Participate' : 'Elegibilidad y Postores',
       icon: Users,
     },
     {
       id: 'how_to_bid',
-      label: isEn ? '50% Legal Deposit & Bidding' : 'Postura Legal y Pujas (50%)',
+      label: isEn ? '50% Deposit & Bidding' : 'Postura Legal (50%)',
       icon: DollarSign,
     },
     {
       id: 'court_locations',
-      label: isEn ? 'Court Locations' : 'Sedes Judiciales y Remates',
+      label: isEn ? 'Court Locations' : 'Sedes Judiciales',
       icon: Landmark,
     },
     {
       id: 'app_guide',
-      label: isEn ? 'How to Use App' : 'Guía de la Plataforma',
+      label: isEn ? 'How to Use App' : 'Uso de la Plataforma',
       icon: Compass,
     },
     {
@@ -103,18 +103,18 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
       onClick={onClose}
     >
       {/* Modal Container */}
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto text-slate-100 animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-5xl lg:max-w-6xl xl:max-w-7xl max-h-[92vh] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto text-slate-100 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-800 bg-slate-950/80">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-800 bg-slate-950/80">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-950/50">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-950/50 shrink-0">
               <Scale className="w-6 h-6" />
             </div>
             <div>
@@ -134,14 +134,14 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tab Navigation Strip */}
-        <div className="flex items-center gap-1.5 p-2 bg-slate-950/60 border-b border-slate-800 overflow-x-auto scrollbar-thin">
+        {/* Tab Navigation Strip - 6 Equal Responsive Grid Columns (Zero Horizontal Scroll) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 p-2.5 bg-slate-950/70 border-b border-slate-800">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -149,14 +149,14 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`flex items-center justify-center gap-1.5 px-2.5 py-2.5 rounded-xl text-xs font-bold text-center transition-all ${
                   isActive
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/50'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 bg-slate-900/60 border border-slate-800/50'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{tab.label}</span>
               </button>
             );
           })}
