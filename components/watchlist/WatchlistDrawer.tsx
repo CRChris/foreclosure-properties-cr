@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
 import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
@@ -49,6 +50,11 @@ export function WatchlistDrawer({
   const [noteText, setNoteText] = useState('');
   const [targetBidInput, setTargetBidInput] = useState('');
   const [savedFeedbackId, setSavedFeedbackId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const loadWatchlist = async () => {
     setLoading(true);
@@ -63,15 +69,20 @@ export function WatchlistDrawer({
   useEffect(() => {
     if (isOpen) {
       loadWatchlist();
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
-  }, [isOpen, userId]);
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
 
   const handleRemove = async (auctionId: string) => {
     await removeFromWatchlist(auctionId, userId);
-    const updated = items.filter((item) => item.auction_id !== auctionId);
-    setItems(updated);
+    setItems((prev) => prev.filter((item) => item.auction_id !== auctionId));
     if (onItemCountChange) {
-      onItemCountChange(updated.length);
+      onItemCountChange(items.length - 1);
     }
   };
 
@@ -102,10 +113,10 @@ export function WatchlistDrawer({
     setTimeout(() => setSavedFeedbackId(null), 2500);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+  const drawerContent = (
+    <div className="fixed inset-0 z-[99999] overflow-hidden animate-in fade-in duration-200">
       {/* Backdrop */}
       <div
         onClick={onClose}
@@ -334,4 +345,6 @@ export function WatchlistDrawer({
       </div>
     </div>
   );
+
+  return createPortal(drawerContent, document.body);
 }

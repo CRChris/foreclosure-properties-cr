@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   Scale,
@@ -39,9 +40,31 @@ type GuideTab = 'process_calls' | 'eligibility' | 'how_to_bid' | 'court_location
 export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModalProps) {
   const { language } = useLanguage();
   const [activeTab, setActiveTab] = useState<GuideTab>('process_calls');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll and listen for Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !mounted) return null;
 
   const isEn = language === 'en';
 
@@ -78,8 +101,11 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
     },
   ];
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       {/* Modal Container */}
       <div
         className="relative w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto text-slate-100 animate-in zoom-in-95 duration-200"
@@ -609,4 +635,6 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
