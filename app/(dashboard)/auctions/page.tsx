@@ -43,13 +43,24 @@ export default function AuctionsPage() {
   const [selectedAuctionId, setSelectedAuctionId] = useState<string | null>(MOCK_AUCTIONS[0]?.id || null);
   const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list');
 
-  // Load live auctions from Supabase on mount
+  // Load live auctions from Supabase or API route on mount
   useEffect(() => {
     fetchAuctions().then((data) => {
       if (data && data.length > 0) {
         setAuctionsData(data);
+        if (data[0]) setSelectedAuctionId(data[0].id);
       }
     });
+
+    fetch('/api/auctions')
+      .then((res) => res.json())
+      .then((res) => {
+        if (res && Array.isArray(res.data) && res.data.length > 0) {
+          setAuctionsData(res.data);
+          if (res.data[0]) setSelectedAuctionId(res.data[0].id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Ref to card containers for automatic smooth scrolling

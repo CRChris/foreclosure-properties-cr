@@ -59,6 +59,9 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [loading, setLoading] = useState(
+    !MOCK_AUCTIONS.some((a) => a.id === params.id)
+  );
   const [auction, setAuction] = useState<Auction | null>(
     MOCK_AUCTIONS.find((a) => a.id === params.id) || null
   );
@@ -69,8 +72,18 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       if (data) {
         setAuction(data);
       }
+      setLoading(false);
     });
   }, [params.id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-slate-400">
+        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium">Cargando expediente judicial...</p>
+      </div>
+    );
+  }
 
   if (!auction) {
     return notFound();

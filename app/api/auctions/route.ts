@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MOCK_AUCTIONS } from '@/lib/mock-data';
+import { fetchAuctions } from '@/lib/supabase/db';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
   const maxLng = searchParams.get('maxLng') ? parseFloat(searchParams.get('maxLng')!) : null;
   const maxLat = searchParams.get('maxLat') ? parseFloat(searchParams.get('maxLat')!) : null;
 
-  let results = [...MOCK_AUCTIONS];
+  const allAuctions = await fetchAuctions();
+  let results = [...allAuctions];
 
   // Query search
   if (query) {
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     results = results.filter((a) => a.base_price_call_1 <= maxPrice);
   }
 
-  // Geospatial Bounding Box filter (PostGIS emulation for mock data)
+  // Geospatial Bounding Box filter
   if (minLng !== null && minLat !== null && maxLng !== null && maxLat !== null) {
     results = results.filter((a) => {
       if (a.latitude === null || a.longitude === null) return false;
