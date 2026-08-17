@@ -419,7 +419,6 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         "base_price_call_3": getattr(auction, "base_price_call_3", None),
         "auction_date_call_3": getattr(auction, "auction_date_call_3", None),
         "estimated_market_value": estimated_market_val,
-        "estimated_margin_pct": margin_pct,
         "plaintiff": getattr(auction, "plaintiff", "Entidad Financiera") or "Entidad Financiera",
         "defendant": getattr(auction, "defendant", None),
         "legal_summary": auction.legal_summary,
@@ -437,27 +436,27 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
     Connects to Supabase PostGIS using service role credentials and performs upserts
     with conflict handling on expediente_number.
     """
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
     
     if not supabase_url or not supabase_key:
         logger.info("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Skipping remote database upload (Simulation mode).")
         return len(records)
         
     try:
-        from supabase import create_client
-        supabase = create_client(supabase_url, supabase_key)
-        
-        success_count = 0
-        for record in records:
-            res = supabase.table("auctions").upsert(
-                record,
-                on_conflict="expediente_number"
-            ).execute()
-            success_count += 1
-            logger.info(f"Upserted auction {record['expediente_number']} into Supabase.")
-            
-        return success_count
+        import urllib.request
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates"
+        }
+        url = f"{supabase_url}/rest/v1/auctions"
+        data = json.dumps(records).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        with urllib.request.urlopen(req) as resp:
+            logger.info(f"Successfully upserted {len(records)} records into Supabase PostGIS table.")
+            return len(records)
     except Exception as e:
         logger.error(f"Error executing Supabase upsert: {e}")
         return 0
