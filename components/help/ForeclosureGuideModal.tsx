@@ -694,6 +694,49 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
                 <h4 className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{isEn ? 'Why are there no photographs or images of the properties?' : '¿Por qué no hay fotografías de las propiedades?'}</span>
+                </h4>
+                <div className="text-xs text-slate-400 space-y-2 leading-relaxed">
+                  <p>
+                    {isEn
+                      ? 'Under Costa Rican foreclosure law, judicial auctions (remates judiciales) are official legal notices published exclusively in text format in the government gazette (Boletín Judicial). The judiciary does not commission real estate photography or host open-house showings prior to auction adjudication.'
+                      : 'Conforme a la normativa procesal de Costa Rica, los edictos de remate judicial se publican exclusivamente en formato de texto legal en el Boletín Judicial de la Imprenta Nacional. El Poder Judicial no comisiona fotografías comerciales ni realiza jornadas de visita guiada previas a la subasta.'}
+                  </p>
+                  <ul className="space-y-1.5 pl-2">
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Legal & Cadastral Identification:' : 'Identificación Registral y Catastral:'}</strong>{' '}
+                        {isEn
+                          ? 'Properties are legally and indisputably identified by their unique Folio Real title number and official Plano Catastrado (Cadastral Survey) archived at the National Registry (Registro Nacional).'
+                          : 'Cada finca queda individualizada de manera fehaciente mediante su matrícula de Folio Real y su Plano Catastrado oficial inscrito en el Registro Nacional.'}
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Certified Characteristics:' : 'Características Legales Certificadas:'}</strong>{' '}
+                        {isEn
+                          ? 'The official edict certifies registered land area (m²), legal nature (whether it has residential houses, commercial buildings, or is raw land), 4-quadrant boundaries (linderos), and public road frontage.'
+                          : 'El edicto judicial certifica la medida superficial (m²), su naturaleza (si posee casa de habitación, edificaciones o es terreno), sus 4 linderos y su condición frente a calle pública.'}
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold">•</span>
+                      <span>
+                        <strong>{isEn ? 'Investor On-Site Inspection:' : 'Inspección Física en Campo:'}</strong>{' '}
+                        {isEn
+                          ? 'Professional investors use the cadastral survey number and local district landmarks to conduct drive-by on-site visual inspections of the property exterior, neighborhood, and access infrastructure prior to bidding.'
+                          : 'Los inversionistas utilizan el número de plano catastrado y las señas del expediente para realizar inspecciones visuales en el sitio antes de la subasta y corroborar el estado físico de la propiedad y sus accesos.'}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                <h4 className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span>{isEn ? 'What currency is used in the auction?' : '¿En qué moneda se paga la subasta?'}</span>
                 </h4>
                 <p className="text-xs text-slate-400">
