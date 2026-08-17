@@ -1,4 +1,5 @@
 import { Auction, CostaRicaProvince, Currency, PropertyCategory, PropertyType, MortgagePriority } from '@/lib/types/auction';
+import { detectPropertyCharacteristics } from '@/lib/utils';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -165,23 +166,14 @@ function mapRowToAuction(item: any): Auction {
     }
   }
 
-  // Derive PropertyType
-  let propertyType: PropertyType = (item.property_type as PropertyType);
-  if (!propertyType) {
-    if (textSearch.includes('condominio') || textSearch.includes('filial') || textSearch.includes('apartamento') || textSearch.includes('penthouse')) {
-      propertyType = 'condo_apartment';
-    } else if (textSearch.includes('casa') || textSearch.includes('habitación') || textSearch.includes('habitacion') || textSearch.includes('unifamiliar') || textSearch.includes('quinta') || textSearch.includes('villa')) {
-      propertyType = 'single_family_home';
-    } else if (textSearch.includes('comercial') || textSearch.includes('oficina') || textSearch.includes('bodega') || textSearch.includes('industrial') || textSearch.includes('local')) {
-      propertyType = 'commercial_industrial';
-    } else if (textSearch.includes('finca') || textSearch.includes('agrícola') || textSearch.includes('agricola') || textSearch.includes('repasto') || textSearch.includes('ganadera')) {
-      propertyType = 'agricultural_land';
-    } else if (textSearch.includes('lote') || textSearch.includes('terreno') || textSearch.includes('solar') || textSearch.includes('desarrollo') || textSearch.includes('para construir')) {
-      propertyType = 'building_lot';
-    } else {
-      propertyType = 'other';
-    }
-  }
+  // Derive Property Characteristics using robust detector
+  const {
+    propertyType,
+    hasConstruction,
+    hasPublicRoad,
+    isCondominio,
+    mortgagePriority,
+  } = detectPropertyCharacteristics(item);
 
   // Parse linderos if present or extract from text
   let nNorte = item.lindero_norte || null;
@@ -198,29 +190,6 @@ function mapRowToAuction(item: any): Auction {
     if (mEste) nEste = mEste[1].trim();
     const mOeste = item.raw_edict_text.match(/oeste[:\s]+([^;,.\n]+)/i);
     if (mOeste) nOeste = mOeste[1].trim();
-  }
-
-  const hasConstruction = typeof item.has_construction === 'boolean'
-    ? item.has_construction
-    : (textSearch.includes('casa') || textSearch.includes('edificio') || textSearch.includes('bodega') || textSearch.includes('filial') || textSearch.includes('mejoras'));
-
-  const hasPublicRoad = typeof item.has_public_road_frontage === 'boolean'
-    ? item.has_public_road_frontage
-    : (textSearch.includes('calle pública') || textSearch.includes('calle publica') || textSearch.includes('frente a calle'));
-
-  const isCondominio = typeof item.is_condominio === 'boolean'
-    ? item.is_condominio
-    : (textSearch.includes('condominio') || textSearch.includes('filial') || textSearch.includes('7933'));
-
-  let mortgagePriority: MortgagePriority = item.mortgage_priority || '1st_mortgage';
-  if (!item.mortgage_priority) {
-    if (textSearch.includes('segundo grado') || textSearch.includes('segunda hipoteca')) {
-      mortgagePriority = '2nd_mortgage';
-    } else if (textSearch.includes('embargo')) {
-      mortgagePriority = 'embargo_judicial';
-    } else {
-      mortgagePriority = '1st_mortgage';
-    }
   }
 
   // Assign distinct deterministic gallery for each property based on expediente / ID

@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, getDaysUntilAuction, calculateInvestorMetrics } from '@/lib/utils';
+import { formatCurrency, formatArea, getDaysUntilAuction, calculateInvestorMetrics, detectPropertyCharacteristics } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { PropertyTypeBanner, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
+import { PropertyTypeBanner } from '@/components/ui/PropertyTypeIcon';
 import {
   Calendar,
   Bookmark,
@@ -63,29 +63,14 @@ export function AuctionCard({
   const metrics = calculateInvestorMetrics(auction, 1);
   const marginPct = auction.estimated_margin_pct || 0;
 
-  // Infer property type if missing
-  const propertyType =
-    auction.property_type ||
-    inferPropertyType(
-      `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
-    );
-
-  const hasConstruction = auction.has_construction ?? (
-    (auction.address_description || '').toLowerCase().includes('casa') ||
-    (auction.address_description || '').toLowerCase().includes('edificio') ||
-    (auction.address_description || '').toLowerCase().includes('condominio')
-  );
-
-  const hasPublicRoad = auction.has_public_road_frontage ?? (
-    (auction.raw_edict_text || '').toLowerCase().includes('calle pública') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('calle publica') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('frente a calle')
-  );
-
-  const isCondominio = auction.is_condominio ?? (
-    (auction.address_description || '').toLowerCase().includes('condominio') ||
-    (auction.address_description || '').toLowerCase().includes('filial')
-  );
+  // Use robust deterministic characteristics detector
+  const {
+    propertyType,
+    hasConstruction,
+    hasPublicRoad,
+    isCondominio,
+    mortgagePriority: priority,
+  } = detectPropertyCharacteristics(auction);
 
   // Margin badge color
   let marginBadgeClass = 'bg-sky-950/90 border-sky-500/40 text-sky-300';
@@ -94,9 +79,6 @@ export function AuctionCard({
   } else if (marginPct >= 20) {
     marginBadgeClass = 'bg-amber-950/90 border-amber-500/50 text-amber-300';
   }
-
-  // Priority indicator
-  const priority = auction.mortgage_priority || '1st_mortgage';
 
   return (
     <div

@@ -9,11 +9,11 @@ import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, calculateInvestorMetrics } from '@/lib/utils';
+import { formatCurrency, formatArea, calculateInvestorMetrics, detectPropertyCharacteristics } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { fetchAuctionById } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
+import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import {
   ArrowLeft,
   Calendar,
@@ -163,11 +163,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   };
 
   const marginPct = auction.estimated_margin_pct || 0;
-  const propertyType =
-    auction.property_type ||
-    inferPropertyType(
-      `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
-    );
+  const { propertyType } = detectPropertyCharacteristics(auction);
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">

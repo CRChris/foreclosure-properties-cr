@@ -4,6 +4,7 @@ import React from 'react';
 import { Auction } from '@/lib/types/auction';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
+import { detectPropertyCharacteristics } from '@/lib/utils';
 import {
   FileText,
   Compass,
@@ -27,36 +28,14 @@ interface PropertySpecsGridProps {
 export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
   const { language } = useLanguage();
 
-  // Determine or fallback property characteristics
-  const hasConstruction = auction.has_construction ?? (
-    (auction.address_description || '').toLowerCase().includes('casa') ||
-    (auction.address_description || '').toLowerCase().includes('edificio') ||
-    (auction.address_description || '').toLowerCase().includes('condominio') ||
-    (auction.legal_summary || '').toLowerCase().includes('casa')
-  );
-
-  const hasPublicRoad = auction.has_public_road_frontage ?? (
-    (auction.raw_edict_text || '').toLowerCase().includes('calle pública') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('calle publica') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('frente a calle')
-  );
-
-  const isCondominio = auction.is_condominio ?? (
-    (auction.address_description || '').toLowerCase().includes('condominio') ||
-    (auction.address_description || '').toLowerCase().includes('filial') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('filial') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('7933')
-  );
-
-  // Mortgage Priority
-  const priority = auction.mortgage_priority || (
-    (auction.raw_edict_text || '').toLowerCase().includes('primer grado') ||
-    (auction.raw_edict_text || '').toLowerCase().includes('primera hipoteca')
-      ? '1st_mortgage'
-      : (auction.raw_edict_text || '').toLowerCase().includes('embargo')
-      ? 'embargo_judicial'
-      : '1st_mortgage'
-  );
+  // Determine or fallback property characteristics using robust detector
+  const {
+    propertyType,
+    hasConstruction,
+    hasPublicRoad,
+    isCondominio,
+    mortgagePriority: priority,
+  } = detectPropertyCharacteristics(auction);
 
   const priorityLabels = {
     '1st_mortgage': {
@@ -152,7 +131,7 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         </div>
 
         <PropertyTypeBadge
-          type={auction.property_type || 'single_family_home'}
+          type={propertyType}
           language={language}
           size="md"
         />

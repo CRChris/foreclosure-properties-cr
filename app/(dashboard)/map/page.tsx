@@ -3,13 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea } from '@/lib/utils';
+import { formatCurrency, formatArea, detectPropertyCharacteristics } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
+import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import Link from 'next/link';
 import { 
   MapPin, 
@@ -136,7 +136,7 @@ export default function MapExplorerPage() {
             {filteredAuctions.length > 0 ? (
               filteredAuctions.map((auction) => {
                 const isSelected = selectedAuction?.id === auction.id;
-                const propType = auction.property_type || inferPropertyType(`${auction.address_description || ''} ${auction.legal_summary || ''}`);
+                const { propertyType: propType } = detectPropertyCharacteristics(auction);
                 return (
                   <div
                     key={auction.id}
