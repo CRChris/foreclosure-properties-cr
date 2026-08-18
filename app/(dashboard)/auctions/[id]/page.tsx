@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
 import { AuctionCallLadder } from '@/components/dossier/AuctionCallLadder';
 import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
+import { CourtAccessCard } from '@/components/dossier/CourtAccessCard';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
 import { OpportunityMatrixCard } from '@/components/dossier/OpportunityMatrixCard';
@@ -352,6 +353,13 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
       {/* Detailed Property Characteristics & 4-Quadrant Linderos */}
       <PropertySpecsGrid auction={auction} />
+
+      {/* Official Court Case File & Online Appraisal Access (PIN Request) */}
+      <CourtAccessCard
+        expediente={auction.expediente_number}
+        courtName={auction.court_name}
+        fincaNumber={auction.folio_real}
+      />
 
       {/* Tabbed Legal Text / Executive Summary Dossier */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
