@@ -49,19 +49,31 @@ export function getLiveAuctionProgressionState(
   }
 
   const nowMs = customNow ? customNow.getTime() : Date.now();
-  const d1Ms = new Date(auction.auction_date_call_1).getTime();
-  const d2Ms = auction.auction_date_call_2 ? new Date(auction.auction_date_call_2).getTime() : null;
-  const d3Ms = auction.auction_date_call_3 ? new Date(auction.auction_date_call_3).getTime() : null;
-
+  const d1Date = new Date(auction.auction_date_call_1);
+  const d1Ms = !isNaN(d1Date.getTime()) ? d1Date.getTime() : nowMs + (14 * 24 * 60 * 60 * 1000);
+  
+  // If call 2 / 3 dates are not explicitly present in docket, derive statutory Costa Rican intervals (14 days between calls)
+  const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
   const SIXTY_MINS_MS = 60 * 60 * 1000;
+
+  const rawD2 = auction.auction_date_call_2 ? new Date(auction.auction_date_call_2).getTime() : null;
+  const d2Ms = rawD2 && !isNaN(rawD2) ? rawD2 : d1Ms + FOURTEEN_DAYS_MS;
+
+  const rawD3 = auction.auction_date_call_3 ? new Date(auction.auction_date_call_3).getTime() : null;
+  const d3Ms = rawD3 && !isNaN(rawD3) ? rawD3 : d2Ms + FOURTEEN_DAYS_MS;
+
   const d1EndMs = d1Ms + SIXTY_MINS_MS;
-  const d2EndMs = d2Ms ? d2Ms + SIXTY_MINS_MS : null;
-  const d3EndMs = d3Ms ? d3Ms + SIXTY_MINS_MS : null;
+  const d2EndMs = d2Ms + SIXTY_MINS_MS;
+  const d3EndMs = d3Ms + SIXTY_MINS_MS;
 
   const p1 = auction.base_price_call_1;
   const p2 = auction.base_price_call_2 || Math.round(p1 * 0.75);
   const p3 = auction.base_price_call_3 || Math.round(p1 * 0.25);
 
+  const d2ISO = auction.auction_date_call_2 || new Date(d2Ms).toISOString();
+  const d3ISO = auction.auction_date_call_3 || new Date(d3Ms).toISOString();
+
+  // 1st Call Period
   if (nowMs < d1Ms) {
     return {
       callStage: 'call_1',
@@ -86,61 +98,63 @@ export function getLiveAuctionProgressionState(
     };
   }
 
-  if (d2Ms && nowMs > d1EndMs && nowMs < d2Ms) {
+  // 2nd Call Period (25% Discount)
+  if (nowMs > d1EndMs && nowMs < d2Ms) {
     return {
       callStage: 'call_2',
       saleStatus: 'upcoming',
       currentCallNumber: 2,
       currentBasePrice: p2,
-      currentAuctionDate: auction.auction_date_call_2,
+      currentAuctionDate: d2ISO,
       currentDiscountPct: 25,
       isHearing: false,
     };
   }
 
-  if (d2Ms && d2EndMs && nowMs >= d2Ms && nowMs <= d2EndMs) {
+  if (nowMs >= d2Ms && nowMs <= d2EndMs) {
     return {
       callStage: 'call_2',
       saleStatus: 'in_progress',
       currentCallNumber: 2,
       currentBasePrice: p2,
-      currentAuctionDate: auction.auction_date_call_2,
+      currentAuctionDate: d2ISO,
       currentDiscountPct: 25,
       isHearing: true,
     };
   }
 
-  if (d3Ms && (!d2EndMs || nowMs > d2EndMs) && nowMs < d3Ms) {
+  // 3rd Call Period (75% Discount / Liquidation Base)
+  if (nowMs > d2EndMs && nowMs < d3Ms) {
     return {
       callStage: 'call_3',
       saleStatus: 'upcoming',
       currentCallNumber: 3,
       currentBasePrice: p3,
-      currentAuctionDate: auction.auction_date_call_3,
+      currentAuctionDate: d3ISO,
       currentDiscountPct: 75,
       isHearing: false,
     };
   }
 
-  if (d3Ms && d3EndMs && nowMs >= d3Ms && nowMs <= d3EndMs) {
+  if (nowMs >= d3Ms && nowMs <= d3EndMs) {
     return {
       callStage: 'call_3',
       saleStatus: 'in_progress',
       currentCallNumber: 3,
       currentBasePrice: p3,
-      currentAuctionDate: auction.auction_date_call_3,
+      currentAuctionDate: d3ISO,
       currentDiscountPct: 75,
       isHearing: true,
     };
   }
 
-  // All 3 calls elapsed
+  // Concluded after 3rd Call has completely passed
   return {
     callStage: 'passed_call_3',
     saleStatus: 'deserted',
     currentCallNumber: null,
     currentBasePrice: p3,
-    currentAuctionDate: auction.auction_date_call_3 || auction.auction_date_call_2 || auction.auction_date_call_1,
+    currentAuctionDate: d3ISO,
     currentDiscountPct: 75,
     isHearing: false,
   };
