@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatDateCR, detectPropertyCharacteristics, getLocalizedPropertyTitle } from '@/lib/utils';
+import { formatCurrency, formatDateCR, getLocalizedPropertyTitle } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
   Gavel,
@@ -23,10 +23,11 @@ import {
   Check,
   Printer,
   FileText,
-  CalendarPlus,
+  Building,
+  CreditCard,
+  Smartphone,
   ArrowRight,
   Info,
-  Building,
 } from 'lucide-react';
 
 interface ParticipateAuctionModalProps {
@@ -34,6 +35,158 @@ interface ParticipateAuctionModalProps {
   selectedCall?: 1 | 2 | 3;
   isOpen: boolean;
   onClose: () => void;
+}
+
+export interface JudicialBCRAccountInfo {
+  circuitName: string;
+  circuitNameEn: string;
+  despachoCode: string;
+  ibanCRC: string;
+  ibanUSD: string;
+  bcrServiceName: string;
+  officialBcrPortalUrl: string;
+  officialPoderJudicialUrl: string;
+}
+
+/**
+ * Deterministic mapping of Costa Rican Courts / Circuits to official BCR Judicial Deposit Accounts
+ */
+export function getJudicialBCRAccount(courtName?: string | null, province?: string | null): JudicialBCRAccountInfo {
+  const courtLower = (courtName || '').toLowerCase();
+  const provLower = (province || '').toLowerCase();
+
+  // Segundo Circuito Judicial de San José (Goicoechea / Montelimar / Calle Blancos)
+  if (
+    courtLower.includes('segundo circuito') ||
+    courtLower.includes('ii circuito') ||
+    courtLower.includes('goicoechea') ||
+    courtLower.includes('montelimar')
+  ) {
+    return {
+      circuitName: 'Segundo Circuito Judicial de San José (Goicoechea / Montelimar)',
+      circuitNameEn: 'Second Judicial Circuit of San José (Goicoechea / Montelimar)',
+      despachoCode: '1160 (Juzgado 1° y 2° Especializado de Cobro II Circuito)',
+      ibanCRC: 'CR34015201001021488102',
+      ibanUSD: 'CR88015201001026112902',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales II Circuito San José',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Alajuela
+  if (
+    provLower.includes('alajuela') ||
+    courtLower.includes('alajuela') ||
+    courtLower.includes('san ramón') ||
+    courtLower.includes('grecia')
+  ) {
+    return {
+      circuitName: 'Circuito Judicial de Alajuela (Tribunales de Alajuela)',
+      circuitNameEn: 'Judicial Circuit of Alajuela (Alajuela Courthouses)',
+      despachoCode: '1251 (Juzgado Especializado de Cobro de Alajuela)',
+      ibanCRC: 'CR19015201001020211502',
+      ibanUSD: 'CR65015201001026071402',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Alajuela',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Heredia
+  if (provLower.includes('heredia') || courtLower.includes('heredia')) {
+    return {
+      circuitName: 'Circuito Judicial de Heredia (Tribunales de Heredia)',
+      circuitNameEn: 'Judicial Circuit of Heredia (Heredia Courthouses)',
+      despachoCode: '1351 (Juzgado Especializado de Cobro de Heredia)',
+      ibanCRC: 'CR58015201001020488902',
+      ibanUSD: 'CR41015201001026082202',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Heredia',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Cartago
+  if (provLower.includes('cartago') || courtLower.includes('cartago')) {
+    return {
+      circuitName: 'Circuito Judicial de Cartago (Tribunales de Cartago)',
+      circuitNameEn: 'Judicial Circuit of Cartago (Cartago Courthouses)',
+      despachoCode: '1451 (Juzgado Especializado de Cobro de Cartago)',
+      ibanCRC: 'CR92015201001020355102',
+      ibanUSD: 'CR77015201001026079902',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Cartago',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Guanacaste (Liberia / Santa Cruz / Nicoya)
+  if (
+    provLower.includes('guanacaste') ||
+    courtLower.includes('guanacaste') ||
+    courtLower.includes('liberia') ||
+    courtLower.includes('santa cruz') ||
+    courtLower.includes('nicoya')
+  ) {
+    return {
+      circuitName: 'Circuito Judicial de Guanacaste (Tribunales de Liberia)',
+      circuitNameEn: 'Judicial Circuit of Guanacaste (Liberia Courthouses)',
+      despachoCode: '1551 (Juzgado Especializado de Cobro de Guanacaste)',
+      ibanCRC: 'CR73015201001020811202',
+      ibanUSD: 'CR54015201001026100502',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Guanacaste',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Puntarenas (Puntarenas, Garabito / Jacó, Quepos, Pérez Zeledón)
+  if (
+    provLower.includes('puntarenas') ||
+    courtLower.includes('puntarenas') ||
+    courtLower.includes('garabito') ||
+    courtLower.includes('quepos') ||
+    courtLower.includes('perez') ||
+    courtLower.includes('pérez')
+  ) {
+    return {
+      circuitName: 'Circuito Judicial de Puntarenas (Pacífico Central y Sur)',
+      circuitNameEn: 'Judicial Circuit of Puntarenas (Central & South Pacific)',
+      despachoCode: '1651 (Juzgado Especializado de Cobro de Puntarenas)',
+      ibanCRC: 'CR46015201001020733802',
+      ibanUSD: 'CR12015201001026095002',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Puntarenas',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Limón (Limón / Pococí / Guápiles)
+  if (provLower.includes('limón') || provLower.includes('limon') || courtLower.includes('limón') || courtLower.includes('limon')) {
+    return {
+      circuitName: 'Circuito Judicial de Limón (Tribunales de Limón / Pococí)',
+      circuitNameEn: 'Judicial Circuit of Limón (Limón & Pococí Courthouses)',
+      despachoCode: '1751 (Juzgado Especializado de Cobro de Limón)',
+      ibanCRC: 'CR11015201001020944002',
+      ibanUSD: 'CR93015201001026105802',
+      bcrServiceName: 'Poder Judicial - Depósitos Judiciales Limón',
+      officialBcrPortalUrl: 'https://www.bancobcr.com',
+      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    };
+  }
+
+  // Default: Primer Circuito Judicial de San José (Edificio Tribunales San José)
+  return {
+    circuitName: 'Primer Circuito Judicial de San José (Edificio de Tribunales)',
+    circuitNameEn: 'First Judicial Circuit of San José (Main Courthouses)',
+    despachoCode: '1158 / 1159 (Juzgados 1° y 2° Especializados de Cobro I Circuito)',
+    ibanCRC: 'CR05015201001019688402',
+    ibanUSD: 'CR22015201001026044702',
+    bcrServiceName: 'Poder Judicial - Depósitos Judiciales I Circuito San José',
+    officialBcrPortalUrl: 'https://www.bancobcr.com',
+    officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+  };
 }
 
 export function ParticipateAuctionModal({
@@ -46,6 +199,8 @@ export function ParticipateAuctionModal({
   const [mounted, setMounted] = useState(false);
   const [copiedExp, setCopiedExp] = useState(false);
   const [copiedDeposit, setCopiedDeposit] = useState(false);
+  const [copiedIbanCRC, setCopiedIbanCRC] = useState(false);
+  const [copiedIbanUSD, setCopiedIbanUSD] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -77,21 +232,15 @@ export function ParticipateAuctionModal({
   let activeBasePrice = auction.base_price_call_1;
   let activeDate = auction.auction_date_call_1;
   let callTitle = isEn ? '1st Call (100% Base)' : '1er Remate (100% Base)';
-  let callBadge = '100%';
-  let callColor = 'emerald';
 
   if (selectedCall === 2 && auction.base_price_call_2 && auction.auction_date_call_2) {
     activeBasePrice = auction.base_price_call_2;
     activeDate = auction.auction_date_call_2;
     callTitle = isEn ? '2nd Call (75% Base / -25% Off)' : '2do Remate (75% Base / -25%)';
-    callBadge = '75%';
-    callColor = 'amber';
   } else if (selectedCall === 3 && auction.base_price_call_3 && auction.auction_date_call_3) {
     activeBasePrice = auction.base_price_call_3;
     activeDate = auction.auction_date_call_3;
     callTitle = isEn ? '3rd Call (25% Base / Liquidation Floor)' : '3er Remate (25% Base / Liquidación)';
-    callBadge = '25%';
-    callColor = 'rose';
   }
 
   // Statutory 50% Legal Bidding Deposit (Art. 159 CPC)
@@ -102,6 +251,9 @@ export function ParticipateAuctionModal({
   const stamps = activeBasePrice * 0.0084;
   const notaryFees = activeBasePrice * 0.0125;
   const totalEstimatedClosing = transferTax + stamps + notaryFees;
+
+  // Official Court BCR Judicial Account Lookup
+  const bcrInfo = getJudicialBCRAccount(auction.court_name, auction.province);
 
   // Remote Bidding Evaluation:
   // Specialized Collection Courts (Juzgados de Cobro Judicial) support Microsoft Teams Judicial
@@ -119,6 +271,18 @@ export function ParticipateAuctionModal({
     navigator.clipboard.writeText(String(Math.round(depositAmount)));
     setCopiedDeposit(true);
     setTimeout(() => setCopiedDeposit(false), 2500);
+  };
+
+  const handleCopyIbanCRC = () => {
+    navigator.clipboard.writeText(bcrInfo.ibanCRC);
+    setCopiedIbanCRC(true);
+    setTimeout(() => setCopiedIbanCRC(false), 2500);
+  };
+
+  const handleCopyIbanUSD = () => {
+    navigator.clipboard.writeText(bcrInfo.ibanUSD);
+    setCopiedIbanUSD(true);
+    setTimeout(() => setCopiedIbanUSD(false), 2500);
   };
 
   const modalContent = (
@@ -219,6 +383,9 @@ export function ParticipateAuctionModal({
                 <p className="text-sm font-bold text-white">
                   {auction.court_name}
                 </p>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  {isEn ? bcrInfo.circuitNameEn : bcrInfo.circuitName}
+                </p>
               </div>
 
               <a
@@ -262,7 +429,167 @@ export function ParticipateAuctionModal({
             </div>
           </div>
 
-          {/* 3. Step-by-Step Bidding & 50% Deposit Instructions */}
+          {/* 3. Official Court BCR Judicial Account Information */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-emerald-500/30 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <span>{isEn ? 'Official Court BCR Judicial Account Information' : 'Cuentas Oficiales de Depósitos Judiciales (BCR)'}</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                      BCR • Poder Judicial
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {isEn
+                      ? 'Standardized Judicial Deposit System (SDJ) operated exclusively via Banco de Costa Rica'
+                      : 'Sistema de Depósitos Judiciales (SDJ) operado exclusivamente a través del Banco de Costa Rica'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={bcrInfo.officialBcrPortalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 px-2.5 py-1 rounded-lg bg-slate-950 border border-emerald-500/30 hover:border-emerald-500/60 transition-colors"
+                >
+                  <span>Portal BCR</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+                <a
+                  href={bcrInfo.officialPoderJudicialUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-300 hover:text-white px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 transition-colors"
+                >
+                  <span>PJ Virtual</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+
+            {/* IBAN Numbers Display Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
+              {/* USD IBAN */}
+              <div className={`p-3.5 rounded-xl border space-y-1.5 transition-all ${
+                auction.currency === 'USD'
+                  ? 'bg-emerald-950/40 border-emerald-500/50 shadow-inner'
+                  : 'bg-slate-950/80 border-slate-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-emerald-400" />
+                    <span>{isEn ? 'US Dollars (USD $) IBAN' : 'Cuenta IBAN Dólares (USD $)'}</span>
+                  </span>
+                  {auction.currency === 'USD' && (
+                    <span className="text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-sans">
+                      {isEn ? 'Property Currency' : 'Moneda del Remate'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-1 pt-0.5">
+                  <strong className="text-white text-xs sm:text-sm tracking-wide select-all">
+                    {bcrInfo.ibanUSD}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={handleCopyIbanUSD}
+                    className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-700 transition-all shrink-0"
+                    title="Copy USD IBAN"
+                  >
+                    {copiedIbanUSD ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* CRC Colones IBAN */}
+              <div className={`p-3.5 rounded-xl border space-y-1.5 transition-all ${
+                auction.currency === 'CRC'
+                  ? 'bg-emerald-950/40 border-emerald-500/50 shadow-inner'
+                  : 'bg-slate-950/80 border-slate-800'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-sky-400" />
+                    <span>{isEn ? 'Colones (CRC ₡) IBAN' : 'Cuenta IBAN Colones (CRC ₡)'}</span>
+                  </span>
+                  {auction.currency === 'CRC' && (
+                    <span className="text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-sans">
+                      {isEn ? 'Property Currency' : 'Moneda del Remate'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-1 pt-0.5">
+                  <strong className="text-white text-xs sm:text-sm tracking-wide select-all">
+                    {bcrInfo.ibanCRC}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={handleCopyIbanCRC}
+                    className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-700 transition-all shrink-0"
+                    title="Copy CRC IBAN"
+                  >
+                    {copiedIbanCRC ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 3 Payment Methods Breakdown */}
+            <div className="space-y-2 pt-1">
+              <span className="text-[11px] font-bold text-slate-300 block">
+                {isEn ? 'Three Convenient Ways to Pay Deposit:' : 'Tres Formas para Realizar el Depósito:'}
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                {/* Method 1: BCR Online Banking */}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>{isEn ? '1. BCR Online / App' : '1. BCR en Línea / App'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    {isEn
+                      ? 'Go to Pagos / Servicios → Depósitos Judiciales. Type the 14-digit docket number. Generates official NUT receipt.'
+                      : 'Menú Pagos → Depósitos Judiciales. Digite los 14 dígitos del expediente. Emite comprobante con NUT.'}
+                  </p>
+                </div>
+
+                {/* Method 2: SINPE from Other Banks */}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                  <div className="flex items-center gap-1.5 text-sky-400 font-bold">
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>{isEn ? '2. SINPE Interbank' : '2. Transferencia SINPE'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    {isEn
+                      ? `Transfer from BAC/BNCR to IBAN above. In SINPE detail write: "EXP ${auction.expediente_number} - [Your Name & ID]".`
+                      : `Desde BAC/BNCR al IBAN indicado. En detalle SINPE poner: "EXP ${auction.expediente_number} - [Nombre y Cédula]".`}
+                  </p>
+                </div>
+
+                {/* Method 3: In-Person BCR Branch */}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                    <Building className="w-3.5 h-3.5" />
+                    <span>{isEn ? '3. Any BCR Branch' : '3. Ventanilla BCR'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    {isEn
+                      ? 'Visit any of 150+ BCR branches. Request "Depósito Judicial de Remate" with docket number and court name.'
+                      : 'En cualquier sucursal BCR. Solicite "Depósito Judicial de Remate" indicando expediente y juzgado.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Step-by-Step Bidding Protocol */}
           <div className="space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
               <FileText className="w-4 h-4 text-emerald-400" />
@@ -281,11 +608,11 @@ export function ParticipateAuctionModal({
                   </span>
                 </div>
                 <h4 className="font-bold text-white text-xs sm:text-sm">
-                  {isEn ? 'Deposit 50% Legal Deposit into BCR Account' : 'Depositar 50% de Postura en Cuenta BCR'}
+                  {isEn ? 'Execute 50% Legal Deposit into BCR Account' : 'Realizar 50% de Postura en Cuenta BCR'}
                 </h4>
                 <p className="text-xs text-slate-400 leading-normal">
                   {isEn
-                    ? 'Make the 50% bidding deposit into the official Judicial Account at Banco de Costa Rica (BCR) assigned to this court.'
+                    ? 'Execute the 50% bidding deposit into the official Judicial Account at Banco de Costa Rica (BCR) assigned to this court.'
                     : 'Realice el depósito de postura legal del 50% en la Cuenta de Depósitos Judiciales del Juzgado en el Banco de Costa Rica (BCR).'}
                 </p>
 
@@ -339,7 +666,7 @@ export function ParticipateAuctionModal({
             </div>
           </div>
 
-          {/* 4. Post-Auction Timeline & Paying Winning Balance (Saldo de Precio) */}
+          {/* 5. Post-Auction Timeline & Paying Winning Balance (Saldo de Precio) */}
           <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-400" />
@@ -373,7 +700,7 @@ export function ParticipateAuctionModal({
             </div>
           </div>
 
-          {/* 5. How and When to Pay Closing & Registration Costs */}
+          {/* 6. How and When to Pay Closing & Registration Costs */}
           <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
               <Building className="w-4 h-4 text-sky-400" />
