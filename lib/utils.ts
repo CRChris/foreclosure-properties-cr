@@ -280,3 +280,84 @@ export function detectPropertyCharacteristics(data: {
   };
 }
 
+/**
+ * Return an executive, localized property title for foreclosure dossiers and cards
+ */
+export function getLocalizedPropertyTitle(auction: Auction, language: 'es' | 'en'): string {
+  const { propertyType } = detectPropertyCharacteristics(auction);
+
+  // If a descriptive address exists, localize keywords if English
+  if (auction.address_description) {
+    let title = auction.address_description.trim();
+    if (language === 'en') {
+      title = title
+        .replace(/Condominio horizontal residencial/gi, 'Residential Gated Community')
+        .replace(/Condominio horizontal cerrado/gi, 'Gated Residential Community')
+        .replace(/Condominio Frente al Mar/gi, 'Oceanfront Condominium')
+        .replace(/Condominio/gi, 'Condominium')
+        .replace(/casa filial número/gi, 'Residence Unit #')
+        .replace(/casa filial/gi, 'Residence Unit')
+        .replace(/Filial/gi, 'Unit')
+        .replace(/frente a Playa/gi, 'facing Beach')
+        .replace(/frente a parque público/gi, 'facing Public Park')
+        .replace(/frente a calle pública/gi, 'Public Road Frontage')
+        .replace(/Casa de habitación/gi, 'Single-Family Home')
+        .replace(/Casa contemporánea de dos plantas/gi, 'Contemporary Two-Story Home')
+        .replace(/Casa de campo/gi, 'Country Residence')
+        .replace(/Villa de playa situada en/gi, 'Beach Villa located in')
+        .replace(/Villa amueblada a/gi, 'Furnished Villa')
+        .replace(/metros de la playa/gi, 'meters from the beach')
+        .replace(/con piscina comunitaria/gi, 'with community pool')
+        .replace(/con piscina privada/gi, 'with private pool')
+        .replace(/penthouse con vista panorámica al Océano Pacífico/gi, 'Penthouse with Panoramic Pacific Ocean Views')
+        .replace(/Penthouse con vista/gi, 'Penthouse with views')
+        .replace(/Terreno plano y casa unifamiliar/gi, 'Flat Lot & Single-Family Home')
+        .replace(/Terreno para construir/gi, 'Building Lot / Development Land')
+        .replace(/Lote para construir/gi, 'Building Lot')
+        .replace(/Lote/gi, 'Lot')
+        .replace(/Finca con vista panorámica al mar/gi, 'Ocean View Estate')
+        .replace(/Finca turística y agropecuaria/gi, 'Eco-Tourism & Agricultural Estate')
+        .replace(/Finca/gi, 'Farm & Estate')
+        .replace(/Local comercial \/ oficinas corporativas/gi, 'Commercial Suite & Corporate Offices')
+        .replace(/Local comercial/gi, 'Commercial Space')
+        .replace(/Oficentro/gi, 'Office Center')
+        .replace(/Módulo Comercial/gi, 'Commercial Module')
+        .replace(/Quinta campestre/gi, 'Country Villa & Estate')
+        .replace(/Inmueble judicial en/gi, 'Judicial Foreclosure Property in')
+        .replace(/Sector/gi, 'Area');
+      return title;
+    }
+    return title;
+  }
+
+  // Fallback to high-caliber category title
+  const typeMap: Record<PropertyType, { es: string; en: string }> = {
+    single_family_home: {
+      es: `Casa de Habitación en ${auction.district}, ${auction.canton}`,
+      en: `Single-Family Home in ${auction.district}, ${auction.canton}`,
+    },
+    condo_apartment: {
+      es: `Condominio Residencial en ${auction.district}, ${auction.canton}`,
+      en: `Residential Condominium in ${auction.district}, ${auction.canton}`,
+    },
+    building_lot: {
+      es: `Lote para Construir en ${auction.district}, ${auction.canton}`,
+      en: `Building Lot in ${auction.district}, ${auction.canton}`,
+    },
+    agricultural_land: {
+      es: `Finca Agrícola / Quinta en ${auction.district}, ${auction.canton}`,
+      en: `Agricultural Land / Farm in ${auction.district}, ${auction.canton}`,
+    },
+    commercial_industrial: {
+      es: `Inmueble Comercial / Industrial en ${auction.district}, ${auction.canton}`,
+      en: `Commercial / Industrial Property in ${auction.district}, ${auction.canton}`,
+    },
+    other: {
+      es: `Inmueble Judicial en ${auction.district}, ${auction.canton}`,
+      en: `Judicial Foreclosure Property in ${auction.district}, ${auction.canton}`,
+    },
+  };
+
+  return typeMap[propertyType]?.[language] || `${auction.district}, ${auction.canton}`;
+}
+

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
+import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction, getLocalizedPropertyTitle } from '@/lib/utils';
 import {
   fetchUserWatchlist,
   saveToWatchlist,
@@ -177,7 +177,7 @@ export function WatchlistDrawer({
                           {auction.canton}, {auction.province}
                         </span>
                         <h3 className="text-sm font-bold text-white line-clamp-1">
-                          {auction.address_description || `${auction.district}, ${auction.canton}`}
+                          {getLocalizedPropertyTitle(auction, language)}
                         </h3>
                         <p className="text-[11px] font-mono text-slate-400">
                           {t.dossier.folioReal}: {auction.folio_real}

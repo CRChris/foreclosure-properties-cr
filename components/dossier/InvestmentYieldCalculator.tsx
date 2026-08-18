@@ -98,7 +98,7 @@ export function InvestmentYieldCalculator({
         </div>
 
         <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-mono text-slate-300">
-          <span>Moneda:</span>
+          <span>{language === 'es' ? 'Moneda:' : 'Currency:'}</span>
           <strong className="text-emerald-400 font-bold">{auction.currency}</strong>
         </div>
       </div>

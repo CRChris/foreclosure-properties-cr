@@ -105,8 +105,8 @@ export function PropertyMap({
 
   return (
     <div style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner ${className}`}>
-      {/* Persistent Map Centroid Disclaimer Badge (Top-Left) */}
-      <div className="absolute top-3 left-3 z-[400] max-w-xs sm:max-w-sm bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3 py-2 text-[11px] text-amber-200/95 shadow-2xl flex items-start gap-2 pointer-events-auto">
+      {/* Persistent Map Centroid Disclaimer Badge (Centered & Shifted to clear +/- Zoom Controls) */}
+      <div className="absolute top-3 left-14 sm:left-1/2 sm:-translate-x-1/2 z-[400] max-w-xs sm:max-w-md bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3 py-2 text-[11px] text-amber-200/95 shadow-2xl flex items-start gap-2 pointer-events-auto">
         <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <p className="leading-tight">
           {language === 'en'

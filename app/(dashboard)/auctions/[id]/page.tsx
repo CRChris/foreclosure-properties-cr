@@ -9,7 +9,13 @@ import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, calculateInvestorMetrics, detectPropertyCharacteristics } from '@/lib/utils';
+import {
+  formatCurrency,
+  formatArea,
+  calculateInvestorMetrics,
+  detectPropertyCharacteristics,
+  getLocalizedPropertyTitle,
+} from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { fetchAuctionById } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -31,6 +37,7 @@ import {
   AlertTriangle,
   Info,
   Building,
+  ExternalLink,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -252,7 +259,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
         <div className="relative z-10 space-y-3">
           <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-            {auction.address_description || `${auction.district}, ${auction.canton}`}
+            {getLocalizedPropertyTitle(auction, language)}
           </h1>
 
           <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-300 pt-1">
@@ -266,10 +273,17 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               <Maximize2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{formatArea(auction.area_m2)}</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <Scale className="w-4 h-4 text-emerald-400 shrink-0" />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${auction.court_name}, Costa Rica`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 hover:text-emerald-400 text-slate-300 transition-colors group underline decoration-slate-700 hover:decoration-emerald-400 underline-offset-2"
+              title={language === 'es' ? 'Ver juzgado en Google Maps (abre en nueva pestaña)' : 'Find auction court on Google Maps (opens in new tab)'}
+            >
+              <Scale className="w-4 h-4 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
               <span>{auction.court_name}</span>
-            </span>
+              <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-emerald-400 ml-0.5" />
+            </a>
           </div>
         </div>
       </div>
@@ -350,10 +364,14 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             {/* Legal Summary Prose */}
             <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 text-sm text-slate-300 leading-relaxed space-y-2">
               <p>
-                {auction.legal_summary ||
-                  `Remate judicial tramitado ante ${auction.court_name} en el expediente ${auction.expediente_number}, promovido por ${auction.plaintiff}${
-                    auction.defendant ? ` contra ${auction.defendant}` : ''
-                  }. Se somete a subasta pública la finca del partido de ${auction.province}, matrícula ${auction.folio_real}, plano catastrado ${auction.plano_catastrado || 'N/A'}, con una medida superficial de ${formatArea(auction.area_m2)}.`}
+                {language === 'en'
+                  ? `Judicial foreclosure proceedings before ${auction.court_name} under case docket ${auction.expediente_number}, filed by plaintiff ${auction.plaintiff}${
+                      auction.defendant ? ` against ${auction.defendant}` : ''
+                    }. Public judicial auction of titled real estate in the province of ${auction.province}, registered under Folio Real ${auction.folio_real}, cadastral survey ${auction.plano_catastrado || 'N/A'}, with an official registered surface area of ${formatArea(auction.area_m2)}.`
+                  : auction.legal_summary ||
+                    `Remate judicial tramitado ante ${auction.court_name} en el expediente ${auction.expediente_number}, promovido por ${auction.plaintiff}${
+                      auction.defendant ? ` contra ${auction.defendant}` : ''
+                    }. Se somete a subasta pública la finca del partido de ${auction.province}, matrícula ${auction.folio_real}, plano catastrado ${auction.plano_catastrado || 'N/A'}, con una medida superficial de ${formatArea(auction.area_m2)}.`}
               </p>
             </div>
 

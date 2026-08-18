@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, detectPropertyCharacteristics } from '@/lib/utils';
+import { formatCurrency, formatArea, detectPropertyCharacteristics, getLocalizedPropertyTitle } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -209,7 +209,7 @@ export default function MapExplorerPage() {
                     {selectedAuction.canton}, {selectedAuction.province}
                   </p>
                   <p className="text-xs font-bold text-white line-clamp-1">
-                    {selectedAuction.address_description || selectedAuction.district}
+                    {getLocalizedPropertyTitle(selectedAuction, language)}
                   </p>
                 </div>
                 <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
