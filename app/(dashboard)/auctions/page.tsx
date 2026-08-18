@@ -6,7 +6,12 @@ import { Auction } from '@/lib/types/auction';
 import { AuctionCard } from '@/components/cards/AuctionCard';
 import { AuctionFilterBar, FilterState, ViewMode } from '@/components/filters/AuctionFilterBar';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
+import { 
+  formatCurrency, 
+  detectPropertyCharacteristics, 
+  getLiveAuctionProgressionState,
+  calculateOpportunityAlpha,
+} from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -34,6 +39,7 @@ const INITIAL_FILTERS: FilterState = {
   priceBracket: 'all',
   minMargin: 0,
   callStage: 'all',
+  dealGrade: 'all',
   constructionStatus: 'all',
   roadFrontage: 'all',
   mortgagePriority: 'all',
@@ -140,7 +146,24 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 10. Discount Margin Filter (Slider)
+      // 10. Opportunity Alpha Rating Filter
+      if (filters.dealGrade !== 'all') {
+        const alpha = calculateOpportunityAlpha(auction);
+        if (filters.dealGrade === 'AAA' && alpha.grade !== 'AAA') {
+          return false;
+        }
+        if (filters.dealGrade === 'AAA_AA' && !['AAA', 'AA'].includes(alpha.grade)) {
+          return false;
+        }
+        if (filters.dealGrade === 'A_PLUS' && !['AAA', 'AA', 'A'].includes(alpha.grade)) {
+          return false;
+        }
+        if (filters.dealGrade === 'B_PLUS' && alpha.grade === 'C') {
+          return false;
+        }
+      }
+
+      // 11. Discount Margin Filter (Slider)
       if (filters.minMargin > 0) {
         const margin = auction.estimated_margin_pct || 0;
         if (margin < filters.minMargin) {
@@ -148,7 +171,7 @@ export default function AuctionsPage() {
         }
       }
 
-      // 11. Timeframe Filter
+      // 12. Timeframe Filter
       if (filters.timeframe !== 'all') {
         const auctionDate = new Date(auction.auction_date_call_1).getTime();
         const now = Date.now();
@@ -163,6 +186,11 @@ export default function AuctionsPage() {
       return true;
     }).sort((a, b) => {
       // Sorting
+      if (filters.sortBy === 'score_desc') {
+        const scoreA = calculateOpportunityAlpha(a).score;
+        const scoreB = calculateOpportunityAlpha(b).score;
+        return scoreB - scoreA;
+      }
       if (filters.sortBy === 'price_asc') {
         return a.base_price_call_1 - b.base_price_call_1;
       }

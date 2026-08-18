@@ -34,6 +34,8 @@ import {
   TreePine,
   ShieldCheck,
   CheckCircle2,
+  Sparkles,
+  Award,
 } from 'lucide-react';
 
 export type ViewMode = 'split' | 'grid' | 'map';
@@ -48,11 +50,12 @@ export interface FilterState {
   priceBracket: 'all' | 'under_100k' | '100k_250k' | '250k_500k' | 'over_500k';
   minMargin: number;
   callStage: 'all' | 'call_1' | 'call_2' | 'call_3' | 'passed_call_3';
+  dealGrade: 'all' | 'AAA' | 'AAA_AA' | 'A_PLUS' | 'B_PLUS';
   constructionStatus: 'all' | 'built' | 'land';
   roadFrontage: 'all' | 'public_road' | 'private';
   mortgagePriority: 'all' | '1st_mortgage' | '2nd_mortgage' | 'embargo_judicial';
   timeframe: 'all' | '7_days' | '15_days' | '30_days' | '60_days';
-  sortBy: 'price_asc' | 'price_desc' | 'date_asc' | 'date_desc' | 'province_asc' | 'margin_desc' | 'area_desc';
+  sortBy: 'score_desc' | 'price_asc' | 'price_desc' | 'date_asc' | 'date_desc' | 'province_asc' | 'margin_desc' | 'area_desc';
 }
 
 export interface AuctionFilterBarProps {
@@ -107,13 +110,23 @@ export function AuctionFilterBar({
 
   // Sort options
   const SORT_OPTIONS: { label: string; value: FilterState['sortBy'] }[] = [
+    { label: t.filters.sortScoreDesc, value: 'score_desc' },
     { label: t.filters.sortDateAsc, value: 'date_asc' },
     { label: t.filters.sortDateDesc, value: 'date_desc' },
+    { label: t.filters.sortMarginDesc, value: 'margin_desc' },
     { label: t.filters.sortPriceAsc, value: 'price_asc' },
     { label: t.filters.sortPriceDesc, value: 'price_desc' },
     { label: t.filters.sortProvinceAsc, value: 'province_asc' },
-    { label: t.filters.sortMarginDesc, value: 'margin_desc' },
     { label: t.filters.sortAreaDesc, value: 'area_desc' },
+  ];
+
+  // Deal grades list
+  const DEAL_GRADES: { label: string; value: FilterState['dealGrade'] }[] = [
+    { label: t.filters.allDealGrades, value: 'all' },
+    { label: t.filters.gradeAAAOnly, value: 'AAA' },
+    { label: t.filters.gradeTopTier, value: 'AAA_AA' },
+    { label: t.filters.gradeAPlus, value: 'A_PLUS' },
+    { label: t.filters.gradeBPlus, value: 'B_PLUS' },
   ];
 
   // Price brackets quick picker
@@ -131,6 +144,7 @@ export function AuctionFilterBar({
     filters.propertyType !== 'all',
     filters.province !== 'all',
     filters.callStage !== 'all',
+    filters.dealGrade !== 'all',
     filters.currency !== 'all',
     filters.priceBracket !== 'all' || filters.minPrice !== '' || filters.maxPrice !== '',
     filters.constructionStatus !== 'all',
@@ -386,7 +400,26 @@ export function AuctionFilterBar({
 
       {/* 3. Collapsible Advanced Legal & Financial Filters Drawer */}
       {isAdvancedOpen && (
-        <div className="pt-4 mt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="pt-4 mt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* Opportunity Alpha Rating Filter */}
+          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{t.filters.dealGrade}</span>
+            </label>
+            <Select
+              value={filters.dealGrade}
+              onChange={(e) => handleUpdate('dealGrade', e.target.value as any)}
+              className="w-full text-xs h-9 bg-slate-900"
+            >
+              {DEAL_GRADES.map((dg) => (
+                <option key={dg.value} value={dg.value}>
+                  {dg.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
           {/* Construction Status Filter */}
           <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
             <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
@@ -497,6 +530,16 @@ export function AuctionFilterBar({
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
               <span>{CALL_STAGES.find((c) => c.value === filters.callStage)?.label}</span>
               <button onClick={() => handleUpdate('callStage', 'all')} className="hover:text-white">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {filters.dealGrade !== 'all' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[11px]">
+              <Sparkles className="w-3 h-3 text-emerald-400" />
+              <span>{DEAL_GRADES.find((dg) => dg.value === filters.dealGrade)?.label}</span>
+              <button onClick={() => handleUpdate('dealGrade', 'all')} className="hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>

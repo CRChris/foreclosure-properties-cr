@@ -35,6 +35,7 @@ export interface Translations {
     land: string;
     industrial: string;
     sortBy: string;
+    sortScoreDesc: string;
     sortDateAsc: string;
     sortDateDesc: string;
     sortMarginDesc: string;
@@ -42,6 +43,12 @@ export interface Translations {
     sortPriceDesc: string;
     sortProvinceAsc: string;
     sortAreaDesc: string;
+    dealGrade: string;
+    allDealGrades: string;
+    gradeAAAOnly: string;
+    gradeTopTier: string;
+    gradeAPlus: string;
+    gradeBPlus: string;
     propertyType: string;
     allPropertyTypes: string;
     typeSingleFamily: string;
