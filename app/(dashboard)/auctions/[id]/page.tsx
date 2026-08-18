@@ -8,6 +8,7 @@ import { AuctionCallLadder } from '@/components/dossier/AuctionCallLadder';
 import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
+import { ParticipateAuctionModal } from '@/components/dossier/ParticipateAuctionModal';
 import { MapWrapper } from '@/components/map/MapWrapper';
 import {
   formatCurrency,
@@ -38,6 +39,7 @@ import {
   Info,
   Building,
   ExternalLink,
+  Gavel,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -52,6 +54,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isParticipateModalOpen, setIsParticipateModalOpen] = useState(false);
   const [auction, setAuction] = useState<Auction | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -186,6 +189,16 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
         {/* Quick Action Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Participate in Auction Primary CTA */}
+          <button
+            type="button"
+            onClick={() => setIsParticipateModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black transition-all shadow-md shadow-emerald-950/60 ring-1 ring-emerald-400/40 hover:scale-[1.02]"
+          >
+            <Gavel className="w-3.5 h-3.5" />
+            <span>{language === 'es' ? 'Participar en este Remate' : 'Participate in this Auction'}</span>
+          </button>
+
           {/* Watchlist Bookmark */}
           <button
             type="button"
@@ -249,12 +262,23 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             </span>
           </div>
 
-          {marginPct > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-sm shadow-xl self-start md:self-auto">
-              <TrendingUp className="w-4 h-4" />
-              +{marginPct}% {t.card.estimatedMargin}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+            {marginPct > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl">
+                <TrendingUp className="w-4 h-4" />
+                +{marginPct}% {t.card.estimatedMargin}
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsParticipateModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all hover:scale-[1.02] ring-1 ring-emerald-400/40"
+            >
+              <Gavel className="w-4 h-4" />
+              <span>{language === 'es' ? 'Participar en este Remate' : 'Participate in this Auction'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="relative z-10 space-y-3">
@@ -293,6 +317,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         auction={auction}
         selectedCall={selectedCall}
         onSelectCall={setSelectedCall}
+        onOpenParticipate={() => setIsParticipateModalOpen(true)}
       />
 
       {/* Detailed Property Characteristics & 4-Quadrant Linderos */}
@@ -471,6 +496,14 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           />
         </div>
       </div>
+
+      {/* Property-Specific Participation Modal */}
+      <ParticipateAuctionModal
+        auction={auction}
+        selectedCall={selectedCall}
+        isOpen={isParticipateModalOpen}
+        onClose={() => setIsParticipateModalOpen(false)}
+      />
     </div>
   );
 }

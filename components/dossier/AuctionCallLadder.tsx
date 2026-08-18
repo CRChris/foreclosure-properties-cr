@@ -10,18 +10,21 @@ import {
   Clock,
   DollarSign,
   ShieldAlert,
+  Gavel,
 } from 'lucide-react';
 
 interface AuctionCallLadderProps {
   auction: Auction;
   selectedCall: 1 | 2 | 3;
   onSelectCall: (call: 1 | 2 | 3) => void;
+  onOpenParticipate?: () => void;
 }
 
 export function AuctionCallLadder({
   auction,
   selectedCall,
   onSelectCall,
+  onOpenParticipate,
 }: AuctionCallLadderProps) {
   const { t, language } = useLanguage();
   const countdown1 = getDaysUntilAuction(auction.auction_date_call_1, language);
@@ -49,16 +52,33 @@ export function AuctionCallLadder({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-lg font-bold text-white tracking-tight">
-            {t.dossier.auctionCallSchedule}
-          </h2>
+          <div>
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              {t.dossier.auctionCallSchedule}
+            </h2>
+            <p className="text-xs text-slate-400 font-medium">
+              {t.dossier.auctionCallScheduleDesc}
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-slate-400 font-medium">
-          {t.dossier.auctionCallScheduleDesc}
-        </span>
+
+        {onOpenParticipate && (
+          <button
+            type="button"
+            onClick={onOpenParticipate}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/60 ring-1 ring-emerald-400/30 self-start sm:self-auto"
+          >
+            <Gavel className="w-3.5 h-3.5" />
+            <span>
+              {language === 'es'
+                ? `Participar en ${selectedCall}° Remate`
+                : `Participate in Call ${selectedCall}`}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* 3-Call Cards Ladder Grid */}
