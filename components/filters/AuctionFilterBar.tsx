@@ -47,7 +47,7 @@ export interface FilterState {
   maxPrice: string;
   priceBracket: 'all' | 'under_100k' | '100k_250k' | '250k_500k' | 'over_500k';
   minMargin: number;
-  callStage: 'all' | 'call_1' | 'call_2' | 'call_3';
+  callStage: 'all' | 'call_1' | 'call_2' | 'call_3' | 'passed_call_3';
   constructionStatus: 'all' | 'built' | 'land';
   roadFrontage: 'all' | 'public_road' | 'private';
   mortgagePriority: 'all' | '1st_mortgage' | '2nd_mortgage' | 'embargo_judicial';
@@ -99,9 +99,10 @@ export function AuctionFilterBar({
   // Call stages
   const CALL_STAGES = [
     { label: t.filters.allStages, value: 'all' },
-    { label: t.filters.call1, value: 'call_1' },
-    { label: t.filters.call2, value: 'call_2' },
-    { label: t.filters.call3, value: 'call_3' },
+    { label: language === 'es' ? '1° Remate (100% Base)' : '1st Call (100% Base)', value: 'call_1' },
+    { label: language === 'es' ? '2° Remate (-25% Descuento)' : '2nd Call (-25% Discount)', value: 'call_2' },
+    { label: language === 'es' ? '3° Remate (-75% Descuento)' : '3rd Call (-75% Discount)', value: 'call_3' },
+    { label: language === 'es' ? 'Vencidos / En Adjudicación' : 'Expired / In Adjudication', value: 'passed_call_3' },
   ];
 
   // Sort options

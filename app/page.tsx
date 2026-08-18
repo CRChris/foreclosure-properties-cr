@@ -11,6 +11,7 @@ import { UserNav } from '@/components/ui/UserNav';
 import { HelpButton } from '@/components/help/HelpButton';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { fetchAuctions } from '@/lib/supabase/db';
+import { getLiveAuctionProgressionState } from '@/lib/utils';
 import { 
   Building2, 
   MapPin, 
@@ -43,12 +44,18 @@ export default function HomePage() {
       .catch(() => {});
   }, []);
 
-  const featuredAuctions = auctions.slice(0, 3);
-  const totalAuctions = auctions.length;
+  // Filter for active, upcoming auctions (exclude passed_call_3 / deserted)
+  const activeAuctions = auctions.filter((a) => {
+    const live = getLiveAuctionProgressionState(a);
+    return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+  });
+
+  const featuredAuctions = activeAuctions.slice(0, 3);
+  const totalAuctions = activeAuctions.length;
   
-  // Calculate average discount margin
+  // Calculate average discount margin across active auctions
   const avgMargin = totalAuctions > 0
-    ? Math.round(auctions.reduce((acc, curr) => acc + (curr.estimated_margin_pct || 0), 0) / totalAuctions)
+    ? Math.round(activeAuctions.reduce((acc, curr) => acc + (curr.estimated_margin_pct || 0), 0) / totalAuctions)
     : 0;
 
   return (

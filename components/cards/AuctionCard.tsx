@@ -3,7 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, getDaysUntilAuction, calculateInvestorMetrics, detectPropertyCharacteristics } from '@/lib/utils';
+import { 
+  formatCurrency, 
+  formatArea, 
+  getDaysUntilAuction, 
+  calculateInvestorMetrics, 
+  detectPropertyCharacteristics,
+  getLiveAuctionProgressionState,
+} from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBanner } from '@/components/ui/PropertyTypeIcon';
 import {
@@ -59,8 +66,10 @@ export function AuctionCard({
     }
   };
 
-  const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
-  const metrics = calculateInvestorMetrics(auction, 1);
+  const liveState = getLiveAuctionProgressionState(auction);
+  const activeDate = liveState.currentAuctionDate || auction.auction_date_call_1;
+  const countdown = getDaysUntilAuction(activeDate, language);
+  const metrics = calculateInvestorMetrics(auction, (liveState.currentCallNumber || 1) as (1 | 2 | 3));
   const marginPct = auction.estimated_margin_pct || 0;
 
   // Use robust deterministic characteristics detector
@@ -140,12 +149,51 @@ export function AuctionCard({
       {/* Card Content Body */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3.5">
         <div>
-          {/* Header Tag / Folio Real & Mortgage Status */}
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pb-2 border-b border-slate-800/70 font-mono">
-            <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-300 font-bold">
+          {/* Call Progression Stage Banner */}
+          <div className="pb-2 border-b border-slate-800/70 flex items-center justify-between gap-2">
+            {liveState.saleStatus === 'in_progress' || countdown.isHearing ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/90 border border-rose-500/60 text-rose-300 font-extrabold text-[11px] uppercase tracking-wider animate-pulse shadow-md shadow-rose-950/50">
+                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                {language === 'es' ? 'En Audiencia Judicial' : 'In Judicial Hearing'}
+              </span>
+            ) : liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold text-[10.5px]">
+                {language === 'es'
+                  ? '3° Remate Vencido • En Proceso de Adjudicación'
+                  : '3rd Call Expired • In Adjudication Process'}
+              </span>
+            ) : liveState.saleStatus === 'suspended' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 font-bold text-[10.5px]">
+                {language === 'es' ? 'Remate Suspendido Judicialmente' : 'Judicially Suspended'}
+              </span>
+            ) : liveState.saleStatus === 'adjudicated_to_creditor' || liveState.saleStatus === 'adjudicated_to_bidder' || liveState.callStage === 'awarded' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold text-[10.5px]">
+                {language === 'es' ? 'Propiedad Adjudicada' : 'Property Awarded'}
+              </span>
+            ) : liveState.callStage === 'call_3' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-extrabold text-[10.5px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                {language === 'es' ? '3° Remate (75% DESCUENTO)' : '3rd Call (75% DISCOUNT)'}
+              </span>
+            ) : liveState.callStage === 'call_2' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-950/90 border border-teal-500/60 text-teal-300 font-extrabold text-[10.5px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                {language === 'es' ? '2° Remate (25% DESCUENTO)' : '2nd Call (25% DISCOUNT)'}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-bold text-[10.5px]">
+                {language === 'es' ? '1° Remate (100% Base)' : '1st Call (100% Base)'}
+              </span>
+            )}
+
+            <span className="font-mono text-[10.5px] text-slate-400 font-semibold">
               Folio: {auction.folio_real}
             </span>
-            <span className="flex items-center gap-1 text-[10.5px] font-sans font-medium text-emerald-400">
+          </div>
+
+          {/* Quick Legal Specs Chips (Frontage, Priority & Construction) */}
+          <div className="pt-2 flex flex-wrap items-center gap-1.5">
+            <span className="flex items-center gap-1 text-[10px] font-sans font-semibold text-emerald-400 px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
               {priority === '1st_mortgage' ? (
                 <>
                   <ShieldCheck className="w-3 h-3 text-emerald-400" />
@@ -163,10 +211,7 @@ export function AuctionCard({
                 </>
               )}
             </span>
-          </div>
 
-          {/* Quick Legal Specs Chips (Frontage & Construction) */}
-          <div className="pt-2 flex flex-wrap items-center gap-1.5">
             {hasPublicRoad ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-950/60 border border-sky-600/40 text-sky-300">
                 <Compass className="w-3 h-3 text-sky-400" />
@@ -195,10 +240,14 @@ export function AuctionCard({
           <div className="pt-2.5 flex items-baseline justify-between gap-2">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                {t.card.firstCall} (Base)
+                {liveState.currentCallNumber === 3
+                  ? '3° Remate (-75%)'
+                  : liveState.currentCallNumber === 2
+                  ? '2° Remate (-25%)'
+                  : `${t.card.firstCall} (Base)`}
               </p>
-              <p className="text-xl font-extrabold tracking-tight text-white">
-                {formatCurrency(auction.base_price_call_1, auction.currency)}
+              <p className="text-xl font-extrabold tracking-tight text-emerald-400">
+                {formatCurrency(liveState.currentBasePrice, auction.currency)}
               </p>
             </div>
             {auction.estimated_market_value && (
@@ -248,8 +297,8 @@ export function AuctionCard({
         <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
           {/* Relative countdown chip */}
           <div className="flex items-center gap-1.5 text-xs font-bold">
-            <Calendar className={`w-3.5 h-3.5 ${countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400 animate-bounce' : 'text-slate-400'}`} />
-            <span className={countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400' : 'text-slate-300'}>
+            <Calendar className={`w-3.5 h-3.5 ${countdown.isHearing ? 'text-rose-400 animate-spin' : countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400 animate-bounce' : 'text-slate-400'}`} />
+            <span className={countdown.isHearing ? 'text-rose-300 font-extrabold' : countdown.days >= 0 && countdown.days <= 7 ? 'text-amber-400' : 'text-slate-300'}>
               {countdown.label}
             </span>
           </div>
@@ -267,3 +316,4 @@ export function AuctionCard({
     </div>
   );
 }
+

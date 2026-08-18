@@ -415,10 +415,9 @@ Follow these legal parsing rules:
 17. 'lindero_norte', 'lindero_sur', 'lindero_este', 'lindero_oeste': Extract the 4 bordering boundaries (linderos).
 18. 'servidumbres_notes': Note any registered easements (servidumbre de paso, acueducto, etc.).
 19. 'mortgage_priority': '1st_mortgage' if hipoteca en primer grado, '2nd_mortgage' if segundo grado, 'embargo_judicial' if execution by embargo.
-"""
 
 EDICT TEXT:
-\"\"\"{edict_text}\"\"\"
+{edict_text}
 """
 
 def extract_single_edict_regex_fallback(edict_text: str) -> Optional[ForeclosureAuction]:
@@ -673,7 +672,6 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         "defendant": getattr(auction, "defendant", None),
         "legal_summary": auction.legal_summary,
         "raw_edict_text": getattr(auction, "raw_edict_text", ""),
-        "images": assigned_images,
         "location": location_wkt,
         "created_at": datetime.now().isoformat(),
         "updated_at": datetime.now().isoformat(),
@@ -686,6 +684,7 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
     """
     Connects to Supabase PostGIS using service role credentials and performs inserts
     with deduplication against existing expediente_numbers in the database.
+    Terminal statuses (suspended, awarded, annulled, etc.) are strictly locked and never overwritten.
     """
     supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -698,9 +697,10 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
         import urllib.request
         ctx = create_ssl_context()
 
-        # 1. Fetch existing expediente numbers to avoid duplicates
+        # 1. Fetch existing expediente numbers & sale statuses to protect terminal states
         existing_expedientes = set()
-        fetch_url = f"{supabase_url}/rest/v1/auctions?select=expediente_number"
+        terminal_expedientes = set()
+        fetch_url = f"{supabase_url}/rest/v1/auctions?select=expediente_number,sale_status"
         fetch_headers = {
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
@@ -710,12 +710,20 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
             with urllib.request.urlopen(req_get, context=ctx, timeout=10) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
-                    existing_expedientes = {item["expediente_number"] for item in data if "expediente_number" in item}
+                    for item in data:
+                        exp = item.get("expediente_number")
+                        if exp:
+                            existing_expedientes.add(exp)
+                            if item.get("sale_status") in ("suspended", "adjudicated_to_creditor", "adjudicated_to_bidder", "awarded", "annulled", "settled"):
+                                terminal_expedientes.add(exp)
         except Exception as err:
             logger.debug(f"Could not fetch existing expedientes: {err}")
 
-        # 2. Filter out already-inserted foreclosures
-        new_records = [r for r in records if r["expediente_number"] not in existing_expedientes]
+        # 2. Filter out existing and terminal foreclosures
+        new_records = [
+            r for r in records 
+            if r["expediente_number"] not in existing_expedientes and r["expediente_number"] not in terminal_expedientes
+        ]
         
         if not new_records:
             logger.info("All discovered foreclosures are already up to date in Supabase PostGIS.")
@@ -806,7 +814,21 @@ def main():
 
     logger.info(f"Upserting {len(enriched_records)} records to Supabase PostGIS...")
     upsert_to_supabase(enriched_records)
+
+    # Trigger Automated Auction Call Progression & Lifecycle Tracker Engine
+    logger.info("Executing automated lifecycle progression engine (Single Source of Truth RPC)...")
+    try:
+        from scraper.auction_tracker import sync_auction_progression_via_rpc
+        progression_result = sync_auction_progression_via_rpc()
+        if progression_result.get("success"):
+            logger.info(f"✓ Progression Engine synced: {progression_result.get('total_processed', 0)} evaluated, {progression_result.get('total_updated', 0)} state transitions.")
+        else:
+            logger.warning(f"Progression Engine warning: {progression_result.get('error')}")
+    except Exception as ex:
+        logger.warning(f"Could not run progression sync RPC: {ex}")
+
     logger.info("Foreclosure ingestion pipeline finished successfully.")
 
 if __name__ == "__main__":
     main()
+

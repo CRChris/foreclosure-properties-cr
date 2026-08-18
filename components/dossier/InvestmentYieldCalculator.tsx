@@ -17,7 +17,7 @@ import {
 
 interface InvestmentYieldCalculatorProps {
   auction: Auction;
-  selectedCall: 1 | 2 | 3;
+  selectedCall: (1 | 2 | 3) | null;
 }
 
 export function InvestmentYieldCalculator({

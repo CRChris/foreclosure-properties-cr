@@ -6,7 +6,7 @@ import { Auction } from '@/lib/types/auction';
 import { AuctionCard } from '@/components/cards/AuctionCard';
 import { AuctionFilterBar, FilterState, ViewMode } from '@/components/filters/AuctionFilterBar';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, detectPropertyCharacteristics } from '@/lib/utils';
+import { formatCurrency, detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -76,6 +76,7 @@ export default function AuctionsPage() {
   const filteredAuctions = useMemo(() => {
     return auctionsData.filter((auction) => {
       const chars = detectPropertyCharacteristics(auction);
+      const liveState = getLiveAuctionProgressionState(auction);
 
       // 1. Text Search Filter (Canton, District, Province, Expediente, Folio, Bank, Summary)
       if (filters.search.trim()) {
@@ -108,13 +109,8 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 5. Price Range Filter (Comparing active base price)
-      let activePrice = auction.base_price_call_1;
-      if (filters.callStage === 'call_2' && auction.base_price_call_2) {
-        activePrice = auction.base_price_call_2;
-      } else if (filters.callStage === 'call_3' && auction.base_price_call_3) {
-        activePrice = auction.base_price_call_3;
-      }
+      // 5. Price Range Filter (Comparing live active call base price)
+      const activePrice = liveState.currentBasePrice || auction.base_price_call_1;
 
       if (filters.minPrice && activePrice < Number(filters.minPrice)) {
         return false;
@@ -123,10 +119,16 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 6. Call Stage Filter
+      // 6. Call Stage Filter (Comparing live progression stage)
       if (filters.callStage !== 'all') {
-        if (filters.callStage === 'call_2' && !auction.base_price_call_2) return false;
-        if (filters.callStage === 'call_3' && !auction.base_price_call_3) return false;
+        if (liveState.callStage !== filters.callStage) {
+          return false;
+        }
+      } else {
+        // By default, hide properties that have already concluded all 3 calls (passed_call_3 / deserted)
+        if (liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted') {
+          return false;
+        }
       }
 
       // 7. Construction Status Filter

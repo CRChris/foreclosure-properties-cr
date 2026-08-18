@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAuctions } from '@/lib/supabase/db';
+import { getLiveAuctionProgressionState } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -8,6 +9,8 @@ export async function GET(request: NextRequest) {
   const canton = searchParams.get('canton');
   const currency = searchParams.get('currency');
   const query = searchParams.get('q');
+  const callStage = searchParams.get('callStage');
+  const includePast = searchParams.get('includePast') === 'true';
   const minPrice = searchParams.get('minPrice') ? parseFloat(searchParams.get('minPrice')!) : null;
   const maxPrice = searchParams.get('maxPrice') ? parseFloat(searchParams.get('maxPrice')!) : null;
   
@@ -19,6 +22,19 @@ export async function GET(request: NextRequest) {
 
   const allAuctions = await fetchAuctions();
   let results = [...allAuctions];
+
+  // Active / Call Stage filter (exclude passed_call_3 by default unless requested)
+  if (callStage && callStage !== 'all') {
+    results = results.filter((a) => {
+      const live = getLiveAuctionProgressionState(a);
+      return live.callStage === callStage;
+    });
+  } else if (!includePast) {
+    results = results.filter((a) => {
+      const live = getLiveAuctionProgressionState(a);
+      return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+    });
+  }
 
   // Query search
   if (query) {

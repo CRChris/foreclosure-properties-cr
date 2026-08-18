@@ -32,14 +32,38 @@ export type MortgagePriority =
   | 'embargo_judicial'
   | 'unknown';
 
-export type AuctionCallStage = 'call_1' | 'call_2' | 'call_3';
+export type AuctionCallStage =
+  | 'call_1'
+  | 'call_2'
+  | 'call_3'
+  | 'passed_call_3'
+  | 'suspended'
+  | 'awarded';
 
-export type AuctionStatus =
-  | 'active'
+export type AuctionSaleStatus =
   | 'upcoming'
-  | 'under_review'
-  | 'completed'
-  | 'suspended';
+  | 'in_progress'
+  | 'deserted'
+  | 'adjudicated_to_creditor'
+  | 'adjudicated_to_bidder'
+  | 'suspended'
+  | 'annulled';
+
+// Backwards-compatible alias for existing code
+export type AuctionStatus = AuctionSaleStatus;
+
+export interface AuctionLifecycleLog {
+  id: string;
+  auction_id: string;
+  previous_stage?: AuctionCallStage | null;
+  new_stage: AuctionCallStage;
+  previous_status?: AuctionSaleStatus | null;
+  new_status: AuctionSaleStatus;
+  call_number?: number | null;
+  reason: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
 
 export interface Auction {
   id: string;
@@ -64,6 +88,15 @@ export interface Auction {
   base_price_call_3: number | null;
   auction_date_call_3: string | null;
   
+  // Automated Call Progression & Lifecycle Tracking (Single Source of Truth)
+  call_stage?: AuctionCallStage;
+  sale_status?: AuctionSaleStatus;
+  current_call_number?: 1 | 2 | 3 | null;
+  current_base_price?: number;
+  current_auction_date?: string | null;
+  current_discount_pct?: number;
+  last_status_sync_at?: string;
+
   // Market Valuations & Margins
   estimated_market_value: number | null;
   estimated_margin_pct: number | null;

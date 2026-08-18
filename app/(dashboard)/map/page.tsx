@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, detectPropertyCharacteristics, getLocalizedPropertyTitle } from '@/lib/utils';
+import { formatCurrency, formatArea, detectPropertyCharacteristics, getLocalizedPropertyTitle, getLiveAuctionProgressionState } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -18,7 +18,7 @@ import {
   Maximize2, 
   Scale, 
   TrendingUp, 
-  Compass,
+  Compass, 
   AlertTriangle,
 } from 'lucide-react';
 
@@ -33,7 +33,13 @@ export default function MapExplorerPage() {
     fetchAuctions().then((data) => {
       if (data && data.length > 0) {
         setAuctions(data);
-        setSelectedAuction(data[0]);
+        const active = data.filter((a) => {
+          const live = getLiveAuctionProgressionState(a);
+          return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+        });
+        if (active.length > 0) {
+          setSelectedAuction(active[0]);
+        }
       }
     });
 
@@ -42,13 +48,23 @@ export default function MapExplorerPage() {
       .then((res) => {
         if (res && Array.isArray(res.data) && res.data.length > 0) {
           setAuctions(res.data);
-          setSelectedAuction(res.data[0]);
+          const active = res.data.filter((a: Auction) => {
+            const live = getLiveAuctionProgressionState(a);
+            return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+          });
+          if (active.length > 0) {
+            setSelectedAuction(active[0]);
+          }
         }
       })
       .catch(() => {});
   }, []);
 
   const filteredAuctions = auctions.filter((auction) => {
+    const liveState = getLiveAuctionProgressionState(auction);
+    if (liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted') {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match =

@@ -16,6 +16,7 @@ import {
   calculateInvestorMetrics,
   detectPropertyCharacteristics,
   getLocalizedPropertyTitle,
+  getLiveAuctionProgressionState,
 } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { fetchAuctionById } from '@/lib/supabase/db';
@@ -50,7 +51,7 @@ interface AuctionDetailPageProps {
 
 export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const { t, language } = useLanguage();
-  const [selectedCall, setSelectedCall] = useState<1 | 2 | 3>(1);
+  const [selectedCall, setSelectedCall] = useState<1 | 2 | 3 | null>(null);
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -63,7 +64,15 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       setLoading(true);
       try {
         const data = await fetchAuctionById(params.id);
-        setAuction(data);
+        if (data) {
+          setAuction(data);
+          const live = getLiveAuctionProgressionState(data);
+          if (live.currentCallNumber) {
+            setSelectedCall(live.currentCallNumber);
+          } else {
+            setSelectedCall(null);
+          }
+        }
       } catch (err) {
         console.error('Error fetching auction dossier:', err);
       } finally {

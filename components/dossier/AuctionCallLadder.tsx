@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatDateCR, getDaysUntilAuction } from '@/lib/utils';
+import { formatCurrency, formatDateCR, getDaysUntilAuction, getLiveAuctionProgressionState } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
@@ -11,11 +11,12 @@ import {
   DollarSign,
   ShieldAlert,
   Gavel,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface AuctionCallLadderProps {
   auction: Auction;
-  selectedCall: 1 | 2 | 3;
+  selectedCall: (1 | 2 | 3) | null;
   onSelectCall: (call: 1 | 2 | 3) => void;
   onOpenParticipate?: () => void;
 }
@@ -27,6 +28,9 @@ export function AuctionCallLadder({
   onOpenParticipate,
 }: AuctionCallLadderProps) {
   const { t, language } = useLanguage();
+  const liveState = getLiveAuctionProgressionState(auction);
+  const isPassedCall3 = liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted';
+
   const countdown1 = getDaysUntilAuction(auction.auction_date_call_1, language);
   const countdown2 = auction.auction_date_call_2
     ? getDaysUntilAuction(auction.auction_date_call_2, language)
@@ -37,21 +41,64 @@ export function AuctionCallLadder({
 
   // Under Costa Rican CPC (Art. 159), participation deposit is 50% of the base price
   const depositCall1 = auction.base_price_call_1 * 0.5;
-  const depositCall2 = auction.base_price_call_2 ? auction.base_price_call_2 * 0.5 : null;
-  const depositCall3 = auction.base_price_call_3 ? auction.base_price_call_3 * 0.5 : null;
+  const depositCall2 = auction.base_price_call_2 
+    ? auction.base_price_call_2 * 0.5 
+    : Math.round(auction.base_price_call_1 * 0.75 * 0.5);
+  const depositCall3 = auction.base_price_call_3 
+    ? auction.base_price_call_3 * 0.5 
+    : Math.round(auction.base_price_call_1 * 0.25 * 0.5);
 
-  // Determine which call is currently active/upcoming
-  let activeCallNumber: 1 | 2 | 3 = 1;
-  if (countdown1.isPast) {
-    if (countdown2 && !countdown2.isPast) {
-      activeCallNumber = 2;
-    } else if (countdown3 && !countdown3.isPast) {
-      activeCallNumber = 3;
-    }
-  }
+  const activeCallNumber = liveState.currentCallNumber;
 
   return (
     <div className="space-y-4">
+      {/* Live Lifecycle State Alerts */}
+      {liveState.saleStatus === 'in_progress' || countdown1.isHearing || (countdown2 && countdown2.isHearing) || (countdown3 && countdown3.isHearing) ? (
+        <div className="p-3.5 rounded-xl bg-rose-950/90 border border-rose-500/80 text-rose-200 flex items-center justify-between gap-3 shadow-lg shadow-rose-950/50 animate-pulse">
+          <div className="flex items-center gap-2.5">
+            <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+            <span className="text-sm font-extrabold tracking-wide uppercase">
+              {language === 'es' ? '🔴 Audiencia Judicial en Vivo' : '🔴 Judicial Hearing In Progress'}
+            </span>
+          </div>
+          <span className="text-xs text-rose-300 font-medium hidden sm:inline">
+            {language === 'es'
+              ? 'Se está llevando a cabo la diligencia de remate en estrados judiciales.'
+              : 'The foreclosure hearing is currently taking place at the courthouse.'}
+          </span>
+        </div>
+      ) : isPassedCall3 ? (
+        <div className="p-4 rounded-xl bg-amber-950/80 border border-amber-500/50 text-amber-200 flex items-start gap-3 shadow-lg">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-extrabold text-amber-300 text-sm">
+              {language === 'es'
+                ? '3° Remate Vencido • Todos los Señalamientos Concluidos (Desierto)'
+                : '3rd Call Expired • All Statutory Calls Concluded (Deserted)'}
+            </p>
+            <p className="text-slate-300">
+              {language === 'es'
+                ? 'Los 3 señalamientos de subasta judicial han concluido sin postores adjudicatarios. El expediente entra en fase de liquidación / adjudicación a favor del acreedor ejecutante (Art. 161 Código Procesal Civil).'
+                : 'All 3 foreclosure auction calls have concluded without qualifying bids. The docket enters the creditor adjudication phase under Art. 161 of the Costa Rican Civil Procedure Code.'}
+            </p>
+          </div>
+        </div>
+      ) : liveState.saleStatus === 'suspended' ? (
+        <div className="p-3.5 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+          <div className="text-xs">
+            <p className="font-extrabold text-red-300">
+              {language === 'es' ? 'Remate Suspendido Judicialmente' : 'Judicially Suspended Auction'}
+            </p>
+            <p className="text-slate-400 mt-0.5">
+              {language === 'es'
+                ? 'La subasta fue suspendida por resolución judicial o arreglo de pago (Art. 160 Código Procesal Civil).'
+                : 'The auction was suspended by court resolution or payment settlement (Art. 160 CPC).'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-emerald-400" />
@@ -60,24 +107,33 @@ export function AuctionCallLadder({
               {t.dossier.auctionCallSchedule}
             </h2>
             <p className="text-xs text-slate-400 font-medium">
-              {t.dossier.auctionCallScheduleDesc}
+              {isPassedCall3
+                ? (language === 'es' ? 'Historial de los 3 señalamientos celebrados' : 'Historical record of the 3 statutory auction calls')
+                : t.dossier.auctionCallScheduleDesc}
             </p>
           </div>
         </div>
 
         {onOpenParticipate && (
-          <button
-            type="button"
-            onClick={onOpenParticipate}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/60 ring-1 ring-emerald-400/30 self-start sm:self-auto"
-          >
-            <Gavel className="w-3.5 h-3.5" />
-            <span>
-              {language === 'es'
-                ? `Participar en ${selectedCall}° Remate`
-                : `Participate in Call ${selectedCall}`}
-            </span>
-          </button>
+          isPassedCall3 ? (
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-semibold self-start sm:self-auto">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              <span>{language === 'es' ? 'Subastas Concluidas (Sin Postores)' : 'Auction Calls Concluded'}</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenParticipate}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/60 ring-1 ring-emerald-400/30 self-start sm:self-auto"
+            >
+              <Gavel className="w-3.5 h-3.5" />
+              <span>
+                {selectedCall
+                  ? (language === 'es' ? `Participar en ${selectedCall}° Remate` : `Participate in Call ${selectedCall}`)
+                  : (language === 'es' ? 'Participar en este Remate' : 'Participate in this Auction')}
+              </span>
+            </button>
+          )
         )}
       </div>
 
@@ -87,14 +143,18 @@ export function AuctionCallLadder({
         <div
           onClick={() => onSelectCall(1)}
           className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-            selectedCall === 1
+            selectedCall === 1 && !isPassedCall3
               ? 'bg-slate-900 border-emerald-500 ring-2 ring-emerald-500/30 shadow-xl shadow-emerald-950/40'
+              : selectedCall === 1 && isPassedCall3
+              ? 'bg-slate-900/90 border-slate-700 ring-1 ring-slate-600'
               : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90'
           }`}
         >
           {activeCallNumber === 1 && (
             <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-              {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
+              {countdown1.isHearing
+                ? (language === 'es' ? 'En Audiencia Judicial' : 'In Hearing')
+                : (language === 'es' ? 'Señalamiento Actual' : 'Active Call')}
             </div>
           )}
 
@@ -106,8 +166,12 @@ export function AuctionCallLadder({
                   100% Base
                 </span>
               </span>
-              <Badge variant={countdown1.isPast ? 'default' : 'success'} size="sm">
-                {countdown1.label}
+              <Badge variant={countdown1.isHearing ? 'danger' : countdown1.isPast ? 'default' : 'success'} size="sm">
+                {countdown1.isHearing 
+                  ? (language === 'es' ? 'En Audiencia' : 'In Hearing') 
+                  : countdown1.isPast 
+                  ? (language === 'es' ? 'Desierto' : 'Deserted') 
+                  : countdown1.label}
               </Badge>
             </div>
 
@@ -140,14 +204,18 @@ export function AuctionCallLadder({
           <div
             onClick={() => onSelectCall(2)}
             className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-              selectedCall === 2
+              selectedCall === 2 && !isPassedCall3
                 ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/30 shadow-xl shadow-amber-950/40'
+                : selectedCall === 2 && isPassedCall3
+                ? 'bg-slate-900/90 border-slate-700 ring-1 ring-slate-600'
                 : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90'
             }`}
           >
             {activeCallNumber === 2 && (
               <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-                {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
+                {countdown2?.isHearing
+                  ? (language === 'es' ? 'En Audiencia Judicial' : 'In Hearing')
+                  : (language === 'es' ? 'Señalamiento Actual' : 'Active Call')}
               </div>
             )}
 
@@ -160,8 +228,12 @@ export function AuctionCallLadder({
                   </span>
                 </span>
                 {countdown2 && (
-                  <Badge variant={countdown2.isPast ? 'default' : 'warning'} size="sm">
-                    {countdown2.label}
+                  <Badge variant={countdown2.isHearing ? 'danger' : countdown2.isPast ? 'default' : 'warning'} size="sm">
+                    {countdown2.isHearing
+                      ? (language === 'es' ? 'En Audiencia' : 'In Hearing')
+                      : countdown2.isPast
+                      ? (language === 'es' ? 'Desierto' : 'Deserted')
+                      : countdown2.label}
                   </Badge>
                 )}
               </div>
@@ -203,14 +275,18 @@ export function AuctionCallLadder({
           <div
             onClick={() => onSelectCall(3)}
             className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
-              selectedCall === 3
+              selectedCall === 3 && !isPassedCall3
                 ? 'bg-slate-900 border-rose-500 ring-2 ring-rose-500/30 shadow-xl shadow-rose-950/40'
+                : selectedCall === 3 && isPassedCall3
+                ? 'bg-slate-900/90 border-slate-700 ring-1 ring-slate-600'
                 : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90'
             }`}
           >
             {activeCallNumber === 3 && (
               <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-rose-500 text-white font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
-                {language === 'es' ? 'Señalamiento Actual' : 'Active Call'}
+                {countdown3?.isHearing
+                  ? (language === 'es' ? 'En Audiencia Judicial' : 'In Hearing')
+                  : (language === 'es' ? 'Señalamiento Actual' : 'Active Call')}
               </div>
             )}
 
@@ -223,8 +299,12 @@ export function AuctionCallLadder({
                   </span>
                 </span>
                 {countdown3 && (
-                  <Badge variant={countdown3.isPast ? 'default' : 'danger'} size="sm">
-                    {countdown3.label}
+                  <Badge variant={countdown3.isHearing ? 'danger' : countdown3.isPast ? 'default' : 'danger'} size="sm">
+                    {countdown3.isHearing
+                      ? (language === 'es' ? 'En Audiencia' : 'In Hearing')
+                      : countdown3.isPast
+                      ? (language === 'es' ? 'Desierto' : 'Deserted')
+                      : countdown3.label}
                   </Badge>
                 )}
               </div>

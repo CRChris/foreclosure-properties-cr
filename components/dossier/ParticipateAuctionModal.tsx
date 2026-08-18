@@ -32,7 +32,7 @@ import {
 
 interface ParticipateAuctionModalProps {
   auction: Auction;
-  selectedCall?: 1 | 2 | 3;
+  selectedCall?: (1 | 2 | 3) | null;
   isOpen: boolean;
   onClose: () => void;
 }

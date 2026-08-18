@@ -1,9 +1,149 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Auction, Currency, InvestorMetrics, CostaRicaClosingCosts, PropertyType, MortgagePriority } from './types/auction';
+import { 
+  Auction, 
+  Currency, 
+  InvestorMetrics, 
+  CostaRicaClosingCosts, 
+  PropertyType, 
+  MortgagePriority,
+  AuctionCallStage,
+  AuctionSaleStatus,
+} from './types/auction';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * Lightweight client helper strictly as a fallback UI resolver for zero-latency display.
+ * Pinned to Costa Rica Timezone (UTC-6) with 60-minute judicial hearing window.
+ * Terminal states (suspended, awarded, annulled) are strictly respected.
+ */
+export function getLiveAuctionProgressionState(
+  auction: Auction,
+  customNow?: Date
+): {
+  callStage: AuctionCallStage;
+  saleStatus: AuctionSaleStatus;
+  currentCallNumber: 1 | 2 | 3 | null;
+  currentBasePrice: number;
+  currentAuctionDate: string | null;
+  currentDiscountPct: number;
+  isHearing: boolean;
+} {
+  // If database already locked terminal state, preserve it
+  if (
+    auction.sale_status &&
+    ['suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled'].includes(auction.sale_status)
+  ) {
+    return {
+      callStage: auction.call_stage || 'suspended',
+      saleStatus: auction.sale_status,
+      currentCallNumber: auction.current_call_number ?? null,
+      currentBasePrice: auction.current_base_price || auction.base_price_call_1,
+      currentAuctionDate: auction.current_auction_date || auction.auction_date_call_1,
+      currentDiscountPct: auction.current_discount_pct || 0,
+      isHearing: false,
+    };
+  }
+
+  const nowMs = customNow ? customNow.getTime() : Date.now();
+  const d1Ms = new Date(auction.auction_date_call_1).getTime();
+  const d2Ms = auction.auction_date_call_2 ? new Date(auction.auction_date_call_2).getTime() : null;
+  const d3Ms = auction.auction_date_call_3 ? new Date(auction.auction_date_call_3).getTime() : null;
+
+  const SIXTY_MINS_MS = 60 * 60 * 1000;
+  const d1EndMs = d1Ms + SIXTY_MINS_MS;
+  const d2EndMs = d2Ms ? d2Ms + SIXTY_MINS_MS : null;
+  const d3EndMs = d3Ms ? d3Ms + SIXTY_MINS_MS : null;
+
+  const p1 = auction.base_price_call_1;
+  const p2 = auction.base_price_call_2 || Math.round(p1 * 0.75);
+  const p3 = auction.base_price_call_3 || Math.round(p1 * 0.25);
+
+  if (nowMs < d1Ms) {
+    return {
+      callStage: 'call_1',
+      saleStatus: 'upcoming',
+      currentCallNumber: 1,
+      currentBasePrice: p1,
+      currentAuctionDate: auction.auction_date_call_1,
+      currentDiscountPct: 0,
+      isHearing: false,
+    };
+  }
+
+  if (nowMs >= d1Ms && nowMs <= d1EndMs) {
+    return {
+      callStage: 'call_1',
+      saleStatus: 'in_progress',
+      currentCallNumber: 1,
+      currentBasePrice: p1,
+      currentAuctionDate: auction.auction_date_call_1,
+      currentDiscountPct: 0,
+      isHearing: true,
+    };
+  }
+
+  if (d2Ms && nowMs > d1EndMs && nowMs < d2Ms) {
+    return {
+      callStage: 'call_2',
+      saleStatus: 'upcoming',
+      currentCallNumber: 2,
+      currentBasePrice: p2,
+      currentAuctionDate: auction.auction_date_call_2,
+      currentDiscountPct: 25,
+      isHearing: false,
+    };
+  }
+
+  if (d2Ms && d2EndMs && nowMs >= d2Ms && nowMs <= d2EndMs) {
+    return {
+      callStage: 'call_2',
+      saleStatus: 'in_progress',
+      currentCallNumber: 2,
+      currentBasePrice: p2,
+      currentAuctionDate: auction.auction_date_call_2,
+      currentDiscountPct: 25,
+      isHearing: true,
+    };
+  }
+
+  if (d3Ms && (!d2EndMs || nowMs > d2EndMs) && nowMs < d3Ms) {
+    return {
+      callStage: 'call_3',
+      saleStatus: 'upcoming',
+      currentCallNumber: 3,
+      currentBasePrice: p3,
+      currentAuctionDate: auction.auction_date_call_3,
+      currentDiscountPct: 75,
+      isHearing: false,
+    };
+  }
+
+  if (d3Ms && d3EndMs && nowMs >= d3Ms && nowMs <= d3EndMs) {
+    return {
+      callStage: 'call_3',
+      saleStatus: 'in_progress',
+      currentCallNumber: 3,
+      currentBasePrice: p3,
+      currentAuctionDate: auction.auction_date_call_3,
+      currentDiscountPct: 75,
+      isHearing: true,
+    };
+  }
+
+  // All 3 calls elapsed
+  return {
+    callStage: 'passed_call_3',
+    saleStatus: 'deserted',
+    currentCallNumber: null,
+    currentBasePrice: p3,
+    currentAuctionDate: auction.auction_date_call_3 || auction.auction_date_call_2 || auction.auction_date_call_1,
+    currentDiscountPct: 75,
+    isHearing: false,
+  };
 }
 
 /**
@@ -61,12 +201,15 @@ export function calculateClosingCosts(basePrice: number): CostaRicaClosingCosts 
 /**
  * Calculate Investor Metrics for a given call stage
  */
-export function calculateInvestorMetrics(auction: Auction, callNumber: 1 | 2 | 3 = 1): InvestorMetrics {
+export function calculateInvestorMetrics(auction: Auction, callNumber?: 1 | 2 | 3): InvestorMetrics {
+  const live = getLiveAuctionProgressionState(auction);
+  const targetCall = callNumber || live.currentCallNumber || 1;
+
   let currentBasePrice = auction.base_price_call_1;
-  if (callNumber === 2 && auction.base_price_call_2) {
-    currentBasePrice = auction.base_price_call_2;
-  } else if (callNumber === 3 && auction.base_price_call_3) {
-    currentBasePrice = auction.base_price_call_3;
+  if (targetCall === 2) {
+    currentBasePrice = auction.base_price_call_2 || Math.round(auction.base_price_call_1 * 0.75);
+  } else if (targetCall === 3) {
+    currentBasePrice = auction.base_price_call_3 || Math.round(auction.base_price_call_1 * 0.25);
   }
 
   const estimatedMarketValue = auction.estimated_market_value || currentBasePrice * 1.35;
@@ -121,40 +264,55 @@ export function formatDateCR(dateString: string, lang: string = 'es'): string {
 }
 
 /**
- * Get remaining days until auction with bilingual labels
+ * Get remaining days until auction with bilingual labels and 60-min hearing window detection
  */
-export function getDaysUntilAuction(dateString: string, lang: string = 'es'): { days: number; isPast: boolean; label: string } {
+export function getDaysUntilAuction(
+  dateString: string, 
+  lang: string = 'es'
+): { days: number; isPast: boolean; isHearing: boolean; label: string } {
   try {
     const target = new Date(dateString).getTime();
-    const now = new Date().getTime();
+    const now = Date.now();
+    const SIXTY_MINS_MS = 60 * 60 * 1000;
+
+    // Check if within the 60-minute active hearing window
+    if (now >= target && now <= target + SIXTY_MINS_MS) {
+      return {
+        days: 0,
+        isPast: false,
+        isHearing: true,
+        label: lang === 'en' ? 'In Judicial Hearing' : 'En Audiencia Judicial',
+      };
+    }
+
     const diffMs = target - now;
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
     if (lang === 'en') {
-      if (diffDays < 0) {
-        return { days: Math.abs(diffDays), isPast: true, label: `Ended ${Math.abs(diffDays)}d ago` };
+      if (diffMs < 0) {
+        return { days: Math.abs(diffDays), isPast: true, isHearing: false, label: `Ended ${Math.abs(diffDays)}d ago` };
       }
       if (diffDays === 0) {
-        return { days: 0, isPast: false, label: 'Today!' };
+        return { days: 0, isPast: false, isHearing: false, label: 'Today!' };
       }
       if (diffDays === 1) {
-        return { days: 1, isPast: false, label: 'Tomorrow' };
+        return { days: 1, isPast: false, isHearing: false, label: 'Tomorrow' };
       }
-      return { days: diffDays, isPast: false, label: `In ${diffDays} days` };
+      return { days: diffDays, isPast: false, isHearing: false, label: `In ${diffDays} days` };
     }
 
-    if (diffDays < 0) {
-      return { days: Math.abs(diffDays), isPast: true, label: `Finalizó hace ${Math.abs(diffDays)}d` };
+    if (diffMs < 0) {
+      return { days: Math.abs(diffDays), isPast: true, isHearing: false, label: `Finalizó hace ${Math.abs(diffDays)}d` };
     }
     if (diffDays === 0) {
-      return { days: 0, isPast: false, label: '¡Hoy mismo!' };
+      return { days: 0, isPast: false, isHearing: false, label: '¡Hoy mismo!' };
     }
     if (diffDays === 1) {
-      return { days: 1, isPast: false, label: 'Mañana' };
+      return { days: 1, isPast: false, isHearing: false, label: 'Mañana' };
     }
-    return { days: diffDays, isPast: false, label: `En ${diffDays} días` };
+    return { days: diffDays, isPast: false, isHearing: false, label: `En ${diffDays} días` };
   } catch {
-    return { days: 0, isPast: false, label: lang === 'en' ? 'Date pending' : 'Fecha pendiente' };
+    return { days: 0, isPast: false, isHearing: false, label: lang === 'en' ? 'Date pending' : 'Fecha pendiente' };
   }
 }
 

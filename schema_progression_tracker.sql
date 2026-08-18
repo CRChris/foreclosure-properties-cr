@@ -1,90 +1,22 @@
 -- ==============================================================================
--- REMATES JUDICIALES COSTA RICA - SUPABASE POSTGRESQL + POSTGIS DATABASE SCHEMA
+-- REMATES JUDICIALES COSTA RICA - AUTOMATED AUCTION PROGRESSION & TRACKER ENGINE
 -- ==============================================================================
--- Description: Production-grade schema for tracking Costa Rican judicial foreclosure auctions
--- Includes PostGIS geometry support, spatial indexing, automated timestamp triggers,
--- and bounding box RPC functions for zero-cost map querying.
+-- Single Source of Truth for Auction Call Progression & Lifecycle Tracking
+-- Strictly pinned to Costa Rica Timezone ('America/Costa_Rica' / UTC-6)
+-- Enforces Terminal State Locks (Suspended, Awarded, Annulled, Settled)
 -- ==============================================================================
 
--- 1. Enable Required PostGIS Extension
-CREATE EXTENSION IF NOT EXISTS "postgis";
+-- 1. Add Lifecycle & Current Call Tracking Columns to public.auctions
+ALTER TABLE public.auctions
+    ADD COLUMN IF NOT EXISTS call_stage VARCHAR(32) DEFAULT 'call_1',
+    ADD COLUMN IF NOT EXISTS sale_status VARCHAR(32) DEFAULT 'upcoming',
+    ADD COLUMN IF NOT EXISTS current_call_number INTEGER DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS current_base_price NUMERIC(15, 2),
+    ADD COLUMN IF NOT EXISTS current_auction_date TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS current_discount_pct NUMERIC(5, 2) DEFAULT 0.00,
+    ADD COLUMN IF NOT EXISTS last_status_sync_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'America/Costa_Rica');
 
--- 2. Create Auctions Table
-CREATE TABLE IF NOT EXISTS public.auctions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    
-    -- Judicial & Registry Identification
-    expediente_number VARCHAR(64) NOT NULL,            -- e.g. '24-000123-1158-CJ'
-    court_name TEXT NOT NULL,                          -- e.g. 'Juzgado Especializado de Cobro de San José'
-    folio_real VARCHAR(32) NOT NULL,                   -- e.g. '6-189342-000' (Province-Number-Sublot)
-    plano_catastrado VARCHAR(64),                      -- e.g. 'P-1928374-2022'
-    
-    -- Geographic Information (Costa Rican Political Division)
-    province VARCHAR(32) NOT NULL,                     -- San José, Alajuela, Cartago, Heredia, Guanacaste, Puntarenas, Limón
-    canton VARCHAR(64) NOT NULL,                       -- e.g. 'Garabito', 'Escazú', 'San Carlos'
-    district VARCHAR(64) NOT NULL,                     -- e.g. 'Jacó', 'San Antonio', 'Quesada'
-    address_description TEXT,                          -- Specific physical directions/references
-    
-    -- Cadastral Metrics
-    area_m2 NUMERIC(12, 2) NOT NULL CHECK (area_m2 > 0),
-    
-    -- Currency & 3-Call Judicial Auction Schedule
-    -- Costa Rican Judicial Code model:
-    -- 1st Call (Primer Remate): 100% Base Price
-    -- 2nd Call (Segundo Remate): 75% of Base Price (-25%)
-    -- 3rd Call (Tercer Remate): 25% of Base Price / Statutory base
-    currency VARCHAR(3) NOT NULL CHECK (currency IN ('USD', 'CRC')),
-    
-    base_price_call_1 NUMERIC(15, 2) NOT NULL CHECK (base_price_call_1 > 0),
-    auction_date_call_1 TIMESTAMPTZ NOT NULL,
-    
-    base_price_call_2 NUMERIC(15, 2),
-    auction_date_call_2 TIMESTAMPTZ,
-    
-    base_price_call_3 NUMERIC(15, 2),
-    auction_date_call_3 TIMESTAMPTZ,
-    
-    -- Valuation & Investor Yield Estimation
-    estimated_market_value NUMERIC(15, 2),
-    estimated_margin_pct NUMERIC(6, 2) GENERATED ALWAYS AS (
-        CASE 
-            WHEN estimated_market_value IS NOT NULL 
-                 AND estimated_market_value > 0 
-                 AND base_price_call_1 > 0 
-            THEN ROUND(((estimated_market_value - base_price_call_1) / estimated_market_value) * 100, 2)
-            ELSE NULL 
-        END
-    ) STORED,
-    
-    -- Legal Parties & Content Extraction
-    plaintiff TEXT NOT NULL,                           -- Bank/Financial institution (e.g. 'Banco Nacional de Costa Rica')
-    defendant TEXT,                                    -- Debtor / Executed party
-    legal_summary TEXT,                                -- AI-generated executive summary of the edict
-    raw_edict_text TEXT NOT NULL,                      -- Full raw legal publication from Boletín Judicial
-    
-    -- Geospatial Point (WGS 84 / EPSG:4326)
-    location GEOMETRY(Point, 4326),
-    
-    -- Automated Lifecycle Stage & Call Progression (Costa Rica CPC)
-    call_stage VARCHAR(32) DEFAULT 'call_1',           -- 'call_1', 'call_2', 'call_3', 'passed_call_3', 'suspended', 'awarded'
-    sale_status VARCHAR(32) DEFAULT 'upcoming',        -- 'upcoming', 'in_progress', 'deserted', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'suspended', 'annulled'
-    current_call_number INTEGER DEFAULT 1,             -- 1, 2, 3, or NULL
-    current_base_price NUMERIC(15, 2),                 -- Live active base price
-    current_auction_date TIMESTAMPTZ,                  -- Live active auction date
-    current_discount_pct NUMERIC(5, 2) DEFAULT 0.00,   -- 0.00, 25.00, 75.00
-    last_status_sync_at TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'America/Costa_Rica'),
-
-    -- Metadata
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- 3. Indexes for High-Performance Queries
--- Spatial GIST index for lightning-fast bounding box map queries
-CREATE INDEX IF NOT EXISTS idx_auctions_location_gist 
-    ON public.auctions USING GIST (location);
-
--- B-Tree indexes for standard filter & sort dimensions
+-- Create Performance Indexes for Fast Stage/Status Filtering
 CREATE INDEX IF NOT EXISTS idx_auctions_call_stage 
     ON public.auctions (call_stage);
 
@@ -97,134 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_auctions_current_call_number
 CREATE INDEX IF NOT EXISTS idx_auctions_current_auction_date 
     ON public.auctions (current_auction_date ASC);
 
-CREATE INDEX IF NOT EXISTS idx_auctions_province 
-    ON public.auctions (province);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_canton 
-    ON public.auctions (canton);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_auction_date_call_1 
-    ON public.auctions (auction_date_call_1 ASC);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_base_price_call_1 
-    ON public.auctions (base_price_call_1 ASC);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_folio_real 
-    ON public.auctions (folio_real);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_expediente_number 
-    ON public.auctions (expediente_number);
-
-CREATE INDEX IF NOT EXISTS idx_auctions_currency 
-    ON public.auctions (currency);
-
--- 4. Automated Updated At Trigger Function
-CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trigger_auctions_updated_at ON public.auctions;
-CREATE TRIGGER trigger_auctions_updated_at
-    BEFORE UPDATE ON public.auctions
-    FOR EACH ROW
-    EXECUTE FUNCTION public.handle_updated_at();
-
--- 5. Geospatial RPC Function: Query Auctions within Bounding Box
--- Efficiently extracts auctions inside Leaflet/OpenStreetMap viewport
-CREATE OR REPLACE FUNCTION public.get_auctions_in_bounds(
-    min_lng DOUBLE PRECISION,
-    min_lat DOUBLE PRECISION,
-    max_lng DOUBLE PRECISION,
-    max_lat DOUBLE PRECISION,
-    target_currency VARCHAR DEFAULT NULL,
-    max_price NUMERIC DEFAULT NULL
-)
-RETURNS TABLE (
-    id UUID,
-    expediente_number VARCHAR,
-    court_name TEXT,
-    folio_real VARCHAR,
-    plano_catastrado VARCHAR,
-    province VARCHAR,
-    canton VARCHAR,
-    district VARCHAR,
-    area_m2 NUMERIC,
-    currency VARCHAR,
-    base_price_call_1 NUMERIC,
-    auction_date_call_1 TIMESTAMPTZ,
-    base_price_call_2 NUMERIC,
-    auction_date_call_2 TIMESTAMPTZ,
-    base_price_call_3 NUMERIC,
-    auction_date_call_3 TIMESTAMPTZ,
-    estimated_market_value NUMERIC,
-    estimated_margin_pct NUMERIC,
-    plaintiff TEXT,
-    legal_summary TEXT,
-    latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION
-) 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        a.id,
-        a.expediente_number,
-        a.court_name,
-        a.folio_real,
-        a.plano_catastrado,
-        a.province,
-        a.canton,
-        a.district,
-        a.area_m2,
-        a.currency,
-        a.base_price_call_1,
-        a.auction_date_call_1,
-        a.base_price_call_2,
-        a.auction_date_call_2,
-        a.base_price_call_3,
-        a.auction_date_call_3,
-        a.estimated_market_value,
-        a.estimated_margin_pct,
-        a.plaintiff,
-        a.legal_summary,
-        ST_Y(a.location::geometry) AS latitude,
-        ST_X(a.location::geometry) AS longitude
-    FROM public.auctions a
-    WHERE a.location IS NOT NULL
-      AND ST_Within(
-            a.location,
-            ST_MakeEnvelope(min_lng, min_lat, max_lng, max_lat, 4326)
-          )
-      AND (target_currency IS NULL OR a.currency = target_currency)
-      AND (max_price IS NULL OR a.base_price_call_1 <= max_price)
-    ORDER BY a.auction_date_call_1 ASC;
-END;
-$$;
-
--- 6. Supabase Row Level Security (RLS)
-ALTER TABLE public.auctions ENABLE ROW LEVEL SECURITY;
-
--- Allow public read access to all auctions
-CREATE POLICY "Allow public read access on auctions"
-    ON public.auctions
-    FOR SELECT
-    USING (true);
-
--- Allow service role full access for scraper ingestion
-CREATE POLICY "Allow service role full access on auctions"
-    ON public.auctions
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
-
--- 7. Audit Trail Table: public.auction_lifecycle_logs
+-- 2. Create Audit Trail Table: public.auction_lifecycle_logs
 CREATE TABLE IF NOT EXISTS public.auction_lifecycle_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     auction_id UUID NOT NULL REFERENCES public.auctions(id) ON DELETE CASCADE,
@@ -244,13 +49,16 @@ CREATE INDEX IF NOT EXISTS idx_auction_lifecycle_logs_auction_id
 CREATE INDEX IF NOT EXISTS idx_auction_lifecycle_logs_created_at 
     ON public.auction_lifecycle_logs (created_at DESC);
 
+-- Enable RLS on lifecycle logs
 ALTER TABLE public.auction_lifecycle_logs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow public read access on auction_lifecycle_logs" ON public.auction_lifecycle_logs;
 CREATE POLICY "Allow public read access on auction_lifecycle_logs"
     ON public.auction_lifecycle_logs
     FOR SELECT
     USING (true);
 
+DROP POLICY IF EXISTS "Allow service role full access on auction_lifecycle_logs" ON public.auction_lifecycle_logs;
 CREATE POLICY "Allow service role full access on auction_lifecycle_logs"
     ON public.auction_lifecycle_logs
     FOR ALL
@@ -258,7 +66,9 @@ CREATE POLICY "Allow service role full access on auction_lifecycle_logs"
     USING (true)
     WITH CHECK (true);
 
--- 8. Pure Calculation Function: public.compute_auction_progression_state
+-- 3. Pure Calculation Function: public.compute_auction_progression_state
+-- Calculates the current stage, status, call number, base price, and discount
+-- Strictly evaluated in Costa Rica Timezone (UTC-6) with 60-minute hearing window
 CREATE OR REPLACE FUNCTION public.compute_auction_progression_state(
     p_auction_row public.auctions,
     p_current_time TIMESTAMPTZ DEFAULT (NOW() AT TIME ZONE 'America/Costa_Rica')
@@ -292,9 +102,10 @@ DECLARE
     v_date TIMESTAMPTZ;
     v_discount NUMERIC(5, 2);
 BEGIN
+    -- Pin to Costa Rica timezone
     v_cr_now := p_current_time;
 
-    -- Terminal status lock: Never alter locked/suspended/awarded records
+    -- If the auction is locked in a terminal or court-suspended state, DO NOT alter it
     IF p_auction_row.sale_status IN ('suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled') THEN
         RETURN QUERY SELECT 
             COALESCE(p_auction_row.call_stage, 'suspended')::VARCHAR(32),
@@ -306,61 +117,78 @@ BEGIN
         RETURN;
     END IF;
 
+    -- Extract dates and prices
     v_d1 := p_auction_row.auction_date_call_1;
     v_d2 := p_auction_row.auction_date_call_2;
     v_d3 := p_auction_row.auction_date_call_3;
 
     v_p1 := p_auction_row.base_price_call_1;
+    -- Standard Costa Rica CPC statutory rules: Call 2 = 75% of Base 1, Call 3 = 25% of Base 1
     v_p2 := COALESCE(p_auction_row.base_price_call_2, ROUND(v_p1 * 0.75, 2));
     v_p3 := COALESCE(p_auction_row.base_price_call_3, ROUND(v_p1 * 0.25, 2));
 
+    -- Hearing window duration is 60 minutes
     v_d1_end := v_d1 + INTERVAL '60 minutes';
     v_d2_end := CASE WHEN v_d2 IS NOT NULL THEN v_d2 + INTERVAL '60 minutes' ELSE NULL END;
     v_d3_end := CASE WHEN v_d3 IS NOT NULL THEN v_d3 + INTERVAL '60 minutes' ELSE NULL END;
 
+    -- Progression Logic Evaluation
     IF v_cr_now < v_d1 THEN
+        -- Before Call 1: Call 1 Upcoming
         v_stage := 'call_1';
         v_status := 'upcoming';
         v_call_num := 1;
         v_price := v_p1;
         v_date := v_d1;
         v_discount := 0.00;
+
     ELSIF v_cr_now >= v_d1 AND v_cr_now <= v_d1_end THEN
+        -- During Call 1 (60 min judicial hearing window)
         v_stage := 'call_1';
         v_status := 'in_progress';
         v_call_num := 1;
         v_price := v_p1;
         v_date := v_d1;
         v_discount := 0.00;
+
     ELSIF v_d2 IS NOT NULL AND v_cr_now > v_d1_end AND v_cr_now < v_d2 THEN
+        -- Call 1 ended with no bids -> Progressed to Call 2 Upcoming (-25% discount)
         v_stage := 'call_2';
         v_status := 'upcoming';
         v_call_num := 2;
         v_price := v_p2;
         v_date := v_d2;
         v_discount := 25.00;
+
     ELSIF v_d2 IS NOT NULL AND v_cr_now >= v_d2 AND v_cr_now <= v_d2_end THEN
+        -- During Call 2 (60 min judicial hearing window)
         v_stage := 'call_2';
         v_status := 'in_progress';
         v_call_num := 2;
         v_price := v_p2;
         v_date := v_d2;
         v_discount := 25.00;
+
     ELSIF v_d3 IS NOT NULL AND (v_d2 IS NULL OR v_cr_now > v_d2_end) AND v_cr_now < v_d3 THEN
+        -- Call 2 ended with no bids -> Progressed to Call 3 Upcoming (-75% discount)
         v_stage := 'call_3';
         v_status := 'upcoming';
         v_call_num := 3;
         v_price := v_p3;
         v_date := v_d3;
         v_discount := 75.00;
+
     ELSIF v_d3 IS NOT NULL AND v_cr_now >= v_d3 AND v_cr_now <= v_d3_end THEN
+        -- During Call 3 (60 min judicial hearing window)
         v_stage := 'call_3';
         v_status := 'in_progress';
         v_call_num := 3;
         v_price := v_p3;
         v_date := v_d3;
         v_discount := 75.00;
+
     ELSE
+        -- All scheduled calls have expired without postors -> Passed Call 3 / Deserted
         v_stage := 'passed_call_3';
         v_status := 'deserted';
         v_call_num := NULL;
@@ -373,17 +201,19 @@ BEGIN
 END;
 $$;
 
--- 9. Trigger for Auto Progression Sync on public.auctions
+-- 4. Trigger Function for Automatic State Assignment on Insert/Update
 CREATE OR REPLACE FUNCTION public.handle_auction_lifecycle_trigger()
 RETURNS TRIGGER AS $$
 DECLARE
     v_calc RECORD;
 BEGIN
+    -- Terminal status lock: Never overwrite terminal statuses
     IF NEW.sale_status IN ('suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled') THEN
         NEW.last_status_sync_at := (NOW() AT TIME ZONE 'America/Costa_Rica');
         RETURN NEW;
     END IF;
 
+    -- Compute live calculated values
     SELECT * INTO v_calc FROM public.compute_auction_progression_state(NEW);
 
     IF v_calc.out_call_stage IS NOT NULL THEN
@@ -406,7 +236,9 @@ CREATE TRIGGER trigger_auctions_lifecycle_sync
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_auction_lifecycle_trigger();
 
--- 10. Single Source of Truth Batch Stored Procedure: public.sync_auction_lifecycle_statuses
+-- 5. Master Single Source of Truth Batch RPC Function: public.sync_auction_lifecycle_statuses
+-- Triggers batch progression evaluation for all active auctions and logs state changes.
+-- Can be called via Supabase RPC: supabase.rpc('sync_auction_lifecycle_statuses')
 CREATE OR REPLACE FUNCTION public.sync_auction_lifecycle_statuses()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -421,8 +253,10 @@ DECLARE
     v_log_reason TEXT;
     v_transitions JSONB := '[]'::jsonb;
 BEGIN
+    -- Pinned to Costa Rica Time
     v_cr_now := (NOW() AT TIME ZONE 'America/Costa_Rica');
 
+    -- Iterate through non-terminal auctions
     FOR r IN 
         SELECT * FROM public.auctions 
         WHERE sale_status IS NULL OR sale_status NOT IN ('suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled')
@@ -431,11 +265,13 @@ BEGIN
 
         SELECT * INTO v_calc FROM public.compute_auction_progression_state(r, v_cr_now);
 
+        -- Check if stage or status transitioned
         IF (r.call_stage IS DISTINCT FROM v_calc.out_call_stage) OR 
            (r.sale_status IS DISTINCT FROM v_calc.out_sale_status) OR
            (r.current_call_number IS DISTINCT FROM v_calc.out_current_call_number) OR
            (r.current_base_price IS DISTINCT FROM v_calc.out_current_base_price) THEN
 
+            -- Build descriptive reason
             IF v_calc.out_sale_status = 'in_progress' THEN
                 v_log_reason := FORMAT('Audiencia judicial en progreso para el Remate %s (Ventana de 60 min iniciada)', v_calc.out_current_call_number);
             ELSIF v_calc.out_call_stage = 'passed_call_3' THEN
@@ -447,6 +283,7 @@ BEGIN
                 v_log_reason := FORMAT('Actualización de ciclo de remate: %s / %s', v_calc.out_call_stage, v_calc.out_sale_status);
             END IF;
 
+            -- Update the auction row
             UPDATE public.auctions
             SET 
                 call_stage = v_calc.out_call_stage,
@@ -459,6 +296,7 @@ BEGIN
                 updated_at = NOW()
             WHERE id = r.id;
 
+            -- Record entry in audit logs
             INSERT INTO public.auction_lifecycle_logs (
                 auction_id,
                 previous_stage,
@@ -497,6 +335,7 @@ BEGIN
                 'current_base_price', v_calc.out_current_base_price
             );
         ELSE
+            -- Keep timestamp fresh
             UPDATE public.auctions
             SET last_status_sync_at = v_cr_now
             WHERE id = r.id;
@@ -512,3 +351,6 @@ BEGIN
     );
 END;
 $$;
+
+-- 6. Initial Migration Backfill: Run Batch Sync on existing records
+SELECT public.sync_auction_lifecycle_statuses();

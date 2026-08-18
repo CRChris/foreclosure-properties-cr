@@ -31,6 +31,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# OS
+# OS & Build artifacts
 .DS_Store
 *.pem
+*.pdf
+*.tsbuildinfo
