@@ -125,13 +125,13 @@ export function CourtAccessCard({
 
         {/* External Link to Gestion en Linea */}
         <a
-          href="https://gestionenlinea.poder-judicial.go.cr/"
+          href="https://pj.poder-judicial.go.cr/"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-700 hover:border-slate-600 bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold transition-all ml-auto group"
         >
           <FileText className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-          <span>{isEn ? 'Open Gestión en Línea Portal' : 'Abrir Gestión en Línea'}</span>
+          <span>{isEn ? 'Open Poder Judicial Portal' : 'Abrir Gestión en Línea (PJ)'}</span>
           <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400" />
         </a>
       </div>
