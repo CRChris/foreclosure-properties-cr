@@ -121,8 +121,15 @@ export default function AuctionsPage() {
       }
 
       // 6. Call Stage Filter (Comparing live progression stage)
-      if (filters.callStage !== 'all' && liveState.callStage !== filters.callStage) {
-        return false;
+      if (filters.callStage !== 'all') {
+        if (liveState.callStage !== filters.callStage) {
+          return false;
+        }
+      } else {
+        // By default (when callStage is 'all'), strictly exclude properties that have elapsed all 3 calls
+        if (liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted') {
+          return false;
+        }
       }
 
       // 7. Construction Status Filter

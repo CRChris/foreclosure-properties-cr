@@ -327,6 +327,11 @@ export async function fetchAuctions(params?: {
       }
       if (params.callStage && params.callStage !== 'all') {
         results = results.filter((a: Auction) => (a.call_stage || '') === params.callStage);
+      } else if (!params.includePast) {
+        results = results.filter((a: Auction) => {
+          const live = getLiveAuctionProgressionState(a);
+          return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+        });
       }
       if (params.minPrice !== null && params.minPrice !== undefined) {
         results = results.filter((a: Auction) => a.base_price_call_1 >= params.minPrice!);
@@ -369,6 +374,8 @@ export async function fetchAuctions(params?: {
     // Active / Call Stage filter
     if (params?.callStage && params.callStage !== 'all') {
       query = query.eq('call_stage', params.callStage);
+    } else if (!params?.includePast) {
+      query = query.neq('call_stage', 'passed_call_3').neq('sale_status', 'deserted');
     }
 
     // Text Search
@@ -389,7 +396,17 @@ export async function fetchAuctions(params?: {
       return MOCK_AUCTIONS;
     }
 
-    return data.map(mapRowToAuction);
+    const mapped = data.map(mapRowToAuction);
+
+    // If includePast is false (default), dynamically filter out any auctions that have elapsed all 3 calls
+    if (!params?.includePast && (!params?.callStage || params.callStage === 'all')) {
+      return mapped.filter((a) => {
+        const live = getLiveAuctionProgressionState(a);
+        return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
+      });
+    }
+
+    return mapped;
   } catch (err) {
     console.warn('Error fetching from Supabase, using mock dataset:', err);
     return MOCK_AUCTIONS;

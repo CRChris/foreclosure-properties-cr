@@ -42,19 +42,18 @@ export default function HomePage() {
     };
   }, []);
 
-  // Active auctions (Call 1, Call 2, Call 3)
+  // Active auctions only (Call 1, Call 2, Call 3 - strictly excluding expired)
   const activeAuctions = auctions.filter((a) => {
     const live = getLiveAuctionProgressionState(a);
     return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
   });
 
-  const displayAuctions = activeAuctions.length > 0 ? activeAuctions : auctions;
-  const featuredAuctions = displayAuctions.slice(0, 3);
-  const totalAuctions = auctions.length;
+  const featuredAuctions = activeAuctions.slice(0, 3);
+  const totalAuctions = activeAuctions.length;
   
   // Calculate average discount margin across active auctions
   const avgMargin = totalAuctions > 0
-    ? Math.round(displayAuctions.reduce((acc, curr) => acc + (curr.estimated_margin_pct || 0), 0) / displayAuctions.length)
+    ? Math.round(activeAuctions.reduce((acc, curr) => acc + (curr.estimated_margin_pct || 0), 0) / totalAuctions)
     : 0;
 
   return (
