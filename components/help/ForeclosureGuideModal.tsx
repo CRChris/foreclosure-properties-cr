@@ -28,6 +28,10 @@ import {
   Calculator,
   ChevronRight,
   ExternalLink,
+  Sparkles,
+  Award,
+  Zap,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface ForeclosureGuideModalProps {
@@ -35,7 +39,7 @@ interface ForeclosureGuideModalProps {
   onClose: () => void;
 }
 
-type GuideTab = 'process_calls' | 'eligibility' | 'how_to_bid' | 'court_locations' | 'app_guide' | 'faq';
+type GuideTab = 'process_calls' | 'eligibility' | 'how_to_bid' | 'opportunity_ratings' | 'court_locations' | 'app_guide' | 'faq';
 
 export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModalProps) {
   const { language } = useLanguage();
@@ -83,6 +87,11 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
       id: 'how_to_bid',
       label: isEn ? '50% Deposit & Bidding' : 'Postura Legal (50%)',
       icon: DollarSign,
+    },
+    {
+      id: 'opportunity_ratings',
+      label: isEn ? 'Opportunity Alpha & Risk' : 'Calificación de Oportunidad',
+      icon: Sparkles,
     },
     {
       id: 'court_locations',
@@ -423,7 +432,188 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
             </div>
           )}
 
-          {/* TAB 4: COURT LOCATIONS & VENUES */}
+          {/* TAB 4: OPPORTUNITY RATINGS & RISK SCORING */}
+          {activeTab === 'opportunity_ratings' && (
+            <div className="space-y-6 animate-in fade-in-50 duration-200">
+              {/* Header Card */}
+              <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-950/70 via-slate-950 to-teal-950/70 border border-emerald-500/30 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4" />
+                  <span>{isEn ? 'Proprietary Underwriting & Legal Rating Engine' : 'Motor Algorítmico de Rentabilidad y Prelación Jurídica'}</span>
+                </div>
+                <h3 className="text-lg font-black text-white">
+                  {isEn ? 'How Opportunity Alpha & Title Security Ratings Work' : 'Cómo se Calculan las Calificaciones de Oportunidad y Rango'}
+                </h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {isEn
+                    ? 'Our platform applies a multi-dimensional scoring matrix to every foreclosure published in the Official Judicial Bulletin. Deals receive an Opportunity Alpha Grade (AAA to C) for economic yield and a Title Security Tier (Tier 1 to 3) based on Costa Rican Civil Procedure Code (Law 9342).'
+                    : 'Nuestra plataforma aplica una matriz algorítmica multidimensional a cada remate del Boletín Judicial. Cada oportunidad recibe una Calificación Alpha (AAA a C) por rentabilidad y un Nivel de Seguridad Registral (Nivel 1 a 3) conforme al Código Procesal Civil (Ley 9342).'}
+                </p>
+              </div>
+
+              {/* 1. Opportunity Alpha Grading Hierarchy */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-emerald-400" />
+                  <span>{isEn ? '1. Opportunity Alpha Grading Scale (0 – 100 Points)' : '1. Escala de Calificación de Oportunidad (0 – 100 Puntos)'}</span>
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-black text-xs">Grade AAA</span>
+                      <span className="font-mono font-bold text-emerald-400">90 – 100 pts</span>
+                    </div>
+                    <strong className="text-white block font-bold">
+                      {isEn ? 'Exceptional Spread & Liquidity' : 'Oportunidad Extraordinaria'}
+                    </strong>
+                    <p className="text-slate-400 leading-relaxed text-[11.5px]">
+                      {isEn
+                        ? 'Deep statutory discount (2nd/3rd call), projected gross margin >35%, high resale liquidity, and direct municipal road frontage.'
+                        : 'Gran descuento de ley (2° o 3° remate), margen bruto estimado >35%, alta liquidez y frente a calle pública.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-teal-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-teal-500 text-slate-950 font-black text-xs">Grade AA</span>
+                      <span className="font-mono font-bold text-teal-400">80 – 89 pts</span>
+                    </div>
+                    <strong className="text-white block font-bold">
+                      {isEn ? 'High Yield Spread' : 'Excelente Rentabilidad'}
+                    </strong>
+                    <p className="text-slate-400 leading-relaxed text-[11.5px]">
+                      {isEn
+                        ? 'Strong statutory discount and healthy profit spread (28-35%). Prime risk-adjusted return profile.'
+                        : 'Sólido descuento por llamado y margen saludable (28-35%). Excelente perfil de rentabilidad ajustada al riesgo.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-sky-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-sky-500 text-slate-950 font-black text-xs">Grade A</span>
+                      <span className="font-mono font-bold text-sky-400">70 – 79 pts</span>
+                    </div>
+                    <strong className="text-white block font-bold">
+                      {isEn ? 'Solid Investment Margin' : 'Sólido Margen de Inversión'}
+                    </strong>
+                    <p className="text-slate-400 leading-relaxed text-[11.5px]">
+                      {isEn
+                        ? 'Attractive margin (18-27%) with solid underlying registry title characteristics.'
+                        : 'Margen comercial atractivo (18-27%) con buenas características registrales y catastrales.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg bg-amber-500 text-slate-950 font-black text-xs">Grade B</span>
+                      <span className="font-mono font-bold text-amber-400">55 – 69 pts</span>
+                    </div>
+                    <strong className="text-white block font-bold">
+                      {isEn ? 'Moderate Spread' : 'Margen Moderado'}
+                    </strong>
+                    <p className="text-slate-400 leading-relaxed text-[11.5px]">
+                      {isEn
+                        ? 'Moderate spread (10-17%) or standard 1st call base price with standard capital growth.'
+                        : 'Margen moderado (10-17%) o subasta en 1° llamado base con potencial estándar.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Mathematical Point Allocation */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>{isEn ? '2. Scoring Factors (100 Points Total)' : '2. Factores de Puntuación (100 Puntos Totales)'}</span>
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                    <span className="font-bold text-emerald-400 block">{isEn ? 'Call Rebate (50 pts)' : 'Rebaja de Ley (50 pts)'}</span>
+                    <p className="text-slate-400 text-[11px]">
+                      {isEn ? 'Call 1 = 15 · Call 2 = 35 · Call 3 = 50' : '1° = 15 · 2° (-25%) = 35 · 3° (-75%) = 50'}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                    <span className="font-bold text-teal-400 block">{isEn ? 'Valuation Margin (35 pts)' : 'Margen vs. Avalúo (35 pts)'}</span>
+                    <p className="text-slate-400 text-[11px]">
+                      {isEn ? '≥40% = 35 · 28-39% = 28 · 18-27% = 18' : '≥40% = 35 · 28-39% = 28 · 18-27% = 18'}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                    <span className="font-bold text-sky-400 block">{isEn ? 'Liquidity (10 pts)' : 'Liquidez (10 pts)'}</span>
+                    <p className="text-slate-400 text-[11px]">
+                      {isEn ? 'Homes/Condos = 10 · Commercial = 8 · Lots = 7' : 'Casas/Condominios = 10 · Comercial = 8 · Lotes = 7'}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
+                    <span className="font-bold text-emerald-400 block">{isEn ? 'Frontage (5 pts)' : 'Frente a Calle (5 pts)'}</span>
+                    <p className="text-slate-400 text-[11px]">
+                      {isEn ? 'Public Road = 5 · Easement = 2' : 'Calle Pública = 5 · Servidumbre = 2'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Title Security & CPC Article 162 Grounding */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>{isEn ? '3. Title Security Tiers & Statutory Lien Purging (Art. 162 CPC)' : '3. Rangos Registrales y Cancelación de Gravámenes (Art. 162 CPC)'}</span>
+                </h4>
+
+                <div className="space-y-2.5 text-xs">
+                  <div className="p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <strong className="text-emerald-300 font-bold">
+                        {isEn ? 'Tier 1 · First-Rank Senior Secured Mortgage (1° Grado Hipotecario Preferente)' : 'Nivel 1 · Primer Grado Hipotecario Preferente'}
+                      </strong>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">
+                      {isEn
+                        ? 'Senior secured lender executing. Under Article 162 of the Costa Rican Civil Procedure Code, the judicial transfer order automatically mandates the National Registry to cancel and purge all junior mortgages, secondary liens, and subsequent embargos without extra cost.'
+                        : 'Acreedor de primer grado ejecutando. Conforme al Artículo 162 del Código Procesal Civil, la adjudicación en firme ordena la cancelación obligatoria en el Registro Nacional de todos los embargos e hipotecas de grado inferior sin costo para el adjudicatario.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-950/60 border border-amber-500/40 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                      <strong className="text-amber-300 font-bold">
+                        {isEn ? 'Tier 2 · Subordinate Second Mortgage (2° Grado Hipotecario)' : 'Nivel 2 · Segundo Grado Hipotecario Subordinado'}
+                      </strong>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">
+                      {isEn
+                        ? 'Foreclosure executed by a junior creditor. The senior 1st mortgage may survive or require satisfaction; investors must verify the outstanding senior principal in the case docket.'
+                        : 'Ejecución por acreedor de segundo grado. La primera hipoteca preferente puede subsistir o requerir liquidación; se debe verificar el saldo pendiente del primer grado en el expediente.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-rose-950/60 border border-rose-500/40 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <strong className="text-rose-300 font-bold">
+                        {isEn ? 'Tier 3 · Complex Judicial Embargo (Embargo en Ejecución)' : 'Nivel 3 · Embargo Judicial en Ejecución'}
+                      </strong>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">
+                      {isEn
+                        ? 'Execution stemming from unsecured civil or commercial debt litigation. Any prior registered mortgages retain supreme priority over the auction proceeds.'
+                        : 'Ejecución por cobro judicial no hipotecario. Cualquier acreedor hipotecario o derecho previamente inscrito conserva absoluta prioridad registral.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: COURT LOCATIONS & VENUES */}
           {activeTab === 'court_locations' && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs sm:text-sm">

@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Auction } from '@/lib/types/auction';
 import { calculateOpportunityAlpha, calculateTitleSecurityRating, formatCurrency } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
+import { OpportunityRatingModal } from '@/components/help/OpportunityRatingModal';
 import {
   Sparkles,
   ShieldCheck,
@@ -25,6 +26,7 @@ interface OpportunityMatrixCardProps {
 
 export function OpportunityMatrixCard({ auction }: OpportunityMatrixCardProps) {
   const { t, language } = useLanguage();
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const alpha = calculateOpportunityAlpha(auction, language);
   const security = calculateTitleSecurityRating(auction, language);
 
@@ -44,42 +46,52 @@ export function OpportunityMatrixCard({ auction }: OpportunityMatrixCardProps) {
   }[security.tier];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl shadow-black/40 space-y-6 relative overflow-hidden">
-      {/* Background Ambient Glow */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+    <>
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-xl shadow-black/40 space-y-6 relative overflow-hidden">
+        {/* Background Ambient Glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
 
-      {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800 relative z-10">
-        <div>
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-            <Sparkles className="w-4 h-4" />
-            <span>{t.matrix.opportunityAlpha}</span>
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800 relative z-10">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+              <Sparkles className="w-4 h-4" />
+              <span>{t.matrix.opportunityAlpha}</span>
+            </div>
+            <h3 className="text-xl font-extrabold text-white mt-1">
+              {language === 'es' ? 'Matriz de Oportunidad & Seguridad Registral' : 'Opportunity & Title Security Matrix'}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {language === 'es'
+                ? 'Evaluación algorítmica multidimensional de margen comercial, liquidez y prelación hipotecaria (Ley 9342)'
+                : 'Multi-factor evaluation of discount margin, asset liquidity, and statutory mortgage rank (Law 9342)'}
+            </p>
           </div>
-          <h3 className="text-xl font-extrabold text-white mt-1">
-            {language === 'es' ? 'Matriz de Oportunidad & Seguridad Registral' : 'Opportunity & Title Security Matrix'}
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {language === 'es'
-              ? 'Evaluación algorítmica multidimensional de margen comercial, liquidez y prelación hipotecaria (Ley 9342)'
-              : 'Multi-factor evaluation of discount margin, asset liquidity, and statutory mortgage rank (Law 9342)'}
-          </p>
-        </div>
 
-        {/* Big Alpha Badge */}
-        <div className="flex items-center gap-3">
-          <div className={`px-4 py-2.5 rounded-2xl bg-gradient-to-r ${gradeColor} flex items-center gap-2.5 shadow-lg ring-2 font-sans`}>
-            <Award className="w-6 h-6 shrink-0" />
-            <div className="text-left">
-              <span className="text-[10px] font-black uppercase tracking-wider block opacity-80">Grade</span>
-              <span className="text-2xl font-black leading-none block">Alpha {alpha.grade}</span>
-            </div>
-            <div className="border-l border-slate-950/20 pl-2.5 ml-0.5 text-center">
-              <span className="text-[10px] font-black uppercase tracking-wider block opacity-80">Score</span>
-              <span className="text-2xl font-black font-mono leading-none block">{alpha.score}</span>
-            </div>
+          {/* Big Alpha Badge with Click Action */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              title={
+                language === 'es'
+                  ? 'Haz clic para ver el desglose detallado y los criterios de puntuación'
+                  : 'Click to view detailed breakdown & scoring criteria'
+              }
+              className={`px-4 py-2.5 rounded-2xl bg-gradient-to-r ${gradeColor} flex items-center gap-2.5 shadow-lg ring-2 font-sans hover:scale-105 active:scale-95 transition-transform cursor-pointer text-left`}
+            >
+              <Award className="w-6 h-6 shrink-0" />
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider block opacity-80">Grade</span>
+                <span className="text-2xl font-black leading-none block">Alpha {alpha.grade}</span>
+              </div>
+              <div className="border-l border-slate-950/20 pl-2.5 ml-0.5 text-center">
+                <span className="text-[10px] font-black uppercase tracking-wider block opacity-80">Score</span>
+                <span className="text-2xl font-black font-mono leading-none block">{alpha.score}</span>
+              </div>
+            </button>
           </div>
         </div>
-      </div>
 
       {/* Top 2 Columns: Alpha Metrics & Title Security */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
@@ -205,5 +217,13 @@ export function OpportunityMatrixCard({ auction }: OpportunityMatrixCardProps) {
         </span>
       </div>
     </div>
+
+    {/* Explanatory Criteria & Breakdown Pop-up */}
+    <OpportunityRatingModal
+      isOpen={isModalOpen}
+      onClose={() => setIsModalOpen(false)}
+      auction={auction}
+    />
+  </>
   );
 }
