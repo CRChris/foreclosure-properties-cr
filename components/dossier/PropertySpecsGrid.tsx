@@ -4,7 +4,7 @@ import React from 'react';
 import { Auction } from '@/lib/types/auction';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
-import { detectPropertyCharacteristics } from '@/lib/utils';
+import { detectPropertyCharacteristics, localizeRealEstateText } from '@/lib/utils';
 import {
   FileText,
   Compass,
@@ -91,11 +91,12 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
   oeste = oeste || (language === 'en' ? 'Registered parcel boundary' : 'Límite predial según plano catastrado');
 
   // Naturaleza text
-  const naturaleza = auction.naturaleza_raw || auction.address_description || (
-    language === 'en'
-      ? `Real estate registered under Folio Real ${auction.folio_real}, located in ${auction.district}, ${auction.canton}, ${auction.province}.`
-      : `Terreno inscrito bajo matrícula ${auction.folio_real}, ubicado en ${auction.district}, ${auction.canton}, ${auction.province}.`
-  );
+  const rawNaturaleza = auction.naturaleza_raw || auction.address_description;
+  const naturaleza = rawNaturaleza
+    ? localizeRealEstateText(rawNaturaleza, language)
+    : (language === 'en'
+        ? `Real estate registered under Folio Real ${auction.folio_real}, located in ${auction.district}, ${auction.canton}, ${auction.province}.`
+        : `Terreno inscrito bajo matrícula ${auction.folio_real}, ubicado en ${auction.district}, ${auction.canton}, ${auction.province}.`);
 
   // Servidumbres text
   const servidumbres = auction.servidumbres_notes || (
