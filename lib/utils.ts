@@ -173,12 +173,14 @@ export function parseFolioReal(folio: string): { provinceCode: number; fincaNumb
 
 /**
  * Intelligent deterministic inference of property characteristics, construction status,
- * frontage, condominium status, and mortgage priority.
+ * frontage, condominium status, and mortgage priority using all available resources
+ * (registry nature, edict announcement, legal summary, and physical description).
  */
 export function detectPropertyCharacteristics(data: {
   address_description?: string | null;
   legal_summary?: string | null;
   raw_edict_text?: string | null;
+  naturaleza_raw?: string | null;
   property_type?: PropertyType;
   property_category?: string;
   has_construction?: boolean;
@@ -186,25 +188,126 @@ export function detectPropertyCharacteristics(data: {
   is_condominio?: boolean;
   mortgage_priority?: MortgagePriority;
 }) {
-  const text = `${data.address_description || ''} ${data.legal_summary || ''} ${data.raw_edict_text || ''}`.toLowerCase();
+  // Combine all descriptive text sources while avoiding court name noise (e.g. "Juzgado Civil y Agrario")
+  const text = `${data.naturaleza_raw || ''} ${data.address_description || ''} ${data.legal_summary || ''} ${data.raw_edict_text || ''}`.toLowerCase();
 
-  // 1. Property Type
-  let propertyType: PropertyType = data.property_type || 'other';
-  if (!data.property_type || data.property_type === 'other') {
-    if (text.includes('condominio') || text.includes('filial') || text.includes('apartamento') || text.includes('penthouse')) {
-      propertyType = 'condo_apartment';
-    } else if (text.includes('comercial') || text.includes('oficina') || text.includes('bodega') || text.includes('local') || text.includes('industrial') || text.includes('plaza')) {
-      propertyType = 'commercial_industrial';
-    } else if (text.includes('finca') || text.includes('agrícola') || text.includes('agricola') || text.includes('ganadera') || text.includes('repasto') || text.includes('cultivo')) {
-      propertyType = 'agricultural_land';
-    } else if (text.includes('casa') || text.includes('habitación') || text.includes('habitacion') || text.includes('unifamiliar') || text.includes('residencial') || text.includes('villa') || text.includes('quinta') || text.includes('residencia')) {
-      propertyType = 'single_family_home';
-    } else if (text.includes('lote') || text.includes('terreno') || text.includes('solar') || text.includes('para construir') || text.includes('desarrollo')) {
-      propertyType = 'building_lot';
-    }
+  // 1. High-confidence specific signal detectors
+  const isCondoSignal = (
+    text.includes('condominio') ||
+    text.includes('finca filial') ||
+    text.includes('casa filial') ||
+    text.includes('filial número') ||
+    text.includes('filial no') ||
+    text.includes('filial 502') ||
+    text.includes('filial 14') ||
+    text.includes('apartamento') ||
+    text.includes('penthouse') ||
+    text.includes('propiedad horizontal') ||
+    text.includes('ley 7933') ||
+    text.includes('régimen de condominio') ||
+    text.includes('regimen de condominio')
+  );
+
+  const isCommercialSignal = (
+    text.includes('local comercial') ||
+    text.includes('oficinas corporativas') ||
+    text.includes('oficentro') ||
+    text.includes('módulo comercial') ||
+    text.includes('modulo comercial') ||
+    text.includes('bodega') ||
+    text.includes('bodegas') ||
+    text.includes('nave industrial') ||
+    text.includes('galerón industrial') ||
+    text.includes('galeron industrial') ||
+    text.includes('parque industrial') ||
+    text.includes('centro comercial') ||
+    text.includes('plaza comercial')
+  );
+
+  const isResidentialSignal = (
+    text.includes('casa de habitación') ||
+    text.includes('casa de habitacion') ||
+    text.includes('casa habitacion') ||
+    text.includes('casa de campo') ||
+    text.includes('casa contemporánea') ||
+    text.includes('casa contemporanea') ||
+    text.includes('casa unifamiliar') ||
+    text.includes('villa') ||
+    text.includes('chalet') ||
+    text.includes('residencia') ||
+    text.includes('vivienda') ||
+    text.includes('4 dormitorios') ||
+    text.includes('3 dormitorios') ||
+    text.includes('2 dormitorios') ||
+    text.includes('dormitorios en suite') ||
+    text.includes('habitaciones') ||
+    text.includes('piscina privada') ||
+    text.includes('con una casa') ||
+    text.includes('con casa') ||
+    text.includes('con edificación') ||
+    text.includes('con edificacion') ||
+    text.includes('los laureles') ||
+    text.includes('valle del sol') ||
+    text.includes('los reyes') ||
+    text.includes('monterán')
+  );
+
+  const isAgriculturalSignal = (
+    text.includes('agrícola') ||
+    text.includes('agricola') ||
+    text.includes('ganadera') ||
+    text.includes('ganadero') ||
+    text.includes('agropecuaria') ||
+    text.includes('agropecuario') ||
+    text.includes('repastos') ||
+    text.includes('pastos') ||
+    text.includes('cultivo') ||
+    text.includes('cafetal') ||
+    text.includes('cañal') ||
+    text.includes('canal') ||
+    text.includes('palma africana') ||
+    text.includes('forestal') ||
+    text.includes('potrero') ||
+    text.includes('finca lechera') ||
+    text.includes('plantación') ||
+    text.includes('plantacion') ||
+    text.includes('árboles frutales') ||
+    text.includes('arboles frutales')
+  );
+
+  const isLotSignal = (
+    text.includes('lote para construir') ||
+    text.includes('terreno para construir') ||
+    text.includes('lote para desarrollo') ||
+    text.includes('solar') ||
+    text.includes('terreno sin construir') ||
+    text.includes('lote sin edificar') ||
+    text.includes('terreno yermo')
+  );
+
+  // 2. Resolve Property Type using legal precedence
+  let propertyType: PropertyType = 'other';
+
+  if (isCondoSignal) {
+    propertyType = 'condo_apartment';
+  } else if (isCommercialSignal) {
+    propertyType = 'commercial_industrial';
+  } else if (isResidentialSignal) {
+    // If it has a villa/home/bedrooms/pool, it is a Single-Family Home even if registered as finca
+    propertyType = 'single_family_home';
+  } else if (isAgriculturalSignal) {
+    propertyType = 'agricultural_land';
+  } else if (isLotSignal) {
+    propertyType = 'building_lot';
+  } else if (data.property_type && data.property_type !== 'other' && data.property_type !== 'agricultural_land') {
+    propertyType = data.property_type;
+  } else if (text.includes('casa') || text.includes('unifamiliar')) {
+    propertyType = 'single_family_home';
+  } else if (text.includes('terreno') || text.includes('lote')) {
+    propertyType = 'building_lot';
   }
 
-  // 2. Has Construction
+  // 3. Has Construction
   let hasConstruction = data.has_construction;
   if (typeof hasConstruction !== 'boolean') {
     const constructionKeywords = [
@@ -212,7 +315,7 @@ export function detectPropertyCharacteristics(data: {
       'bodega', 'local', 'oficina', 'oficinas', 'filial', 'apartamento', 'penthouse',
       'villa', 'quinta', 'residencia', 'mejoras', 'planta', 'habitaciones', 'baños',
       'banos', 'cochera', 'garaje', 'piscina', 'mampostería', 'mamposteria', 'piso',
-      'techada', 'seguridad', 'acabados'
+      'techada', 'seguridad', 'acabados', 'dormitorios'
     ];
     
     const unbuiltKeywords = [
@@ -232,7 +335,7 @@ export function detectPropertyCharacteristics(data: {
     }
   }
 
-  // 3. Public Road Frontage
+  // 4. Public Road Frontage
   let hasPublicRoad = data.has_public_road_frontage;
   if (typeof hasPublicRoad !== 'boolean') {
     hasPublicRoad = (
@@ -247,19 +350,16 @@ export function detectPropertyCharacteristics(data: {
     );
   }
 
-  // 4. Is Condominio
+  // 5. Is Condominio
   let isCondominio = data.is_condominio;
   if (typeof isCondominio !== 'boolean') {
     isCondominio = (
       propertyType === 'condo_apartment' ||
-      text.includes('condominio') ||
-      text.includes('finca filial') ||
-      text.includes('filial') ||
-      text.includes('7933')
+      isCondoSignal
     );
   }
 
-  // 5. Mortgage Priority
+  // 6. Mortgage Priority
   let mortgagePriority: MortgagePriority = data.mortgage_priority || '1st_mortgage';
   if (!data.mortgage_priority) {
     if (text.includes('segundo grado') || text.includes('segunda hipoteca')) {

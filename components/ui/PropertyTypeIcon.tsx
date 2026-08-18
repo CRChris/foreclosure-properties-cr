@@ -93,25 +93,100 @@ export const PROPERTY_TYPE_CONFIGS: Record<PropertyType, PropertyTypeConfig> = {
 };
 
 /**
- * Determine property type from text if undefined
+ * Determine property type from text using comprehensive real estate signal resolution
  */
 export function inferPropertyType(text: string): PropertyType {
   const s = text.toLowerCase();
-  if (s.includes('condominio') || s.includes('filial') || s.includes('apartamento') || s.includes('penthouse')) {
+  
+  if (
+    s.includes('condominio') ||
+    s.includes('finca filial') ||
+    s.includes('casa filial') ||
+    s.includes('filial número') ||
+    s.includes('filial no') ||
+    s.includes('apartamento') ||
+    s.includes('penthouse') ||
+    s.includes('propiedad horizontal') ||
+    s.includes('ley 7933')
+  ) {
     return 'condo_apartment';
   }
-  if (s.includes('casa') || s.includes('habitación') || s.includes('habitacion') || s.includes('unifamiliar') || s.includes('residencial') || s.includes('quinta') || s.includes('villa')) {
-    return 'single_family_home';
-  }
-  if (s.includes('comercial') || s.includes('oficina') || s.includes('bodega') || s.includes('industrial') || s.includes('local')) {
+
+  if (
+    s.includes('local comercial') ||
+    s.includes('oficinas corporativas') ||
+    s.includes('oficentro') ||
+    s.includes('bodega') ||
+    s.includes('bodegas') ||
+    s.includes('nave industrial') ||
+    s.includes('galerón industrial') ||
+    s.includes('parque industrial') ||
+    s.includes('centro comercial') ||
+    s.includes('plaza comercial')
+  ) {
     return 'commercial_industrial';
   }
-  if (s.includes('finca') || s.includes('agrícola') || s.includes('agricola') || s.includes('repasto') || s.includes('ganadera') || s.includes('cultivo')) {
+
+  if (
+    s.includes('casa') ||
+    s.includes('habitación') ||
+    s.includes('habitacion') ||
+    s.includes('unifamiliar') ||
+    s.includes('residencial') ||
+    s.includes('villa') ||
+    s.includes('chalet') ||
+    s.includes('residencia') ||
+    s.includes('vivienda') ||
+    s.includes('4 dormitorios') ||
+    s.includes('3 dormitorios') ||
+    s.includes('2 dormitorios') ||
+    s.includes('dormitorios') ||
+    s.includes('habitaciones') ||
+    s.includes('piscina privada') ||
+    s.includes('con una casa') ||
+    s.includes('con casa')
+  ) {
+    return 'single_family_home';
+  }
+
+  if (
+    s.includes('agrícola') ||
+    s.includes('agricola') ||
+    s.includes('ganadera') ||
+    s.includes('ganadero') ||
+    s.includes('agropecuaria') ||
+    s.includes('agropecuario') ||
+    s.includes('repastos') ||
+    s.includes('pastos') ||
+    s.includes('cultivo') ||
+    s.includes('cafetal') ||
+    s.includes('cañal') ||
+    s.includes('palma africana') ||
+    s.includes('forestal') ||
+    s.includes('potrero') ||
+    s.includes('finca lechera') ||
+    s.includes('plantación') ||
+    s.includes('plantacion') ||
+    s.includes('árboles frutales') ||
+    s.includes('arboles frutales')
+  ) {
     return 'agricultural_land';
   }
-  if (s.includes('lote') || s.includes('terreno') || s.includes('solar') || s.includes('para construir') || s.includes('desarrollo')) {
+
+  if (
+    s.includes('lote para construir') ||
+    s.includes('terreno para construir') ||
+    s.includes('lote para desarrollo') ||
+    s.includes('solar') ||
+    s.includes('terreno sin construir') ||
+    s.includes('lote sin edificar') ||
+    s.includes('terreno yermo') ||
+    s.includes('lote') ||
+    s.includes('terreno')
+  ) {
     return 'building_lot';
   }
+
   return 'other';
 }
 

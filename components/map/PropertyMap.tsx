@@ -4,11 +4,11 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, getDaysUntilAuction } from '@/lib/utils';
+import { formatCurrency, formatArea, getDaysUntilAuction, detectPropertyCharacteristics } from '@/lib/utils';
 import Link from 'next/link';
 import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { PropertyTypeBadge, inferPropertyType } from '@/components/ui/PropertyTypeIcon';
+import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 
 export interface PropertyMapProps {
   auctions: Auction[];
@@ -153,11 +153,7 @@ export function PropertyMap({
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
           const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
-          const propertyType =
-            auction.property_type ||
-            inferPropertyType(
-              `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''}`
-            );
+          const { propertyType } = detectPropertyCharacteristics(auction);
 
           return (
             <Marker
