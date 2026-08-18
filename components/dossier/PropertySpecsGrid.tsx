@@ -4,7 +4,7 @@ import React from 'react';
 import { Auction } from '@/lib/types/auction';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
-import { detectPropertyCharacteristics, localizeRealEstateText } from '@/lib/utils';
+import { detectPropertyCharacteristics, localizeRealEstateText, formatDateAdded } from '@/lib/utils';
 import {
   FileText,
   Compass,
@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Building,
   TreePine,
+  Clock,
 } from 'lucide-react';
 
 interface PropertySpecsGridProps {
@@ -139,12 +140,12 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
       </div>
 
       {/* Key Status Highlights */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Mortgage Seniority */}
         <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
           <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
             <PriorityIcon className="w-3.5 h-3.5 text-emerald-400" />
-            {language === 'en' ? 'Seniority / Claim Status' : 'Grado de Ejecución'}
+            {language === 'en' ? 'Seniority / Claim' : 'Grado de Ejecución'}
           </span>
           <div className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${priorityConfig.badge}`}>
             {language === 'en' ? priorityConfig.en : priorityConfig.es}
@@ -155,7 +156,7 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
           <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
             <Compass className="w-3.5 h-3.5 text-sky-400" />
-            {language === 'en' ? 'Public Road Access' : 'Acceso a Calle Pública'}
+            {language === 'en' ? 'Road Access' : 'Acceso a Calle'}
           </span>
           <div
             className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${
@@ -168,11 +169,11 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
             <span>
               {hasPublicRoad
                 ? language === 'en'
-                  ? 'Confirmed Public Road Frontage'
-                  : 'Frente a Calle Pública Confirmado'
+                  ? 'Confirmed Frontage'
+                  : 'Frente Confirmado'
                 : language === 'en'
-                ? 'Easement / Private Access'
-                : 'Acceso por Servidumbre / Vía Privada'}
+                ? 'Easement Access'
+                : 'Por Servidumbre'}
             </span>
           </div>
         </div>
@@ -181,7 +182,7 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
           <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
             <Building className="w-3.5 h-3.5 text-amber-400" />
-            {language === 'en' ? 'Construction Status' : 'Estado de Construcción'}
+            {language === 'en' ? 'Construction' : 'Construcción'}
           </span>
           <div
             className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${
@@ -194,17 +195,28 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
               <>
                 <Building className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>
-                  {language === 'en' ? 'With Existing Structures' : 'Con Edificación / Mejoras'}
+                  {language === 'en' ? 'With Structures' : 'Con Edificación'}
                 </span>
               </>
             ) : (
               <>
                 <TreePine className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>
-                  {language === 'en' ? 'Raw Land / Unbuilt Lot' : 'Terreno Sin Construir'}
+                  {language === 'en' ? 'Raw Land' : 'Sin Construir'}
                 </span>
               </>
             )}
+          </div>
+        </div>
+
+        {/* Date Added */}
+        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
+          <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+            {language === 'en' ? 'Date Added' : 'Fecha de Ingreso'}
+          </span>
+          <div className="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 text-slate-200 text-xs font-bold truncate">
+            {formatDateAdded(auction.created_at, language)}
           </div>
         </div>
       </div>

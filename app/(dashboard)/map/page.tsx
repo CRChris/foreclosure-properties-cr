@@ -30,8 +30,9 @@ export default function MapExplorerPage() {
   const [selectedProvince, setSelectedProvince] = useState<CostaRicaProvince | 'all'>('all');
 
   useEffect(() => {
+    let isMounted = true;
     fetchAuctions().then((data) => {
-      if (data && data.length > 0) {
+      if (isMounted && data && data.length > 0) {
         setAuctions(data);
         const active = data.filter((a) => {
           const live = getLiveAuctionProgressionState(a);
@@ -43,21 +44,9 @@ export default function MapExplorerPage() {
       }
     });
 
-    fetch('/api/auctions')
-      .then((r) => r.json())
-      .then((res) => {
-        if (res && Array.isArray(res.data) && res.data.length > 0) {
-          setAuctions(res.data);
-          const active = res.data.filter((a: Auction) => {
-            const live = getLiveAuctionProgressionState(a);
-            return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
-          });
-          if (active.length > 0) {
-            setSelectedAuction(active[0]);
-          }
-        }
-      })
-      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredAuctions = auctions.filter((auction) => {

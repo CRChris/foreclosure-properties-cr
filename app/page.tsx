@@ -30,18 +30,16 @@ export default function HomePage() {
   const [auctions, setAuctions] = useState<Auction[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
     fetchAuctions().then((data) => {
-      if (data) setAuctions(data);
+      if (isMounted && data) {
+        setAuctions(data);
+      }
     });
 
-    fetch('/api/auctions')
-      .then((r) => r.json())
-      .then((res) => {
-        if (res && Array.isArray(res.data)) {
-          setAuctions(res.data);
-        }
-      })
-      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Filter for active, upcoming auctions (exclude passed_call_3 / deserted)

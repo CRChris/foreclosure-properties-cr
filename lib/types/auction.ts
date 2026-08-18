@@ -65,6 +65,22 @@ export interface AuctionLifecycleLog {
   created_at: string;
 }
 
+export type IngestionLogStatus = 'success' | 'no_new_properties' | 'warning' | 'error';
+
+export interface IngestionLog {
+  id: string;
+  run_date: string;
+  source: string;
+  status: IngestionLogStatus;
+  total_edicts_found: number;
+  properties_added: number;
+  properties_skipped: number;
+  expedientes_added?: string[];
+  error_message?: string | null;
+  duration_seconds: number;
+  created_at: string;
+}
+
 export interface Auction {
   id: string;
   expediente_number: string;

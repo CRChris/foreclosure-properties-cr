@@ -10,6 +10,7 @@ import {
   calculateInvestorMetrics, 
   detectPropertyCharacteristics,
   getLiveAuctionProgressionState,
+  isPropertyNewToday,
 } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBanner } from '@/components/ui/PropertyTypeIcon';
@@ -24,6 +25,7 @@ import {
   Compass,
   Building,
   TreePine,
+  Sparkles,
 } from 'lucide-react';
 
 interface AuctionCardProps {
@@ -71,6 +73,7 @@ export function AuctionCard({
   const countdown = getDaysUntilAuction(activeDate, language);
   const metrics = calculateInvestorMetrics(auction, (liveState.currentCallNumber || 1) as (1 | 2 | 3));
   const marginPct = auction.estimated_margin_pct || 0;
+  const isNewToday = isPropertyNewToday(auction.created_at);
 
   // Use robust deterministic characteristics detector
   const {
@@ -112,9 +115,16 @@ export function AuctionCard({
           className="rounded-b-none border-b border-slate-800"
         />
 
-        {/* Floating Badges Overlay (Discount Margin & Bookmark) */}
+        {/* Floating Badges Overlay (NEW Badge, Discount Margin & Bookmark) */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-20 pointer-events-none">
-          <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+            {isNewToday && (
+              <span className="px-2.5 py-1 text-[10.5px] font-black rounded-lg bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 flex items-center gap-1 shadow-lg shadow-emerald-950/60 ring-1 ring-white/40 tracking-wider uppercase">
+                <Sparkles className="w-3 h-3 fill-slate-950" />
+                {t.card.newToday || (language === 'es' ? '¡NUEVO HOY!' : 'NEW TODAY')}
+              </span>
+            )}
+
             {marginPct > 0 ? (
               <span
                 className={`px-2.5 py-1 text-xs font-black rounded-lg border backdrop-blur-md flex items-center gap-1 shadow-lg ${marginBadgeClass}`}

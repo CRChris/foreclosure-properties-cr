@@ -264,6 +264,47 @@ export function formatDateCR(dateString: string, lang: string = 'es'): string {
 }
 
 /**
+ * Format Date Added for property dossier & cadastral details (e.g. August 18, 2026 / 18 de agosto de 2026)
+ */
+export function formatDateAdded(dateString?: string | null, lang: string = 'es'): string {
+  if (!dateString) return lang === 'en' ? 'Recently published' : 'Publicación reciente';
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    const locale = lang === 'en' ? 'en-US' : 'es-CR';
+    return new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date);
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Check if a property was added today (or within the last 24 hours)
+ */
+export function isPropertyNewToday(createdAt?: string | null): boolean {
+  if (!createdAt) return false;
+  try {
+    const created = new Date(createdAt);
+    if (isNaN(created.getTime())) return false;
+    
+    const now = new Date();
+    const isSameDay = 
+      created.getFullYear() === now.getFullYear() &&
+      created.getMonth() === now.getMonth() &&
+      created.getDate() === now.getDate();
+
+    const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+    return isSameDay || (diffHours >= 0 && diffHours <= 24);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get remaining days until auction with bilingual labels and 60-min hearing window detection
  */
 export function getDaysUntilAuction(

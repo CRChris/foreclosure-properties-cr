@@ -53,7 +53,7 @@ logging.basicConfig(
 logger = logging.getLogger("scraper.30days")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 
 def parse_date_spanish(date_str: str, default_hour: int = 10, default_minute: int = 0) -> Optional[datetime]:

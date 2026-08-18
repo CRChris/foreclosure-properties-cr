@@ -99,11 +99,14 @@ export interface Translations {
     daysLeft: string;
     auctionToday: string;
     auctionPassed: string;
+    newToday: string;
     bookmarkAdded: string;
     bookmarkRemoved: string;
   };
   dossier: {
     backToCatalog: string;
+    dateAdded: string;
+    newToday: string;
     saveToWatchlist: string;
     savedToWatchlist: string;
     exportPDF: string;
@@ -177,5 +180,24 @@ export interface Translations {
     waitingDesc: string;
     resetFilters: string;
     connectedStatus: string;
+  };
+  ingestionModal: {
+    title: string;
+    subtitle: string;
+    statusActive: string;
+    nextScheduledRun: string;
+    runHistory: string;
+    runDate: string;
+    status: string;
+    edictsFound: string;
+    propertiesAdded: string;
+    skipped: string;
+    duration: string;
+    statusSuccess: string;
+    statusNoNew: string;
+    statusWarning: string;
+    statusError: string;
+    noLogsYet: string;
+    close: string;
   };
 }

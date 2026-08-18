@@ -23,20 +23,25 @@ async function handleSync(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret) {
-    const bearerToken = authHeader?.replace(/^Bearer\s+/i, '');
-    const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+  if (!cronSecret) {
+    return NextResponse.json(
+      { error: 'Unauthorized: CRON_SECRET is not configured on the server' },
+      { status: 401 }
+    );
+  }
 
-    if (!isVercelCron && bearerToken !== cronSecret) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Invalid CRON_SECRET Bearer token' },
-        { status: 401 }
-      );
-    }
+  const bearerToken = authHeader?.replace(/^Bearer\s+/i, '');
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+
+  if (!isVercelCron && bearerToken !== cronSecret) {
+    return NextResponse.json(
+      { error: 'Unauthorized: Invalid CRON_SECRET Bearer token' },
+      { status: 401 }
+    );
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey || supabaseUrl.includes('placeholder')) {
     return NextResponse.json(

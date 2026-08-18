@@ -8,6 +8,7 @@ import {
   AuctionCallStage,
   AuctionSaleStatus,
   AuctionLifecycleLog,
+  IngestionLog,
 } from '@/lib/types/auction';
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
@@ -275,19 +276,120 @@ function mapRowToAuction(item: any): Auction {
 /**
  * Fetch all auctions from Supabase or fallback to mock data
  */
-export async function fetchAuctions(): Promise<Auction[]> {
+export async function fetchAuctions(params?: {
+  province?: string | null;
+  canton?: string | null;
+  currency?: string | null;
+  query?: string | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  callStage?: string | null;
+  includePast?: boolean;
+  minLng?: number | null;
+  minLat?: number | null;
+  maxLng?: number | null;
+  maxLat?: number | null;
+}): Promise<Auction[]> {
   if (!isSupabaseConfigured()) {
+    // If no Supabase, return all mock data (API route will filter in memory as fallback)
     return MOCK_AUCTIONS;
   }
 
   try {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('auctions')
-      .select('*')
-      .order('auction_date_call_1', { ascending: true });
+    
+    // If bounding box is provided, use the spatial RPC
+    if (params?.minLng !== undefined && params?.minLng !== null && 
+        params?.minLat !== undefined && params?.minLat !== null &&
+        params?.maxLng !== undefined && params?.maxLng !== null &&
+        params?.maxLat !== undefined && params?.maxLat !== null) {
+      
+      let rpcQuery = supabase.rpc('get_auctions_in_bounds', {
+        min_lng: params.minLng,
+        min_lat: params.minLat,
+        max_lng: params.maxLng,
+        max_lat: params.maxLat,
+        target_currency: params.currency && params.currency !== 'all' ? params.currency.toUpperCase() : null,
+        max_price: params.maxPrice !== undefined ? params.maxPrice : null
+      });
 
-    if (error || !data || data.length === 0) {
+      const { data, error } = await rpcQuery;
+      if (error || !data) return MOCK_AUCTIONS;
+      
+      let results = data.map(mapRowToAuction);
+      
+      // Apply remaining filters in-memory for spatial results (RPC doesn't handle all filters yet)
+      if (params.province && params.province !== 'all') {
+        results = results.filter((a: Auction) => a.province.toLowerCase() === params.province!.toLowerCase());
+      }
+      if (params.canton) {
+        results = results.filter((a: Auction) => a.canton.toLowerCase() === params.canton!.toLowerCase());
+      }
+      if (params.callStage && params.callStage !== 'all') {
+        results = results.filter((a: Auction) => (a.call_stage || '') === params.callStage);
+      } else if (!params.includePast) {
+        results = results.filter((a: Auction) => a.call_stage !== 'passed_call_3' && a.sale_status !== 'deserted');
+      }
+      if (params.minPrice !== null && params.minPrice !== undefined) {
+        results = results.filter((a: Auction) => a.base_price_call_1 >= params.minPrice!);
+      }
+      if (params.query) {
+        const q = params.query.toLowerCase();
+        results = results.filter(
+          (a: Auction) =>
+            a.canton.toLowerCase().includes(q) ||
+            a.district.toLowerCase().includes(q) ||
+            a.province.toLowerCase().includes(q) ||
+            a.expediente_number.toLowerCase().includes(q) ||
+            a.folio_real.toLowerCase().includes(q) ||
+            a.plaintiff.toLowerCase().includes(q)
+        );
+      }
+      
+      return results;
+    }
+
+    // Standard Query without spatial bounds
+    let query = supabase.from('auctions').select('*');
+
+    if (params?.province && params.province !== 'all') {
+      query = query.ilike('province', params.province);
+    }
+    if (params?.canton) {
+      query = query.ilike('canton', params.canton);
+    }
+    if (params?.currency && params.currency !== 'all') {
+      query = query.eq('currency', params.currency.toUpperCase());
+    }
+    if (params?.minPrice !== undefined && params.minPrice !== null) {
+      query = query.gte('base_price_call_1', params.minPrice);
+    }
+    if (params?.maxPrice !== undefined && params.maxPrice !== null) {
+      query = query.lte('base_price_call_1', params.maxPrice);
+    }
+    
+    // Active / Call Stage filter
+    if (params?.callStage && params.callStage !== 'all') {
+      query = query.eq('call_stage', params.callStage);
+    } else if (!params?.includePast) {
+      query = query.neq('call_stage', 'passed_call_3').neq('sale_status', 'deserted');
+    }
+
+    // Text Search
+    if (params?.query && params.query.trim()) {
+      const sanitized = params.query.replace(/[,()"]/g, ' ').trim();
+      if (sanitized) {
+        const q = `%${sanitized}%`;
+        query = query.or(`canton.ilike.${q},district.ilike.${q},province.ilike.${q},expediente_number.ilike.${q},folio_real.ilike.${q},plaintiff.ilike.${q}`);
+      }
+    }
+
+    query = query.order('auction_date_call_1', { ascending: true });
+
+    const { data, error } = await query;
+
+    if (error || !data) {
+      console.warn('Error fetching from Supabase query, falling back:', error);
       return MOCK_AUCTIONS;
     }
 
@@ -332,7 +434,7 @@ export async function fetchUserWatchlist(userId?: string): Promise<WatchlistItem
     if (typeof window === 'undefined') return [];
     try {
       const items: WatchlistItem[] = [];
-      const allAuctions = await fetchAuctions();
+      const allAuctions = await fetchAuctions({ includePast: true });
       for (const auction of allAuctions) {
         const saved = localStorage.getItem(`saved_auction_${auction.id}`);
         if (saved === 'true') {
@@ -529,4 +631,70 @@ export async function fetchAuctionLifecycleLogs(auctionId?: string): Promise<Auc
     return [];
   }
 }
+
+/**
+ * Fetch daily scraper & pipeline ingestion logs
+ */
+export async function fetchIngestionLogs(): Promise<IngestionLog[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('ingestion_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (!error && data && data.length > 0) {
+        return data as IngestionLog[];
+      }
+    } catch (err) {
+      console.warn('Could not fetch ingestion_logs from Supabase, returning mock logs:', err);
+    }
+  }
+
+  // Graceful fallback mock ingestion logs
+  return [
+    {
+      id: 'log-today',
+      run_date: new Date().toISOString().split('T')[0],
+      source: 'boletin_judicial',
+      status: 'no_new_properties',
+      total_edicts_found: 18,
+      properties_added: 0,
+      properties_skipped: 18,
+      expedientes_added: [],
+      error_message: null,
+      duration_seconds: 4.35,
+      created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'log-yesterday',
+      run_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      source: 'boletin_judicial',
+      status: 'success',
+      total_edicts_found: 24,
+      properties_added: 16,
+      properties_skipped: 8,
+      expedientes_added: ['24-000123-1158-CJ', '23-004589-1012-CJ', '24-001892-0994-CJ', '23-008912-1200-CJ'],
+      error_message: null,
+      duration_seconds: 14.82,
+      created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: 'log-prev',
+      run_date: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString().split('T')[0],
+      source: 'boletin_judicial',
+      status: 'no_new_properties',
+      total_edicts_found: 12,
+      properties_added: 0,
+      properties_skipped: 12,
+      expedientes_added: [],
+      error_message: null,
+      duration_seconds: 3.90,
+      created_at: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    },
+  ];
+}
+
 

@@ -17,6 +17,8 @@ import {
   detectPropertyCharacteristics,
   getLocalizedPropertyTitle,
   getLiveAuctionProgressionState,
+  formatDateAdded,
+  isPropertyNewToday,
 } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { fetchAuctionById } from '@/lib/supabase/db';
@@ -25,6 +27,8 @@ import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import {
   ArrowLeft,
   Calendar,
+  Clock,
+  Sparkles,
   MapPin,
   Scale,
   TrendingUp,
@@ -182,6 +186,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   };
 
   const marginPct = auction.estimated_margin_pct || 0;
+  const isNewToday = isPropertyNewToday(auction.created_at);
   const { propertyType } = detectPropertyCharacteristics(auction);
 
   return (
@@ -262,6 +267,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
+            {isNewToday && (
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/60 ring-1 ring-white/40 tracking-wide uppercase">
+                <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                {t.card.newToday || (language === 'es' ? '¡NUEVO HOY!' : 'NEW TODAY')}
+              </span>
+            )}
             <PropertyTypeBadge type={propertyType} language={language} size="lg" />
             <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-mono font-bold">
               Folio Real: {auction.folio_real}
@@ -305,6 +316,13 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             <span className="flex items-center gap-1.5">
               <Maximize2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{formatArea(auction.area_m2)}</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong className="text-slate-400 font-semibold">{t.dossier.dateAdded}:</strong>{' '}
+                <span className="text-emerald-300 font-medium">{formatDateAdded(auction.created_at, language)}</span>
+              </span>
             </span>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${auction.court_name}, Costa Rica`)}`}
@@ -410,7 +428,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             </div>
 
             {/* Cadastral Specs Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
                 <span className="text-[11px] text-slate-400 uppercase font-bold block">
                   {t.dossier.folioReal}
@@ -444,6 +462,15 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                 </span>
                 <span className="text-sm font-extrabold text-emerald-400 font-mono mt-1 block">
                   {formatArea(auction.area_m2)}
+                </span>
+              </div>
+
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+                  {t.dossier.dateAdded}
+                </span>
+                <span className="text-xs font-bold text-slate-200 mt-1 block">
+                  {formatDateAdded(auction.created_at, language)}
                 </span>
               </div>
             </div>

@@ -10,6 +10,7 @@ import re
 import sys
 import json
 import ssl
+import time
 import logging
 import argparse
 from typing import Optional, List, Dict, Any, Tuple
@@ -678,20 +679,72 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
     }
 
 # ==============================================================================
-# 6. SUPABASE UPSERT ENGINE
+# 6. SUPABASE UPSERT & INGESTION LOGGING ENGINE
 # ==============================================================================
-def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
+def record_ingestion_log(
+    status: str,
+    total_edicts: int = 0,
+    added: int = 0,
+    skipped: int = 0,
+    expedientes: Optional[List[str]] = None,
+    error_message: Optional[str] = None,
+    duration_seconds: float = 0.0,
+    run_date: Optional[str] = None
+) -> bool:
+    """
+    Records an execution entry into the public.ingestion_logs table in Supabase.
+    """
+    supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    
+    if not supabase_url or not supabase_key:
+        logger.debug("Supabase credentials missing. Ingestion log not persisted remotely.")
+        return False
+        
+    try:
+        import urllib.request
+        ctx = create_ssl_context()
+        url = f"{supabase_url}/rest/v1/ingestion_logs"
+        payload_dict = {
+            "run_date": run_date or datetime.now().strftime("%Y-%m-%d"),
+            "source": "boletin_judicial",
+            "status": status,
+            "total_edicts_found": total_edicts,
+            "properties_added": added,
+            "properties_skipped": skipped,
+            "expedientes_added": expedientes or [],
+            "error_message": error_message,
+            "duration_seconds": round(duration_seconds, 2),
+            "created_at": datetime.now().isoformat(),
+        }
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload_dict).encode("utf-8"), headers=headers, method="POST")
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+            if resp.status in (200, 201):
+                logger.info(f"✓ Ingestion execution log saved: status={status}, added={added}, skipped={skipped}")
+                return True
+    except Exception as e:
+        logger.debug(f"Could not record ingestion log to Supabase: {e}")
+        return False
+
+
+def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[str]]:
     """
     Connects to Supabase PostGIS using service role credentials and performs inserts
     with deduplication against existing expediente_numbers in the database.
-    Terminal statuses (suspended, awarded, annulled, etc.) are strictly locked and never overwritten.
+    Returns (inserted_count, skipped_count, list_of_inserted_expedientes).
     """
     supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     
     if not supabase_url or not supabase_key:
         logger.info("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Skipping remote database upload (Simulation mode).")
-        return len(records)
+        return len(records), 0, [r.get("expediente_number", "") for r in records]
         
     try:
         import urllib.request
@@ -725,9 +778,11 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
             if r["expediente_number"] not in existing_expedientes and r["expediente_number"] not in terminal_expedientes
         ]
         
+        skipped_count = len(records) - len(new_records)
+
         if not new_records:
             logger.info("All discovered foreclosures are already up to date in Supabase PostGIS.")
-            return 0
+            return 0, skipped_count, []
 
         # 3. Post new records
         headers = {
@@ -743,92 +798,145 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> int:
         req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
         with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
             if resp.status in (200, 201):
+                new_expedientes = [r["expediente_number"] for r in new_records]
                 logger.info(f"✓ Successfully inserted {len(new_records)} new foreclosures into Supabase PostGIS!")
-                return len(new_records)
+                return len(new_records), skipped_count, new_expedientes
             else:
                 logger.warning(f"Supabase returned status code: {resp.status}")
-                return 0
+                return 0, len(records), []
     except Exception as e:
         logger.error(f"Error during Supabase insert: {e}")
-        return 0
+        return 0, len(records), []
 
 # ==============================================================================
 # 7. MAIN CLI ORCHESTRATION PIPELINE
 # ==============================================================================
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="Boletín Judicial Foreclosure Ingestion Engine")
     parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF file to parse")
     parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
     parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
     args = parser.parse_args()
 
+    target_date_str = args.date or datetime.now().strftime("%Y-%m-%d")
+
     logger.info("=======================================================")
     logger.info("Starting Costa Rica Judicial Foreclosure Ingestion...")
+    logger.info(f"Target Date: {target_date_str}")
     logger.info("=======================================================")
 
     raw_edicts: List[str] = []
 
-    if args.file:
-        if not os.path.exists(args.file):
-            logger.error(f"Specified file does not exist: {args.file}")
-            sys.exit(1)
-        logger.info(f"Reading local PDF file: {args.file}")
-        from pypdf import PdfReader
-        reader = PdfReader(args.file)
-        full_text = ""
-        for page in reader.pages:
-            full_text += (page.extract_text() or "") + "\n"
-        
-        pattern = re.compile(
-            r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
-            re.IGNORECASE
-        )
-        for chunk in pattern.split(full_text):
-            chunk = chunk.strip()
-            c_lower = chunk.lower()
-            if len(chunk) > 120 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
-                raw_edicts.append(chunk)
-    else:
-        target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
-        raw_edicts = fetch_daily_bulletin(target_date)
-
-    if not raw_edicts:
-        logger.info("No judicial foreclosure edicts found for the given target. Ingestion cycle complete.")
-        return
-
-    logger.info(f"Processing {len(raw_edicts)} extracted edicts...")
-    extracted_auctions = extract_auctions_with_gemini(raw_edicts)
-    logger.info(f"Successfully extracted {len(extracted_auctions)} valid structured auctions.")
-
-    if not extracted_auctions:
-        logger.info("No structured records were generated from the edicts. Ingestion finished.")
-        return
-
-    logger.info("Enriching records with PostGIS coordinates, images, and market valuation...")
-    enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
-
-    if args.dry_run:
-        logger.info(f"[Dry Run] {len(enriched_records)} records prepared:")
-        print(json.dumps(enriched_records, indent=2, ensure_ascii=False))
-        return
-
-    logger.info(f"Upserting {len(enriched_records)} records to Supabase PostGIS...")
-    upsert_to_supabase(enriched_records)
-
-    # Trigger Automated Auction Call Progression & Lifecycle Tracker Engine
-    logger.info("Executing automated lifecycle progression engine (Single Source of Truth RPC)...")
     try:
-        from scraper.auction_tracker import sync_auction_progression_via_rpc
-        progression_result = sync_auction_progression_via_rpc()
-        if progression_result.get("success"):
-            logger.info(f"✓ Progression Engine synced: {progression_result.get('total_processed', 0)} evaluated, {progression_result.get('total_updated', 0)} state transitions.")
+        if args.file:
+            if not os.path.exists(args.file):
+                logger.error(f"Specified file does not exist: {args.file}")
+                sys.exit(1)
+            logger.info(f"Reading local PDF file: {args.file}")
+            from pypdf import PdfReader
+            reader = PdfReader(args.file)
+            full_text = ""
+            for page in reader.pages:
+                full_text += (page.extract_text() or "") + "\n"
+            
+            pattern = re.compile(
+                r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
+                re.IGNORECASE
+            )
+            for chunk in pattern.split(full_text):
+                chunk = chunk.strip()
+                c_lower = chunk.lower()
+                if len(chunk) > 120 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
+                    raw_edicts.append(chunk)
         else:
-            logger.warning(f"Progression Engine warning: {progression_result.get('error')}")
-    except Exception as ex:
-        logger.warning(f"Could not run progression sync RPC: {ex}")
+            target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
+            raw_edicts = fetch_daily_bulletin(target_date)
 
-    logger.info("Foreclosure ingestion pipeline finished successfully.")
+        if not raw_edicts:
+            logger.info("No judicial foreclosure edicts found for the given target. Ingestion cycle complete.")
+            duration = time.time() - start_time
+            if not args.dry_run:
+                record_ingestion_log(
+                    status="no_new_properties",
+                    total_edicts=0,
+                    added=0,
+                    skipped=0,
+                    duration_seconds=duration,
+                    run_date=target_date_str
+                )
+            return
+
+        logger.info(f"Processing {len(raw_edicts)} extracted edicts...")
+        extracted_auctions = extract_auctions_with_gemini(raw_edicts)
+        logger.info(f"Successfully extracted {len(extracted_auctions)} valid structured auctions.")
+
+        if not extracted_auctions:
+            logger.info("No structured records were generated from the edicts. Ingestion finished.")
+            duration = time.time() - start_time
+            if not args.dry_run:
+                record_ingestion_log(
+                    status="no_new_properties",
+                    total_edicts=len(raw_edicts),
+                    added=0,
+                    skipped=0,
+                    duration_seconds=duration,
+                    run_date=target_date_str
+                )
+            return
+
+        logger.info("Enriching records with PostGIS coordinates, images, and market valuation...")
+        enriched_records = [enrich_auction_data(a) for a in extracted_auctions]
+
+        if args.dry_run:
+            logger.info(f"[Dry Run] {len(enriched_records)} records prepared:")
+            print(json.dumps(enriched_records, indent=2, ensure_ascii=False))
+            return
+
+        logger.info(f"Upserting {len(enriched_records)} records to Supabase PostGIS...")
+        inserted_count, skipped_count, new_expedientes = upsert_to_supabase(enriched_records)
+
+        # Trigger Automated Auction Call Progression & Lifecycle Tracker Engine
+        logger.info("Executing automated lifecycle progression engine (Single Source of Truth RPC)...")
+        try:
+            from scraper.auction_tracker import sync_auction_progression_via_rpc
+            progression_result = sync_auction_progression_via_rpc()
+            if progression_result.get("success"):
+                logger.info(f"✓ Progression Engine synced: {progression_result.get('total_processed', 0)} evaluated, {progression_result.get('total_updated', 0)} state transitions.")
+            else:
+                logger.warning(f"Progression Engine warning: {progression_result.get('error')}")
+        except Exception as ex:
+            logger.warning(f"Could not run progression sync RPC: {ex}")
+
+        duration = time.time() - start_time
+        status_str = "success" if inserted_count > 0 else "no_new_properties"
+        record_ingestion_log(
+            status=status_str,
+            total_edicts=len(raw_edicts),
+            added=inserted_count,
+            skipped=skipped_count,
+            expedientes=new_expedientes,
+            duration_seconds=duration,
+            run_date=target_date_str
+        )
+
+        logger.info("Foreclosure ingestion pipeline finished successfully.")
+    except Exception as exc:
+        duration = time.time() - start_time
+        logger.error(f"Ingestion pipeline failed with exception: {exc}")
+        if not args.dry_run:
+            record_ingestion_log(
+                status="error",
+                total_edicts=len(raw_edicts),
+                added=0,
+                skipped=0,
+                error_message=str(exc),
+                duration_seconds=duration,
+                run_date=target_date_str
+            )
+        raise
 
 if __name__ == "__main__":
     main()
+
 

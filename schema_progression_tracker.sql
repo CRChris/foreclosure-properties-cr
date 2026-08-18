@@ -245,7 +245,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    r RECORD;
+    r public.auctions;
     v_calc RECORD;
     v_cr_now TIMESTAMPTZ;
     v_total_processed INTEGER := 0;
@@ -351,6 +351,10 @@ BEGIN
     );
 END;
 $$;
+
+-- Revoke public access to prevent abuse
+REVOKE EXECUTE ON FUNCTION public.sync_auction_lifecycle_statuses() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.sync_auction_lifecycle_statuses() TO service_role;
 
 -- 6. Initial Migration Backfill: Run Batch Sync on existing records
 SELECT public.sync_auction_lifecycle_statuses();

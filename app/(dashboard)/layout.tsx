@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { Scale, Compass } from 'lucide-react';
+import { Scale, Compass, Activity } from 'lucide-react';
 import { UserNav } from '@/components/ui/UserNav';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { HelpButton } from '@/components/help/HelpButton';
+import { IngestionLogModal } from '@/components/ingest/IngestionLogModal';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 export default function DashboardLayout({
@@ -14,6 +15,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { t } = useLanguage();
+  const [isIngestionModalOpen, setIsIngestionModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
@@ -48,10 +50,18 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="hidden xl:flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 rounded-full">
+            {/* Clickable Gazette Ingestion Activity Log Badge */}
+            <button
+              type="button"
+              onClick={() => setIsIngestionModalOpen(true)}
+              title="Click to view Gazette ingestion logs & pipeline history"
+              className="flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-950/60 hover:bg-emerald-900/50 border border-emerald-800/50 hover:border-emerald-500/50 px-3 py-1.5 rounded-full transition-all cursor-pointer shadow-sm hover:scale-105"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              {t.nav.dailyIngestionActive}
-            </div>
+              <span className="hidden sm:inline">{t.nav.dailyIngestionActive}</span>
+              <span className="sm:hidden">Ingestion Log</span>
+              <Activity className="w-3.5 h-3.5 text-emerald-400/80 ml-0.5" />
+            </button>
 
             {/* Help & Guide Explainer Button */}
             <HelpButton />
@@ -64,6 +74,12 @@ export default function DashboardLayout({
           </div>
         </div>
       </header>
+
+      {/* Ingestion Activity Log Modal */}
+      <IngestionLogModal
+        isOpen={isIngestionModalOpen}
+        onClose={() => setIsIngestionModalOpen(false)}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
