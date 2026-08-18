@@ -200,4 +200,29 @@ export interface Translations {
     noLogsYet: string;
     close: string;
   };
+  matrix: {
+    opportunityAlpha: string;
+    opportunityAlphaSubtitle: string;
+    titleSecurity: string;
+    titleSecuritySubtitle: string;
+    gradeAAA: string;
+    gradeAA: string;
+    gradeA: string;
+    gradeB: string;
+    gradeC: string;
+    tier1Title: string;
+    tier2Title: string;
+    tier3Title: string;
+    tier1Desc: string;
+    tier2Desc: string;
+    tier3Desc: string;
+    statutoryProtection: string;
+    statutoryProtectionBadge: string;
+    discountAdvantage: string;
+    valuationSpread: string;
+    assetLiquidity: string;
+    roadFrontageFactor: string;
+    legalGroundingTitle: string;
+    viewAuditBreakdown: string;
+  };
 }

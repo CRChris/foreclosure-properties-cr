@@ -9,6 +9,10 @@ import {
   MortgagePriority,
   AuctionCallStage,
   AuctionSaleStatus,
+  DealAlphaRating,
+  DealAlphaGrade,
+  TitleSecurityRating,
+  TitleSecurityTier,
 } from './types/auction';
 
 export function cn(...inputs: ClassValue[]) {
@@ -795,5 +799,146 @@ export function getLocalizedPropertyTitle(auction: Auction, language: 'es' | 'en
 
   return typeMap[propertyType]?.[language] || `${auction.district}, ${auction.canton}`;
 }
+
+/**
+ * Calculate Opportunity Alpha Rating (0 - 100 with Grades AAA, AA, A, B, C)
+ * Proprietary multi-factor scoring evaluating statutory discount, valuation spread, liquidity, and road access.
+ */
+export function calculateOpportunityAlpha(auction: Auction, lang: 'es' | 'en' = 'es'): DealAlphaRating {
+  const liveState = getLiveAuctionProgressionState(auction);
+  const chars = detectPropertyCharacteristics(auction);
+
+  // 1. Stage Discounting Points (Max 50 pts)
+  let stagePoints = 15; // 1st Call baseline
+  if (liveState.currentCallNumber === 2) {
+    stagePoints = 35; // 25% discount
+  } else if (liveState.currentCallNumber === 3) {
+    stagePoints = 50; // 75% discount / liquidation
+  }
+
+  // 2. Valuation Spread Margin Points (Max 35 pts)
+  const marginPct = auction.estimated_margin_pct || 0;
+  let marginPoints = 5;
+  if (marginPct >= 40) {
+    marginPoints = 35;
+  } else if (marginPct >= 28) {
+    marginPoints = 28;
+  } else if (marginPct >= 18) {
+    marginPoints = 18;
+  } else if (marginPct >= 10) {
+    marginPoints = 10;
+  }
+
+  // 3. Asset Liquidity & Typology Points (Max 10 pts)
+  let assetPoints = 5;
+  if (chars.propertyType === 'condo_apartment' || chars.propertyType === 'single_family_home') {
+    assetPoints = 10;
+  } else if (chars.propertyType === 'commercial_industrial') {
+    assetPoints = 8;
+  } else if (chars.propertyType === 'building_lot') {
+    assetPoints = 7;
+  }
+
+  // 4. Access & Frontage Advantage Points (Max 5 pts)
+  const accessPoints = chars.hasPublicRoad ? 5 : 2;
+
+  const rawScore = stagePoints + marginPoints + assetPoints + accessPoints;
+  const score = Math.min(100, Math.max(10, rawScore));
+
+  // Determine Grade & localized summary
+  let grade: DealAlphaGrade = 'C';
+  let label = lang === 'en' ? 'Narrow Margin' : 'Margen Reducido';
+  if (score >= 90) {
+    grade = 'AAA';
+    label = lang === 'en' ? 'Exceptional Opportunity' : 'Oportunidad Extraordinaria';
+  } else if (score >= 80) {
+    grade = 'AA';
+    label = lang === 'en' ? 'High Yield Spread' : 'Excelente Rentabilidad';
+  } else if (score >= 70) {
+    grade = 'A';
+    label = lang === 'en' ? 'Solid Investment Margin' : 'Sólido Margen de Inversión';
+  } else if (score >= 55) {
+    grade = 'B';
+    label = lang === 'en' ? 'Moderate Spread' : 'Margen Moderado';
+  }
+
+  return {
+    score,
+    grade,
+    label,
+    stagePoints,
+    marginPoints,
+    assetPoints,
+    accessPoints,
+  };
+}
+
+/**
+ * Calculate Title Security & Lien Seniority Rating
+ * Grounded in Costa Rican Civil Procedure Code (Art. 162 CPC - Lien Extinguishment)
+ */
+export function calculateTitleSecurityRating(auction: Auction, lang: 'es' | 'en' = 'es'): TitleSecurityRating {
+  const chars = detectPropertyCharacteristics(auction);
+  const priority = chars.mortgagePriority;
+
+  if (priority === '1st_mortgage') {
+    return {
+      tier: 'tier_1',
+      tierNumber: 1,
+      label: lang === 'en' ? 'Tier 1 · Senior Clean Lien' : 'Nivel 1 · Primer Grado Preferente',
+      priorityName: lang === 'en' ? '1st Mortgage Senior Lien' : '1° Grado Hipotecario Preferente',
+      score: 95,
+      isSeniorLien: true,
+      extinguishmentProtected: true,
+      legalCitation: 'Art. 162 CPC (Ley 9342)',
+      keyFactors: [
+        lang === 'en' ? 'Senior Priority Ranking' : 'Rango Hipotecario Preferente',
+        lang === 'en' ? 'Automatic Junior Lien Cancellation upon Adjudication' : 'Cancelación de Gravámenes Inferiores por Adjudicación',
+        chars.hasPublicRoad 
+          ? (lang === 'en' ? 'Direct Public Road Access' : 'Frente a Calle Pública') 
+          : (lang === 'en' ? 'Right of Way Easement' : 'Acceso por Servidumbre'),
+      ],
+    };
+  }
+
+  if (priority === '2nd_mortgage') {
+    return {
+      tier: 'tier_2',
+      tierNumber: 2,
+      label: lang === 'en' ? 'Tier 2 · Subordinate Lien' : 'Nivel 2 · Segundo Grado Subordinado',
+      priorityName: lang === 'en' ? '2nd Mortgage Subordinate Lien' : '2° Grado Hipotecario Subordinado',
+      score: 65,
+      isSeniorLien: false,
+      extinguishmentProtected: false,
+      legalCitation: 'Art. 160-162 CPC (Ley 9342)',
+      keyFactors: [
+        lang === 'en' ? 'Subordinate to Senior 1st Mortgage' : 'Subordinado a Hipoteca de Primer Grado',
+        lang === 'en' ? 'Prior Mortgage Payoff Verification Advised' : 'Verificación de Saldo Anterior Requerida',
+        chars.hasPublicRoad 
+          ? (lang === 'en' ? 'Direct Public Road Access' : 'Frente a Calle Pública') 
+          : (lang === 'en' ? 'Right of Way Easement' : 'Acceso por Servidumbre'),
+      ],
+    };
+  }
+
+  return {
+    tier: 'tier_3',
+    tierNumber: 3,
+    label: lang === 'en' ? 'Tier 3 · Complex Claim / Embargo' : 'Nivel 3 · Embargo Judicial Complejo',
+    priorityName: lang === 'en' ? 'Judicial Embargo Claim' : 'Embargo Judicial en Ejecución',
+    score: 45,
+    isSeniorLien: false,
+    extinguishmentProtected: false,
+    legalCitation: 'Art. 158-164 CPC (Ley 9342)',
+    keyFactors: [
+      lang === 'en' ? 'Unsecured Litigation Execution' : 'Ejecución de Proceso Monitorio / Cobro',
+      lang === 'en' ? 'Requires Full Docket Study for Prior Liens' : 'Requiere Estudio Integral de Gravámenes Previos',
+      chars.hasPublicRoad 
+        ? (lang === 'en' ? 'Direct Public Road Access' : 'Frente a Calle Pública') 
+        : (lang === 'en' ? 'Right of Way Easement' : 'Acceso por Servidumbre'),
+    ],
+  };
+}
+
 
 

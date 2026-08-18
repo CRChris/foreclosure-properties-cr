@@ -81,6 +81,32 @@ export interface IngestionLog {
   created_at: string;
 }
 
+export type DealAlphaGrade = 'AAA' | 'AA' | 'A' | 'B' | 'C';
+
+export interface DealAlphaRating {
+  score: number; // 0 - 100
+  grade: DealAlphaGrade;
+  label: string;
+  stagePoints: number;
+  marginPoints: number;
+  assetPoints: number;
+  accessPoints: number;
+}
+
+export type TitleSecurityTier = 'tier_1' | 'tier_2' | 'tier_3';
+
+export interface TitleSecurityRating {
+  tier: TitleSecurityTier;
+  tierNumber: 1 | 2 | 3;
+  label: string;
+  priorityName: string;
+  score: number;
+  isSeniorLien: boolean;
+  extinguishmentProtected: boolean;
+  legalCitation: string;
+  keyFactors: string[];
+}
+
 export interface Auction {
   id: string;
   expediente_number: string;

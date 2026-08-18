@@ -8,7 +8,9 @@ import { AuctionCallLadder } from '@/components/dossier/AuctionCallLadder';
 import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldCalculator';
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
+import { OpportunityMatrixCard } from '@/components/dossier/OpportunityMatrixCard';
 import { ParticipateAuctionModal } from '@/components/dossier/ParticipateAuctionModal';
+import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
 import { MapWrapper } from '@/components/map/MapWrapper';
 import {
   formatCurrency,
@@ -274,6 +276,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               </span>
             )}
             <PropertyTypeBadge type={propertyType} language={language} size="lg" />
+            <DealAlphaBadge auction={auction} language={language} size="md" />
             <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-mono font-bold">
               Folio Real: {auction.folio_real}
             </span>
@@ -484,6 +487,9 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           </div>
         )}
       </div>
+
+      {/* Opportunity Alpha & Title Security Matrix */}
+      <OpportunityMatrixCard auction={auction} />
 
       {/* Statutory Closing Costs & Investment Yield Calculator */}
       <InvestmentYieldCalculator

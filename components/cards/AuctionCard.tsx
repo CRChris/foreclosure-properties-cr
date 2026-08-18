@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBanner } from '@/components/ui/PropertyTypeIcon';
+import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
 import {
   Calendar,
   Bookmark,
@@ -201,8 +202,9 @@ export function AuctionCard({
             </span>
           </div>
 
-          {/* Quick Legal Specs Chips (Frontage, Priority & Construction) */}
+          {/* Quick Legal Specs Chips (Deal Alpha, Frontage, Priority & Construction) */}
           <div className="pt-2 flex flex-wrap items-center gap-1.5">
+            <DealAlphaBadge auction={auction} language={language} size="sm" showTitleTier={false} />
             <span className="flex items-center gap-1 text-[10px] font-sans font-semibold text-emerald-400 px-2 py-0.5 rounded bg-slate-950 border border-slate-800">
               {priority === '1st_mortgage' ? (
                 <>
