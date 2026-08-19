@@ -15,6 +15,7 @@ import time
 import logging
 import argparse
 import unicodedata
+import html as html_module
 import urllib.request
 import urllib.error
 from typing import Optional, List, Dict, Any, Tuple, Set
@@ -547,63 +548,98 @@ def is_real_estate_foreclosure_edict(text: str) -> bool:
 def is_foreclosure_edict_text(text: str) -> bool:
     return is_real_estate_foreclosure_edict(text)
 
+def html_to_clean_text(html_content: str) -> str:
+    """Converts HTML payloads into clean, verbatim plain text with proper paragraph breaks and unescaped entities."""
+    if not html_content:
+        return ""
+    if BeautifulSoup:
+        soup = BeautifulSoup(html_content, "html.parser")
+        for br in soup.find_all(["br", "p", "div", "tr", "li"]):
+            br.insert_before("\n")
+        raw_text = soup.get_text("\n", strip=True)
+    else:
+        text = re.sub(r"(?i)<br\s*/?>", "\n", html_content)
+        text = re.sub(r"(?i)</(?:p|div|tr|li|h[1-6])>", "\n\n", text)
+        text = re.sub(r"<[^>]+>", " ", text)
+        raw_text = text
+
+    unescaped = html_module.unescape(raw_text).replace('\xa0', ' ').replace('\u200b', '')
+    lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in unescaped.splitlines()]
+    clean_lines = []
+    blank_count = 0
+    for line in lines:
+        if not line:
+            blank_count += 1
+            if blank_count <= 2:
+                clean_lines.append("")
+        else:
+            blank_count = 0
+            clean_lines.append(line)
+    return "\n".join(clean_lines).strip()
+
 def segment_document_blocks(text: str) -> List[str]:
     r"""
-    Step 1: Splits Boletín Judicial / Nexus PJ publication text into discrete notice blocks.
-    Uses multi-tiered segmentation:
-    - Publication boundary markers (e.g. 'Referencia N°:', 'publicación número:', 'N° de publicación:')
-    - Closing boundary tags (e.g. '—1 vez.—( IN... )')
-    - Case docket identifiers (e.g. 'EXP:\s*\d{2}-\d{4,8}-\d{3,4}-[A-Z0-9]+')
-    - Court headers (e.g. 'JUZGADO...', 'TRIBUNAL...', 'AVISO DE REMATE')
+    Step 1: Splits Boletín Judicial / Nexus PJ publication text into discrete, 100% complete notice blocks.
+    Strictly preserves entire legal notice blocks from initial court header to closing tags.
+    NEVER splits on internal body clauses (such as 'PRIMER REMATE', 'EXPEDIENTE:', or 'MIDE:').
+
+    Segmentation hierarchy:
+    1. Closure tag boundaries: Official Imprenta Nacional tags and Nexus PJ publication references:
+       - '( IN202601106505 )' / '1 vez.—( IN... ).'
+       - 'Referencia N°: 2025165785, publicación número: 1 de 1'
+    2. Header boundaries between distinct publication listings:
+       - 'JUZGADO...', 'TRIBUNAL...', 'Ante esta notaría...', 'PUBLICACIÓN DE UNA VEZ...', 'CREDIBANJO...'
     """
     if not text:
         return []
 
-    # 1. Primary boundary: Publication reference markers
-    pub_pattern = re.compile(
-        r"(?=(?:Referencia\s+N[º°o]?\s*:|publicaci[óo]n\s+n[úu]mero\s*:|N[º°o]\s+de\s+publicaci[óo]n\s*:|publicaci[óo]n\s+N[º°o]?\s*:))",
-        re.IGNORECASE
-    )
-    pub_parts = pub_pattern.split(text)
-    if len(pub_parts) > 1:
-        valid_pub_blocks = [p.strip() for p in pub_parts if len(p.strip()) >= 80]
-        if len(valid_pub_blocks) > 1:
-            return valid_pub_blocks
+    clean_doc = text.strip()
 
-    # 2. Secondary boundary: Imprenta Nacional closure markers "\d+ vez.—( IN... )" or "( IN... )"
+    # 1. Primary Strategy: Closure tag & publication reference based boundary splitting
+    # Captures the ending mark and keeps it attached to the preceding block
     close_pattern = re.compile(
-        r"(\(\s*IN[0-9]{8,14}\s*\)[^\n]*\n+|\b(?:1|2|3)\s*(?:vez|veces|v\.)[.—\s]*\(\s*IN[0-9]+\s*\)[^\n]*\n+)",
+        r'(\b(?:Referencia\s+N[º°o]?\s*:\s*[0-9]+[^\n]*(?:publicaci[óo]n\s+n[úu]mero\s*:\s*[0-9]+\s+de\s+[0-9]+)?[^\n]*|\(\s*IN[0-9]{8,14}\s*\)[^\n]*))',
         re.IGNORECASE
     )
-    parts = close_pattern.split(text)
-    if len(parts) > 1:
-        combined_blocks = []
-        curr = ""
-        for p in parts:
-            curr += p
-            if close_pattern.search(p):
-                if len(curr.strip()) >= 80:
-                    combined_blocks.append(curr.strip())
-                curr = ""
-        if curr.strip() and len(curr.strip()) >= 80:
-            combined_blocks.append(curr.strip())
-        if len(combined_blocks) > 1:
-            return combined_blocks
+    closure_matches = list(close_pattern.finditer(clean_doc))
+    if len(closure_matches) > 1:
+        blocks = []
+        last_idx = 0
+        for m in closure_matches:
+            end_idx = m.end()
+            block = clean_doc[last_idx:end_idx].strip()
+            if len(block) >= 80:
+                blocks.append(block)
+            last_idx = end_idx
+        trailing = clean_doc[last_idx:].strip()
+        if len(trailing) >= 80:
+            blocks.append(trailing)
+        if len(blocks) > 1:
+            return blocks
 
-    # 3. Tertiary boundary: Court headers and docket identifiers at line starts
-    line_start_pattern = re.compile(
-        r"(?=(?:\n\s*(?:JUZGADO|TRIBUNAL)\s+[\w\s,.-]+?(?:DE\s+COBRO|CIVIL|AGRARIO|CONCURSAL|MENOR\s+CUANT[IÍ]A|PRIMERA\s+INSTANCIA)|"
-        r"\n\s*(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*[0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+|"
-        r"\n\s*\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Za-z0-9]*\b|"
-        r"\n\s*(?:AVISO\s+DE\s+REMATE|EDICTO\s+DE\s+REMATE|PRIMER\s+REMATE|REMATE\s+JUDICIAL)\b))",
+    # 2. Secondary Strategy: Verified top-level header banners between distinct notices
+    # (Never include internal body markers like PRIMER REMATE, AVISO DE REMATE, or EXPEDIENTE)
+    header_pattern = re.compile(
+        r'(?:\n\s*|^)(?='
+        r'(?:[123]\s*v\.\s*[123]\.\s*(?:Ante\s+esta\s+notar[íi]a|En\s+la\s+puerta|En\s+este\s+Despacho|A\s+las)|'
+        r'PUBLICACI[ÓO]N\s+DE\s+(?:UNA|DOS|TRES)\s+VE[ZCES]+|'
+        r'(?:JUZGADO|TRIBUNAL)\s+[\w\s,.-]+?(?:DE\s+COBRO|CIVIL|AGRARIO|CONCURSAL|MENOR\s+CUANT[IÍ]A|PRIMERA\s+INSTANCIA|DE\s+HACIENDA)|'
+        r'Ante\s+esta\s+notar[íi]a\s*:|'
+        r'En\s+(?:esta|mi)\s+notar[íi]a\s*:|'
+        r'NOTAR[ÍI]A\s+DE\s+[A-Z]|'
+        r'AVISO\s+DE\s+SUBASTA\s+[A-Z]|'
+        r'REMATES\s+AVISOS\s+SERVICIOS\s+FIDUCIARIOS|'
+        r'CONSULTORES\s+FINANCIEROS\s+COFIN\s+S\.\s*A\.|'
+        r'CREDIBANJO\s*,?\s*S\.\s*A\.)'
+        r')',
         re.IGNORECASE
     )
-    line_parts = line_start_pattern.split(text)
-    valid_line_blocks = [p.strip() for p in line_parts if len(p.strip()) >= 80]
-    if len(valid_line_blocks) > 1:
-        return valid_line_blocks
+    header_splits = header_pattern.split(clean_doc)
+    valid_blocks = [p.strip() for p in header_splits if len(p.strip()) >= 80]
+    if len(valid_blocks) > 1:
+        return valid_blocks
 
-    return [text.strip()]
+    return [clean_doc]
 
 def split_into_expediente_blocks(text: str) -> List[str]:
     """Segment document text into discrete blocks and filter for real estate foreclosures."""
@@ -756,21 +792,20 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
                                 if doc_valid:
                                     doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
                                     hit_obj = doc_body.get("hits", {}) if isinstance(doc_body.get("hits"), dict) else {}
-                                    html = hit_obj.get("html", "")
-                                    if html and BeautifulSoup:
-                                        soup = BeautifulSoup(html, "html.parser")
-                                        hit_text = soup.get_text("\n", strip=True)
-                                    elif html:
-                                        hit_text = re.sub(r"<[^>]+>", "\n", html)
+                                    html_raw = hit_obj.get("html", "")
+                                    if html_raw:
+                                        hit_text = html_to_clean_text(html_raw)
                                     else:
                                         hit_text = hit_obj.get("texto") or hit_obj.get("contenido") or ""
+                                        if hit_text:
+                                            hit_text = html_module.unescape(hit_text).strip()
                                         
                                     if hit_text and len(hit_text) >= 100:
-                                        # Split by expediente blocks
+                                        # Split multi-notice documents or retain complete single notice
                                         blocks = split_into_expediente_blocks(hit_text)
                                         if blocks:
                                              edicts.extend(blocks)
-                                        else:
+                                        elif is_real_estate_foreclosure_edict(hit_text):
                                              edicts.append(hit_text.strip())
                         except Exception as doc_err:
                             logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")

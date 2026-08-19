@@ -326,7 +326,19 @@ def seed_baseline():
             "plaintiff": prop["plaintiff"],
             "defendant": prop["defendant"],
             "legal_summary": prop["legal_summary"],
-            "raw_edict_text": f"Edicto oficial de remate judicial. Expediente {prop['expediente_number']}, {prop['court_name']}. Finca matrícula {prop['folio_real']}, plano {prop['plano_catastrado']}. Base de {prop['currency']} {prop['base_price_call_1']:,.2f}.",
+            "raw_edict_text": (
+                f"{prop['court_name'].upper()}. En la puerta exterior de este Despacho; libre de gravámenes hipotecarios "
+                f"soportando servidumbres y afectaciones de ley; se subasta al mejor postor la finca del partido de {prop['province']}, "
+                f"matrícula de folio real número {prop['folio_real']}, situada en el distrito {prop['district']}, cantón {prop['canton']} de la provincia de {prop['province']}. "
+                f"Naturaleza: {prop['address_description']}. "
+                f"Linderos: norte: calle pública de acceso, sur: propiedad colindante privada, este: servidumbre de paso, oeste: finca vecina. "
+                f"Mide: {prop['area_m2']:,.2f} metros cuadrados. Plano catastrado número {prop['plano_catastrado']}. "
+                f"Con la base de {prop['currency']} {prop['base_price_call_1']:,.2f} en el primer remate que se efectuará a las 14:30 horas del primer señalamiento. "
+                f"De no haber postores, para el segundo remate se señalan las 14:30 horas del segundo señalamiento con la base de {prop['currency']} {prop['base_price_call_2']:,.2f} (rebajada en un 25% de la base original); "
+                f"y para el tercer remate se señalan las 14:30 horas del tercer señalamiento con la base de {prop['currency']} {prop['base_price_call_3']:,.2f} (25% de la base original). "
+                f"Se remata por ordenarse así en proceso de ejecución hipotecaria de {prop['plaintiff']} contra {prop['defendant']}. "
+                f"Expediente judicial número {prop['expediente_number']}.—Juez(a) Tramitador(a).—( IN202601{prop['expediente_number'].replace('-', '')[:6]} ). 3 v. 1."
+            ),
             "location": prop["location"],
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
