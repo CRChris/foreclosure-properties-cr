@@ -14,6 +14,7 @@ export interface NormalizedPlano {
   provinciaNombre: string; // e.g. 'Puntarenas', 'San José'
   numero: string; // e.g. '948699' (leading zeros stripped)
   anio: string; // e.g. '2004' (4 digits)
+  plano12Digits: string; // e.g. '609486992004'
   raw: string;
 }
 
@@ -85,10 +86,11 @@ const PROVINCE_MAP: Record<string, { code: string; name: string }> = {
 /**
  * Normalizes a Costa Rican cadastral plano number.
  * Examples:
- * - "P-0948699-2004" -> { provincia: "6", provinciaNombre: "Puntarenas", numero: "948699", anio: "2004" }
- * - "6-948699-2004" -> { provincia: "6", provinciaNombre: "Puntarenas", numero: "948699", anio: "2004" }
- * - "SJ-12345-2010" -> { provincia: "1", provinciaNombre: "San José", numero: "12345", anio: "2010" }
- * - "A-005678-98"   -> { provincia: "2", provinciaNombre: "Alajuela", numero: "5678", anio: "1998" }
+ * - "P-0948699-2004" -> { provincia: "6", provinciaNombre: "Puntarenas", numero: "948699", anio: "2004", plano12Digits: "609486992004" }
+ * - "6-948699-2004" -> { provincia: "6", provinciaNombre: "Puntarenas", numero: "948699", anio: "2004", plano12Digits: "609486992004" }
+ * - "SJ-12345-2010" -> { provincia: "1", provinciaNombre: "San José", numero: "12345", anio: "2010", plano12Digits: "100123452010" }
+ * - "A-005678-98"   -> { provincia: "2", provinciaNombre: "Alajuela", numero: "5678", anio: "1998", plano12Digits: "200056781998" }
+ * - "Plano: 6-948699-2004" -> matches accurately
  */
 export function normalizePlano(rawPlano?: string | null): NormalizedPlano | null {
   if (!rawPlano || typeof rawPlano !== 'string') {
@@ -100,19 +102,60 @@ export function normalizePlano(rawPlano?: string | null): NormalizedPlano | null
     return null;
   }
 
-  // Split by common delimiters: hyphens, slashes, underscores, or spaces
-  const parts = cleaned
-    .replace(/[^A-Z0-9\u00C0-\u00FF]+/g, '-')
-    .split('-')
-    .filter(Boolean);
-
-  if (parts.length < 3) {
-    return null;
+  // 1. Check if raw is already a pure 12-digit SNIT string, e.g. "609486992004"
+  const pure12Match = cleaned.match(/^([1-7])(\d{7})(\d{4})$/);
+  if (pure12Match) {
+    const provCode = pure12Match[1];
+    const provMatch = PROVINCE_MAP[provCode];
+    const num = pure12Match[2].replace(/^0+/, '');
+    const yr = pure12Match[3];
+    return {
+      provincia: provCode,
+      provinciaNombre: provMatch ? provMatch.name : `Provincia ${provCode}`,
+      numero: num || pure12Match[2],
+      anio: yr,
+      plano12Digits: `${provCode}${pure12Match[2]}${yr}`,
+      raw: rawPlano,
+    };
   }
 
-  const rawProvincia = parts[0];
-  const rawNumero = parts[1];
-  const rawAnio = parts[2];
+  // 2. Try regex extraction to find province prefix/code, document number (1-8 digits), and year (2 or 4 digits)
+  // Handles: "P-0948699-2004", "6-948699-2004", "SJ-12345-2010", "Plano catastrado 6-948699-2004", "No. 1-12345-2010"
+  const regex = /(?:^|[^\w])(SJ|AL|A|CAR|C|HER|H|GUA|G|PUN|P|LIM|L|[1-7])[\s\-_/]+0*(\d{1,8})[\s\-_/]+(\d{2,4})(?:[^\w]|$)/i;
+  const match = cleaned.match(regex);
+
+  let rawProvincia = '';
+  let rawNumero = '';
+  let rawAnio = '';
+
+  if (match) {
+    rawProvincia = match[1];
+    rawNumero = match[2];
+    rawAnio = match[3];
+  } else {
+    // Fallback: split by delimiters
+    const parts = cleaned
+      .replace(/[^A-Z0-9\u00C0-\u00FF]+/g, '-')
+      .split('-')
+      .filter(Boolean);
+
+    // Find the first part that is a valid province
+    let provIdx = -1;
+    for (let i = 0; i < parts.length; i++) {
+      if (PROVINCE_MAP[parts[i]]) {
+        provIdx = i;
+        break;
+      }
+    }
+
+    if (provIdx !== -1 && parts.length >= provIdx + 3) {
+      rawProvincia = parts[provIdx];
+      rawNumero = parts[provIdx + 1];
+      rawAnio = parts[provIdx + 2];
+    } else {
+      return null;
+    }
+  }
 
   const provMatch = PROVINCE_MAP[rawProvincia];
   if (!provMatch) {
@@ -137,11 +180,14 @@ export function normalizePlano(rawPlano?: string | null): NormalizedPlano | null
     return null;
   }
 
+  const plano12Digits = `${provMatch.code}${numero.padStart(7, '0')}${anio}`;
+
   return {
     provincia: provMatch.code,
     provinciaNombre: provMatch.name,
     numero,
     anio,
+    plano12Digits,
     raw: rawPlano,
   };
 }
@@ -164,7 +210,7 @@ export function convertCrtm05ToWgs84(x: number, y: number): [number, number] {
 /**
  * Recursively reprojects GeoJSON coordinates from CRTM05 to WGS84.
  */
-function reprojectCoordinates(coords: any): any {
+export function reprojectCoordinates(coords: any): any {
   if (
     Array.isArray(coords) &&
     coords.length >= 2 &&
@@ -235,7 +281,7 @@ export function calculatePolygonCentroid(ring: number[][]): { lat: number; lng: 
 /**
  * Extracts the primary exterior polygon ring and computes its centroid.
  */
-function extractCentroidFromGeometry(geometry: any): { lat: number; lng: number } | null {
+export function extractCentroidFromGeometry(geometry: any): { lat: number; lng: number } | null {
   if (!geometry || !geometry.type || !geometry.coordinates) {
     return null;
   }
@@ -281,8 +327,9 @@ export interface SnitGeocodeOptions {
 }
 
 /**
- * Queries SNIT (Sistema Nacional de Información Territorial) WFS service
- * to locate the exact cadastral polygon for a given plano.
+ * Queries SNIT (Sistema Nacional de Información Territorial) services
+ * (SIRI Cadastral API and OGC GeoServer WFS endpoints)
+ * to locate the exact cadastral polygon and GPS coordinates for a given plano.
  */
 export async function lookupCadastralPlano(
   rawPlano: string,
@@ -298,104 +345,129 @@ export async function lookupCadastralPlano(
     };
   }
 
-  const { provincia, numero, anio } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 12000;
+  const { provincia, numero, anio, plano12Digits } = normalized;
+  const timeoutMs = options?.timeoutMs ?? 10000;
   const customFetch = options?.fetchFn ?? fetch;
 
-  const baseUrl = 'https://geos.snitcr.go.cr/geoserver/wfs';
-  const cqlFilter = `plano='${numero}' AND anio='${anio}' AND provincia='${provincia}'`;
+  // 1. Query official SNIT SIRI service (Visor Fincas / Planos backend)
+  const siriUrls = [
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=plano&plano=${plano12Digits}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=plano&plano=${encodeURIComponent(`${provincia}-${numero}-${anio}`)}`,
+  ];
 
-  const url = new URL(baseUrl);
-  url.searchParams.set('service', 'WFS');
-  url.searchParams.set('version', '2.0.0');
-  url.searchParams.set('request', 'GetFeature');
-  url.searchParams.set('typeName', 'registro_inmobiliario:catastro');
-  url.searchParams.set('outputFormat', 'application/json');
-  url.searchParams.set('cql_filter', cqlFilter);
+  for (const siriUrl of siriUrls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await customFetch(siriUrl, {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
 
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+      if (res.ok) {
+        const siriData = await res.json();
+        if (siriData && siriData.result && siriData.data) {
+          const features = [
+            ...(siriData.data.zona_1?.features || []),
+            ...(siriData.data.zona_2?.features || []),
+          ];
 
-    const response = await customFetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timer));
+          if (features.length > 0) {
+            const reprojectedFeatures = features.map((feature: any) => ({
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: reprojectCoordinates(feature.geometry?.coordinates),
+              },
+            }));
 
-    if (!response.ok) {
-      return {
-        success: false,
-        isExact: false,
-        error: `SNIT WFS server returned status HTTP ${response.status}: ${response.statusText}`,
-        normalizedPlano: normalized,
-      };
-    }
+            const primaryFeature = reprojectedFeatures[0];
+            const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
 
-    const data = await response.json();
-
-    if (
-      !data ||
-      data.type !== 'FeatureCollection' ||
-      !Array.isArray(data.features) ||
-      data.features.length === 0
-    ) {
-      return {
-        success: false,
-        isExact: false,
-        error: `No cadastral records found for plano ${numero}-${anio} in province ${provincia}`,
-        normalizedPlano: normalized,
-      };
-    }
-
-    // Reproject all features in FeatureCollection from CRTM05 (EPSG:5367) to WGS84 (EPSG:4326)
-    const reprojectedFeatures = data.features.map((feature: any) => ({
-      ...feature,
-      geometry: {
-        ...feature.geometry,
-        coordinates: reprojectCoordinates(feature.geometry?.coordinates),
-      },
-    }));
-
-    const primaryFeature = reprojectedFeatures[0];
-    const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
-
-    if (!centroid || isNaN(centroid.lat) || isNaN(centroid.lng)) {
-      return {
-        success: false,
-        isExact: false,
-        error: 'Failed to compute centroid for cadastral polygon',
-        normalizedPlano: normalized,
-      };
-    }
-
-    const reprojectedGeoJSON: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: reprojectedFeatures,
-    };
-
-    return {
-      success: true,
-      lat: centroid.lat,
-      lng: centroid.lng,
-      polygonGeoJSON: reprojectedGeoJSON,
-      isExact: true,
-      normalizedPlano: normalized,
-      properties: primaryFeature.properties,
-    };
-  } catch (error: any) {
-    const isAbort = error?.name === 'AbortError';
-    return {
-      success: false,
-      isExact: false,
-      error: isAbort
-        ? `SNIT WFS request timed out after ${timeoutMs}ms`
-        : error?.message || 'Unknown network or parsing error querying SNIT',
-      normalizedPlano: normalized,
-    };
+            if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+              return {
+                success: true,
+                lat: centroid.lat,
+                lng: centroid.lng,
+                polygonGeoJSON: {
+                  type: 'FeatureCollection',
+                  features: reprojectedFeatures,
+                },
+                isExact: true,
+                normalizedPlano: normalized,
+                properties: primaryFeature.properties,
+              };
+            }
+          }
+        }
+      }
+    } catch {}
   }
+
+  // 2. Query SNIT GeoServer WFS endpoints as fallback
+  const wfsEndpoints = [
+    'https://geos.snitcr.go.cr/geoserver/wfs',
+    'https://siri.snitcr.go.cr/Geoservicios/wfs',
+  ];
+
+  for (const baseUrl of wfsEndpoints) {
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set('service', 'WFS');
+      url.searchParams.set('version', '1.1.0');
+      url.searchParams.set('request', 'GetFeature');
+      url.searchParams.set('typeName', 'catastro');
+      url.searchParams.set('outputFormat', 'application/json');
+      url.searchParams.set('cql_filter', `plano='${numero}' AND anio='${anio}' AND provincia='${provincia}'`);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await customFetch(url.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.type === 'FeatureCollection' && Array.isArray(data.features) && data.features.length > 0) {
+          const reprojectedFeatures = data.features.map((feature: any) => ({
+            ...feature,
+            geometry: {
+              ...feature.geometry,
+              coordinates: reprojectCoordinates(feature.geometry?.coordinates),
+            },
+          }));
+
+          const primaryFeature = reprojectedFeatures[0];
+          const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
+
+          if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+            return {
+              success: true,
+              lat: centroid.lat,
+              lng: centroid.lng,
+              polygonGeoJSON: {
+                type: 'FeatureCollection',
+                features: reprojectedFeatures,
+              },
+              isExact: true,
+              normalizedPlano: normalized,
+              properties: primaryFeature.properties,
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    success: false,
+    isExact: false,
+    error: `No cadastral records found in SNIT for plano ${numero}-${anio} in province ${provincia}`,
+    normalizedPlano: normalized,
+  };
 }
 
 // Alias for convenience / backward-compatibility with requirements

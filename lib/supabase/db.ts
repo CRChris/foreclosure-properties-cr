@@ -12,7 +12,7 @@ import {
   LocationType,
 } from '@/lib/types/auction';
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
-import { geocodePropertyLocation } from '@/lib/services/snitGeocodeService';
+import { geocodePropertyLocation, extractCentroidFromGeometry } from '@/lib/services/snitGeocodeService';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -243,58 +243,138 @@ const UNIQUE_REAL_ESTATE_GALLERIES: string[][] = [
   ],
 ];
 
-function mapRowToAuction(item: any): Auction {
-  let lat = typeof item.latitude === 'number' ? item.latitude : null;
-  let lng = typeof item.longitude === 'number' ? item.longitude : null;
+/**
+ * Decodes PostGIS Hex EWKB geometry point (e.g. '0101000020E6100000...') into WGS84 [lng, lat]
+ */
+function parseHexEWKBPoint(hex: string): { lng: number; lat: number } | null {
+  if (typeof hex !== 'string' || hex.length < 42 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    return null;
+  }
+  try {
+    const buf = Buffer.from(hex, 'hex');
+    const isLittleEndian = buf.readUInt8(0) === 1;
+    let offset = 5;
+    const type = isLittleEndian ? buf.readUInt32LE(1) : buf.readUInt32BE(1);
+    // Check if SRID flag (0x20000000) is present
+    if ((type & 0x20000000) !== 0) {
+      offset = 9;
+    }
+    const x = isLittleEndian ? buf.readDoubleLE(offset) : buf.readDoubleBE(offset);
+    const y = isLittleEndian ? buf.readDoubleLE(offset + 8) : buf.readDoubleBE(offset + 8);
+    if (!isNaN(x) && !isNaN(y) && x >= -86.5 && x <= -82.0 && y >= 8.0 && y <= 12.0) {
+      return { lng: x, lat: y };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
-  if ((!lat || !lng) && item.location) {
+function mapRowToAuction(item: any): Auction {
+  let lat = typeof item.latitude === 'number' 
+    ? item.latitude 
+    : (typeof item.lat === 'number' ? item.lat : (typeof item.coordinates_lat === 'number' ? item.coordinates_lat : null));
+  let lng = typeof item.longitude === 'number' 
+    ? item.longitude 
+    : (typeof item.lng === 'number' ? item.lng : (typeof item.coordinates_lng === 'number' ? item.coordinates_lng : null));
+
+  let parcelPolygonObj: any = null;
+  if (item.parcel_polygon) {
+    if (typeof item.parcel_polygon === 'string') {
+      try {
+        parcelPolygonObj = JSON.parse(item.parcel_polygon);
+      } catch {
+        parcelPolygonObj = null;
+      }
+    } else if (typeof item.parcel_polygon === 'object') {
+      parcelPolygonObj = item.parcel_polygon;
+    }
+  }
+
+  // If coordinates are not yet resolved, try parsing item.location
+  if ((lat === null || lng === null) && item.location) {
     if (typeof item.location === 'object' && Array.isArray(item.location.coordinates)) {
       lng = item.location.coordinates[0];
       lat = item.location.coordinates[1];
     } else if (typeof item.location === 'string') {
+      // 1. Try WKT POINT(lng lat) or SRID=4326;POINT(lng lat)
       const match = item.location.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
       if (match) {
         lng = parseFloat(match[1]);
         lat = parseFloat(match[2]);
+      } else {
+        // 2. Try PostGIS Hex EWKB binary representation
+        const hexPoint = parseHexEWKBPoint(item.location);
+        if (hexPoint) {
+          lng = hexPoint.lng;
+          lat = hexPoint.lat;
+        }
       }
     }
   }
+
+  // If still missing coordinates but parcel_polygon exists, compute centroid from polygon
+  if ((lat === null || lng === null) && parcelPolygonObj) {
+    const centroid = extractCentroidFromGeometry(
+      parcelPolygonObj.type === 'FeatureCollection'
+        ? parcelPolygonObj.features?.[0]?.geometry
+        : (parcelPolygonObj.type === 'Feature' ? parcelPolygonObj.geometry : parcelPolygonObj)
+    );
+    if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+      lat = centroid.lat;
+      lng = centroid.lng;
+    }
+  }
+
+  const isExactCadastral = item.location_type === 'exact_cadastral' || (parcelPolygonObj !== null);
 
   const normalizedDistrict = normalizeGeoKey(item.district);
   const normalizedCanton = normalizeGeoKey(item.canton);
   const normalizedProv = normalizeGeoKey(item.province || 'san jose');
   const fullText = `${item.canton || ''} ${item.district || ''} ${item.address_description || ''} ${item.legal_summary || ''}`.toLowerCase();
 
-  // Safeguard: If property is for Pérez Zeledón, ensure it is accurately grounded at [9.3739, -83.7058]
-  // (Prevents any Pérez Zeledón property from showing up on Jacó pin 9.6152, -84.6298)
-  const isPerezZeledon = 
-    normalizedCanton.includes('perez zeledon') ||
-    normalizedDistrict.includes('perez zeledon') ||
-    normalizedDistrict === 'daniel flores' ||
-    normalizedDistrict === 'rivas' ||
-    fullText.includes('perez zeledon') ||
-    fullText.includes('pérez zeledón') ||
-    fullText.includes('san isidro de el general');
+  // Safeguard: ONLY apply general town centroids if exact cadastral location is NOT present
+  if (!isExactCadastral) {
+    const isPerezZeledon = 
+      normalizedCanton.includes('perez zeledon') ||
+      normalizedDistrict.includes('perez zeledon') ||
+      normalizedDistrict === 'daniel flores' ||
+      normalizedDistrict === 'rivas' ||
+      fullText.includes('perez zeledon') ||
+      fullText.includes('pérez zeledón') ||
+      fullText.includes('san isidro de el general');
 
-  const isGarabitoOrJaco =
-    normalizedCanton.includes('garabito') ||
-    normalizedDistrict.includes('jaco') ||
-    normalizedDistrict.includes('jacó') ||
-    fullText.includes('garabito') ||
-    fullText.includes('jaco') ||
-    fullText.includes('jacó') ||
-    fullText.includes('herradura');
+    const isGarabitoOrJaco =
+      normalizedCanton.includes('garabito') ||
+      normalizedDistrict.includes('jaco') ||
+      normalizedDistrict.includes('jacó') ||
+      fullText.includes('garabito') ||
+      fullText.includes('jaco') ||
+      fullText.includes('jacó') ||
+      fullText.includes('herradura');
 
-  if (isPerezZeledon && !isGarabitoOrJaco) {
-    // If coordinates are missing or mistakenly placed at Jacó / West Coast Puntarenas, override to Pérez Zeledón
-    if (!lat || !lng || (lat > 9.55 && lat < 9.70 && lng < -84.50 && lng > -84.75)) {
-      lat = 9.3739;
-      lng = -83.7058;
-    }
-  } else if (isGarabitoOrJaco && !isPerezZeledon) {
-    if (!lat || !lng || (lat < 9.45 && lng > -83.85)) {
-      lat = 9.6152;
-      lng = -84.6298;
+    if (isPerezZeledon && !isGarabitoOrJaco) {
+      // If coordinates are missing or mistakenly placed at Jacó / West Coast Puntarenas, override to Pérez Zeledón
+      if (!lat || !lng || (lat > 9.55 && lat < 9.70 && lng < -84.50 && lng > -84.75)) {
+        lat = 9.3739;
+        lng = -83.7058;
+      }
+    } else if (isGarabitoOrJaco && !isPerezZeledon) {
+      if (!lat || !lng || (lat < 9.45 && lng > -83.85)) {
+        lat = 9.6152;
+        lng = -84.6298;
+      }
+    } else if (!lat || !lng) {
+      if (COSTA_RICA_CENTROIDS[normalizedDistrict]) {
+        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedDistrict];
+      } else if (COSTA_RICA_CENTROIDS[normalizedCanton]) {
+        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedCanton];
+      } else if (COSTA_RICA_CENTROIDS[normalizedProv]) {
+        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedProv];
+      } else {
+        lat = 9.9281;
+        lng = -84.0907;
+      }
     }
   } else if (!lat || !lng) {
     if (COSTA_RICA_CENTROIDS[normalizedDistrict]) {
@@ -404,10 +484,8 @@ function mapRowToAuction(item: any): Auction {
     raw_edict_text: item.raw_edict_text || '',
     latitude: lat,
     longitude: lng,
-    location_type: (item.location_type as any) || (item.parcel_polygon ? 'exact_cadastral' : 'approximate_town'),
-    parcel_polygon: item.parcel_polygon 
-      ? (typeof item.parcel_polygon === 'string' ? JSON.parse(item.parcel_polygon) : item.parcel_polygon) 
-      : null,
+    location_type: (item.location_type as any) || (parcelPolygonObj ? 'exact_cadastral' : 'approximate_town'),
+    parcel_polygon: parcelPolygonObj,
     images: Array.isArray(item.images) && item.images.length > 0 ? item.images : uniqueGallery,
     created_at: item.created_at || new Date().toISOString(),
     updated_at: item.updated_at || new Date().toISOString(),
