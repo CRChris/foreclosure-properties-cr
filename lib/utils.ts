@@ -426,10 +426,12 @@ export function detectPropertyCharacteristics(data: {
   mortgage_priority?: MortgagePriority;
 }) {
   // Combine all descriptive text sources while avoiding court name noise (e.g. "Juzgado Civil y Agrario")
-  const natRaw = (data.naturaleza_raw || '').toLowerCase();
+  const extractedNat = (data.raw_edict_text?.match(/(?:naturaleza\s*[:\s]+|la\s+cual\s+es\s+|terreno\s+de\s+|finca\s+que\s+es\s+)([^.]+?)(?=\.\s*(?:situada|ubicada|mide|linderos|plano)|situada|ubicada|mide|linderos|plano|\.|$)/i) || [])[1] || '';
+  const natRaw = (data.naturaleza_raw || extractedNat || '').toLowerCase();
   const text = `${data.naturaleza_raw || ''} ${data.address_description || ''} ${data.legal_summary || ''} ${data.raw_edict_text || ''}`.toLowerCase();
 
   // 1. Explicit construction presence markers (Costa Rica Legal Semantics)
+  // Must describe an existing built structure on the parcel
   const hasExplicitBuiltConstruction = (
     text.includes('con una casa') ||
     text.includes('con casa de habitacion') ||
@@ -464,13 +466,15 @@ export function detectPropertyCharacteristics(data: {
     natRaw.includes('lote sin edificar') ||
     natRaw.includes('solar sin edificar') ||
     natRaw.includes('solar') ||
-    (natRaw.includes('terreno') && !hasExplicitBuiltConstruction) ||
-    (natRaw.includes('lote') && !hasExplicitBuiltConstruction)
+    (natRaw.includes('lote condominal') && !hasExplicitBuiltConstruction) ||
+    (natRaw.includes('lote') && !hasExplicitBuiltConstruction) ||
+    (natRaw.includes('terreno') && !hasExplicitBuiltConstruction)
   );
 
   // 3. High-confidence specific signal detectors
   const isCondoSignal = (
     text.includes('condominio') ||
+    text.includes('condominal') ||
     text.includes('finca filial') ||
     text.includes('casa filial') ||
     text.includes('filial número') ||
@@ -572,8 +576,11 @@ export function detectPropertyCharacteristics(data: {
       hasConstruction = false;
     } else if (hasExplicitBuiltConstruction) {
       hasConstruction = true;
-    } else if (propertyType === 'single_family_home' || propertyType === 'condo_apartment' || propertyType === 'commercial_industrial') {
+    } else if (propertyType === 'single_family_home' || propertyType === 'commercial_industrial') {
       hasConstruction = true;
+    } else if (propertyType === 'condo_apartment') {
+      // Condo apartment with bare land phrase is unbuilt condo lot
+      hasConstruction = !isBareLandPhrase;
     } else {
       hasConstruction = false;
     }
