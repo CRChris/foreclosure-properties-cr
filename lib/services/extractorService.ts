@@ -164,7 +164,7 @@ export function parseSpanishWordsToNumber(text: string): number {
 
   // Check for decimals / céntimos / decímetros
   let fractionalPart = 0;
-  const decMatch = norm.match(/con\s+([a-z\s]+?)\s+(?:decimetros|centimos|centavos|centesimas|decimas)/i);
+  const decMatch = norm.match(/con\s+([a-z\s,]+?)\s+(?:decimetros|centimos|centavos|centesimas|decimas)/i);
   let mainText = norm;
   if (decMatch) {
     const fracWords = decMatch[1].split(/[\s,-]+/).filter(w => w && w !== 'y' && w !== 'de');
@@ -179,7 +179,7 @@ export function parseSpanishWordsToNumber(text: string): number {
   }
 
   const words = mainText.split(/[\s,-]+/).filter(w => (
-    w && !['de', 'con', 'y', 'del', 'la', 'el', 'los', 'las', 'metros', 'cuadrados', 'colones', 'dolares', 'exactos', 'netos'].includes(w)
+    w && !['de', 'con', 'y', 'del', 'la', 'el', 'los', 'las', 'metros', 'cuadrados', 'colones', 'dolares', 'exactos', 'netos', 'decimetros'].includes(w)
   ));
 
   let total = 0;
@@ -209,17 +209,19 @@ export function parseSpanishWordsToNumber(text: string): number {
  * Extracts and converts area clauses starting with "MIDE:" or similar into numeric square meters.
  * Examples:
  * - "MIDE: DOSCIENTOS CINCUENTA METROS CUADRADOS" -> 250.00
+ * - "MIDE: 1687 metros con noventa y seis, decímetros cuadrados" -> 1687.96
  * - "MIDE: TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS CUADRADOS" -> 3500.50
  * - "UNA HECTÁREA CON TRES MIL METROS" -> 13000.00
  * - "45.000,00 m2" -> 45000.00
  */
 export function extractLotSizeM2(text: string): number {
   if (!text) return 0;
+  const normalizedText = text.replace(/\s+/g, ' ');
 
   // 1. Check for compound hectare + meters pattern (e.g., "UNA HECTÁREA CON TRES MIL METROS", "2 hectáreas con 500 m2")
-  const haPlusMetersMatch = text.match(/(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)/i);
+  const haPlusMetersMatch = normalizedText.match(/(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^.,;\n]+?)(?:metros|m2|m²)/i);
   if (haPlusMetersMatch) {
-    const haCountMatch = text.match(/(una|[0-9]+)\s+hect[áa]rea/i);
+    const haCountMatch = normalizedText.match(/(una|[0-9]+)\s+hect[áa]rea/i);
     let haMultiplier = 1;
     if (haCountMatch) {
       if (haCountMatch[1].toLowerCase() === 'una') haMultiplier = 1;
@@ -233,8 +235,8 @@ export function extractLotSizeM2(text: string): number {
   }
 
   // 2. Extract the specific "MIDE:" or "CABIDA:" clause
-  const mideClauseMatch = text.match(/(?:mide|cabida|superficie|área|medida)\s*[:\s]*([^\.;\n]+?)(?:linderos|linda|colinda|plano|situada|ubicada|segundo|\.|$)/i);
-  const clause = mideClauseMatch ? mideClauseMatch[1].trim() : text;
+  const mideClauseMatch = normalizedText.match(/(?:mide|cabida|superficie|área|medida)\s*[:\s]*([^.]+?)(?=\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z]|$)|plano\s*:|\.|$)/i);
+  const clause = mideClauseMatch ? mideClauseMatch[1].trim() : normalizedText;
 
   // 3. Check for standalone hectares (e.g. "12 hectáreas", "1.5 ha")
   const haMatch = clause.match(/([0-9]+(?:[\.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)/i);
@@ -246,7 +248,7 @@ export function extractLotSizeM2(text: string): number {
     if (num > 0) return num * 10000;
   }
 
-  // 4. Check for digit numbers with meters/decimeters (e.g. "165.50 m2", "45.000,00 metros cuadrados")
+  // 4. Check for digit numbers with meters/decimeters (e.g. "1687 metros con noventa y seis, decímetros cuadrados", "165.50 m2", "45.000,00 metros cuadrados")
   const digitMatch = clause.match(/([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts)/i);
   if (digitMatch) {
     let clean = digitMatch[1].trim();
@@ -272,7 +274,7 @@ export function extractLotSizeM2(text: string): number {
     const val = parseFloat(clean);
     if (!isNaN(val) && val > 0) {
       // Check if there is an additional decimeters clause
-      const decMatch = clause.match(/con\s+([0-9]+|[a-záéíóú\s]+?)\s*(?:dec[íi]metros)/i);
+      const decMatch = clause.match(/con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)/i);
       if (decMatch) {
         const decVal = /^\d+/.test(decMatch[1].trim())
           ? parseFloat(decMatch[1].trim())
@@ -284,11 +286,8 @@ export function extractLotSizeM2(text: string): number {
   }
 
   // 5. Spelled-out Spanish words in the "MIDE:" clause
-  const wordAreaMatch = clause.match(/([a-záéíóú\s]+?)(?:metros\s+cuadrados|m2|m²|dec[íi]metros|\.|$)/i);
-  if (wordAreaMatch) {
-    const areaNum = parseSpanishWordsToNumber(clause);
-    if (areaNum > 0) return areaNum;
-  }
+  const areaNum = parseSpanishWordsToNumber(clause);
+  if (areaNum > 0) return areaNum;
 
   return 0;
 }
@@ -432,17 +431,24 @@ export function extractVerbatimNaturaleza(text: string): string {
 export function extractPropertyDeterministic(edictText: string): PropertyAuction | null {
   if (!edictText || edictText.trim().length < 50) return null;
 
-  const norm = normalizeSpanishText(edictText);
+  const normalizedText = edictText.replace(/\s+/g, ' ');
+  const norm = normalizeSpanishText(normalizedText);
 
   // 1. Folio Real / Finca
-  const folioMatch = edictText.match(/(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})/i)
-    || edictText.match(/\b([1-7]-[0-9]{5,7}-[0-9]{3})\b/);
+  const folioMatch = normalizedText.match(/(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]{1,7}(?:-[A-Za-z0-9]+){1,3}|[0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})/i)
+    || normalizedText.match(/\b([1-7]-[0-9]{5,7}-[0-9]{3})\b/i);
   
   let fincaNumber = folioMatch ? folioMatch[1].trim() : '1-000000-000';
 
   // 2. Province
   let province = 'San José';
-  if (fincaNumber.includes('-') && PROVINCE_MAP[fincaNumber[0]]) {
+  const provExplicitMatch = normalizedText.match(/(?:provincia\s+de|partido\s+de)\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
+  if (provExplicitMatch) {
+    const pKey = normalizeSpanishText(provExplicitMatch[1].trim());
+    if (PROVINCE_MAP[pKey]) {
+      province = PROVINCE_MAP[pKey];
+    }
+  } else if (fincaNumber.includes('-') && PROVINCE_MAP[fincaNumber[0]]) {
     province = PROVINCE_MAP[fincaNumber[0]];
   } else {
     for (const [pName, pStandard] of Object.entries(PROVINCE_MAP)) {
@@ -462,50 +468,54 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   }
 
   // 3. Plano Catastrado
-  const planoMatch = edictText.match(/(?:plano\s*(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s*[:\.]?|[:\.]\s*|\s+)?|catastro\s*n[úu]mero\s*[:\.]?\s*)([A-Z0-9]{1,4}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)/i);
+  const planoMatch = normalizedText.match(/(?:plano\s*(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s*[:\.]?|[:\.]\s*|\s+)?|catastro\s*n[úu]mero\s*[:\.]?\s*)([A-Z0-9]{1,4}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)/i);
   const planoNumber = planoMatch ? planoMatch[1].trim() : null;
 
   // 4. Canton & District
-  const cantonMatch = edictText.match(/cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)/i);
+  const cantonMatch = normalizedText.match(/cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)/i);
   const canton = cantonMatch ? cantonMatch[1].trim() : null;
 
-  const distMatch = edictText.match(/distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)/i);
+  const distMatch = normalizedText.match(/distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)/i);
   const district = distMatch ? distMatch[1].trim() : null;
 
   // 5. Verbatim Naturaleza & Classification
-  const naturalezaRaw = extractVerbatimNaturaleza(edictText) || `Inmueble situado en ${province}`;
-  const { property_type, is_constructed } = classifyPropertyNaturaleza(naturalezaRaw, edictText);
+  const naturalezaRaw = extractVerbatimNaturaleza(normalizedText) || `Inmueble situado en ${province}`;
+  const { property_type, is_constructed } = classifyPropertyNaturaleza(naturalezaRaw, normalizedText);
 
   // 6. Lot Size in m2
-  const lotSizeM2 = extractLotSizeM2(edictText) || 250.0;
+  const lotSizeM2 = extractLotSizeM2(normalizedText) || 250.0;
 
   // 7. Base Price & Currency
   let currency: "CRC" | "USD" = "CRC";
-  if (norm.includes('dolar') || norm.includes('usd') || edictText.includes('$')) {
+  if (norm.includes('dolar') || norm.includes('usd') || edictText.includes('$') || norm.includes('estados unidos')) {
     currency = "USD";
   }
 
   let basePrice = 0;
-  const baseMatch = edictText.match(/(?:base\s+de\s+|con\s+la\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\.\n]{1,120})/i);
+  const baseMatch = normalizedText.match(/(?:con\s+la\s+base\s+de|base\s+de|precio\s+base\s+de|base\s*:)\s*([^,;\n]+)/i);
   if (baseMatch) {
-    const rawPriceStr = baseMatch[1];
-    const numMatch = rawPriceStr.match(/([0-9]{1,3}(?:[\.,][0-9]{3})+(?:[\.,][0-9]{2})?|[0-9]{4,12})/);
+    const rawPriceStr = baseMatch[1].trim();
+    const numMatch = rawPriceStr.match(/([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]+(?:[\.,][0-9]+)?)/);
     if (numMatch) {
       let clean = numMatch[1].trim();
-      if (clean.includes(',') && clean.includes('.')) {
+      const dotParts = clean.split('.');
+      if (dotParts.length === 3 && dotParts[2].length === 2 && dotParts[1].length === 3) {
+        clean = dotParts[0] + dotParts[1] + '.' + dotParts[2];
+      } else if (clean.includes(',') && clean.includes('.')) {
         if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
           clean = clean.replace(/\./g, '').replace(',', '.');
         } else {
           clean = clean.replace(/,/g, '');
         }
       } else if (clean.includes('.')) {
-        const parts = clean.split('.');
-        if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+        if (dotParts.length > 2 || (dotParts.length === 2 && dotParts[1].length === 3)) {
           clean = clean.replace(/\./g, '');
         }
       } else if (clean.includes(',')) {
-        const parts = clean.split(',');
-        if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+        const commaParts = clean.split(',');
+        if (commaParts.length === 2 && commaParts[1].length <= 2) {
+          clean = clean.replace(',', '.');
+        } else {
           clean = clean.replace(/,/g, '');
         }
       }
@@ -516,15 +526,15 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   }
 
   // 8. Expediente Docket Number
-  const expMatch = edictText.match(/\b([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Za-z0-9]*)\b/i)
-    || edictText.match(/(?:EXP(?:EDIENTE)?|NO\.\s*EXP\.?)\s*[:\.\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+)/i);
+  const expMatch = normalizedText.match(/\b([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Za-z0-9]*)\b/i)
+    || normalizedText.match(/(?:EXP(?:EDIENTE)?|NO\.\s*EXP\.?)\s*[:\.\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+)/i)
+    || normalizedText.match(/\(\s*(IN[0-9]{8,14})\s*\)/i);
   const expediente = expMatch ? expMatch[1].trim() : null;
 
   // 9. Auction Date (Call 1)
   let auctionDate: string | null = null;
-  const dateMatch = edictText.match(/(?:a\s+las|al\s+ser\s+las)\s+[^\.\n,;]+?(?:202[4-9]|dos\s+mil\s+veinti[a-z]+)/i);
+  const dateMatch = normalizedText.match(/(?:a\s+las|al\s+ser\s+las)\s+[^\.\n,;]+?(?:202[4-9]|dos\s+mil\s+veinti[a-z]+)/i);
   if (dateMatch) {
-    // Generate ISO estimate with UTC-6
     auctionDate = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
   }
 

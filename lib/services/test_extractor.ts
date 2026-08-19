@@ -88,6 +88,50 @@ function runTypeScriptExtractorTests() {
     console.log('     ', JSON.stringify(validated, null, 2));
   }
 
+  // 4. Test Verbatim Notary Foreclosure Edict (IN202601106505)
+  console.log('\n4. Testing Verbatim Notary Foreclosure Edict (IN202601106505 - Tárcoles Condominium Lot)...');
+  const verbatimNotice = `2 v. 2.
+Ante esta notaría: Rodolfo Espinoza Zamora, con oficina 
+abierta en San José, avenida primera, calles 25 y 27 N° 
+2552, 2 casas contiguo al Restaurante Limoncello, de paso 
+en Heredia, San Pablo, Residencial Rincón verde 2, casa 
+6- A. En la puerta exterior, se subasta al mejor postor libre
+de gravámenes soportando gravámenes o afectaciones: si
+hay: reservas y restricciones citas 311-16547-01-0990-001,
+servidumbre de paso citas 536-14235-01-0002-001. La finca
+matrícula 42537-F-000, naturaleza: lote condominal 3, terreno
+apto para construir que se destinará a uso habitacional y que
+tendrá una altura máxima de 3 pisos, situada en el distrito
+2-Tarcoles, cantón 11-Garabito de la provincia de Puntarenas.
+Linderos: norte: calle del condominio, sur: zona verde N° 1,
+este: lote condominal 4, oeste: lote condominal 1 en medio
+servidumbre N° 1. Mide: 1687 metros con noventa y seis,
+decímetros cuadrados. Plano: P-0948699-2004. Con la base de
+$50.000.00, moneda oficial de los Estados Unidos de América
+para tal efecto se señala las 12 medio día del 11 de agosto del
+2026. De no haber postores, el segundo remate se efectuará
+a las 12 medio día del 19 de agosto del 2026, con la base de
+$37.500.00. De no haber postores, el tercer remate se efectuará 
+a las 12 medio día del 27 de agosto del 2026, con la base de
+$12.500.00. ( IN202601106505 ).`;
+
+  const parsedVerbatim = extractPropertyDeterministic(verbatimNotice);
+  console.assert(parsedVerbatim !== null, 'Verbatim edict parse should not be null');
+  if (parsedVerbatim) {
+    const valVerbatim = PropertyAuctionSchema.parse(parsedVerbatim);
+    console.assert(Math.abs(valVerbatim.lot_size_m2 - 1687.96) < 0.01, `Area mismatch: expected 1687.96, got ${valVerbatim.lot_size_m2}`);
+    console.assert(valVerbatim.plano_number === 'P-0948699-2004', `Plano mismatch: expected P-0948699-2004, got ${valVerbatim.plano_number}`);
+    console.assert(valVerbatim.is_constructed === false, `is_constructed must be false, got ${valVerbatim.is_constructed}`);
+    console.assert(valVerbatim.property_type === 'lot', `property_type must be lot, got ${valVerbatim.property_type}`);
+    console.assert(valVerbatim.currency === 'USD', `currency must be USD, got ${valVerbatim.currency}`);
+    console.assert(valVerbatim.base_price === 50000, `base_price must be 50000, got ${valVerbatim.base_price}`);
+    console.assert(valVerbatim.canton === 'Garabito', `canton mismatch: expected Garabito, got ${valVerbatim.canton}`);
+    console.assert(valVerbatim.district === 'Tarcoles', `district mismatch: expected Tarcoles, got ${valVerbatim.district}`);
+    console.assert(valVerbatim.province === 'Puntarenas', `province mismatch: expected Puntarenas, got ${valVerbatim.province}`);
+    console.log('   ✓ Verbatim IN202601106505 notice parsed & validated with Zod:');
+    console.log('     ', JSON.stringify(valVerbatim, null, 2));
+  }
+
   console.log('\n================================================================');
   console.log('ALL TYPESCRIPT UNIT TESTS & ZOD VALIDATIONS PASSED!');
   console.log('================================================================');

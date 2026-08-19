@@ -1089,7 +1089,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # 3. Property Folio Real / Matrícula
         folio_patterns = [
-            r"(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})",
+            r"(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]{1,7}(?:-[A-Za-z0-9]+){1,3}|[0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})",
             r"\b([1-7]-[0-9]{5,7}-[0-9]{3})\b",
             r"(?:finca\s+inscrita\s+en\s+el\s+Registro\s+Público[^\(]*\()([0-9]-[0-9]+-[0-9]+|[0-9]+-[0-9]+)",
         ]
@@ -1123,7 +1123,14 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         }
         detected_prov = "San José"
         
-        if "-" in folio and folio[0] in prov_code_map:
+        prov_explicit = re.search(r"(?:provincia\s+de|partido\s+de)\s+([A-Za-zÁÉÍÓÚáéíóú]+)", edict_text, re.I)
+        if prov_explicit:
+            p_cand = prov_explicit.group(1).strip().lower()
+            for p_k, p_v in prov_code_map.items():
+                if normalize_text(p_v).lower() == normalize_text(p_cand).lower():
+                    detected_prov = p_v
+                    break
+        elif "-" in folio and folio[0] in prov_code_map:
             detected_prov = prov_code_map[folio[0]]
         else:
             for prov in PROVINCE_PREFIXES.keys():
@@ -1164,45 +1171,39 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         plano_match = re.search(r"(?:plano\s*(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s*[:\.]?|[:\.]\s*|\s+)?|catastro\s*n[úu]mero\s*[:\.]?\s*)([A-Z0-9]{1,4}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        clean_text = re.sub(r'(?<!\n)\n(?!\n)', ' ', edict_text)
+        clean_text = re.sub(r'\s+', ' ', edict_text)
 
         # 6. Currency & 3-Call Base Prices
-        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|siguiente\s+base\s*:|base\s*:)\s*([^\;\.]{1,250})(?:\.|\;|\n\n)", clean_text, re.I)
-        if not base_match:
-            base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+)", edict_text, re.I)
-        base_sentence = base_match.group(0) if base_match else edict_text
+        base_match = re.search(r"(?:con\s+la\s+base\s+de|base\s+de|por\s+la\s+base\s+de|con\s+una\s+base\s+de|precio\s+base\s+de|siguiente\s+base\s*:|base\s*:)\s*([^,;\n]+)", clean_text, re.I)
+        base_sentence = base_match.group(0) if base_match else clean_text
         b_low = base_sentence.lower()
 
-        if "colón" in b_low or "colones" in b_low or "₡" in base_sentence or "¢" in base_sentence or "crc" in b_low:
-            currency = "CRC"
-        elif "dólar" in b_low or "dolares" in b_low or "usd" in b_low or "$" in base_sentence:
+        currency = "CRC"
+        if any(w in b_low for w in ["dólar", "dolar", "usd", "estados unidos", "moneda oficial de los estados unidos"]) or "$" in base_sentence or "usd" in text_lower:
             currency = "USD"
-        else:
-            if "colón" in text_lower or "colones" in text_lower or "₡" in edict_text or "¢" in edict_text:
-                currency = "CRC"
-            elif "dólar" in text_lower or "dolares" in text_lower or "usd" in text_lower:
-                currency = "USD"
-            else:
-                currency = "CRC"
+        elif any(w in b_low for w in ["colón", "colon", "crc", "céntimo", "centimo"]) or "¢" in base_sentence:
+            currency = "CRC"
+        elif any(w in text_lower for w in ["dólares", "dolares", "usd", "estados unidos"]) or "$" in edict_text:
+            currency = "USD"
 
-        raw_price_matches = re.findall(
-            r'(?:USD|CRC|\$|₡|¢)?\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})',
-            base_sentence,
-            re.I
-        )
+        # Base prices for calls 1, 2, 3
         prices = []
-        for match_str in raw_price_matches:
-            if match_str:
-                val = parse_cr_price_string(match_str)
-                if val:
-                    if currency == "USD" and 3000 <= val <= 50000000:
-                        prices.append(val)
-                    elif currency == "CRC" and 500000 <= val <= 20000000000:
-                        prices.append(val)
+        
+        # Check standard digit formats in base sentence
+        # Support formats like "$50.000.00", "25.000.000,00", "220,000.00"
+        num_candidates = re.findall(r'([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})', base_sentence)
+        for num_str in num_candidates:
+            v = parse_cr_price_string(num_str)
+            if v:
+                dot_parts = num_str.split('.')
+                if len(dot_parts) == 3 and len(dot_parts[1]) == 3 and len(dot_parts[2]) == 2:
+                    v = float(dot_parts[0] + dot_parts[1] + '.' + dot_parts[2])
+                if (currency == "USD" and 1000 <= v <= 50000000) or (currency == "CRC" and 500000 <= v <= 20000000000):
+                    prices.append(v)
 
         if not prices:
             word_val = parse_spanish_words_to_number(base_sentence)
-            if (currency == "USD" and 3000 <= word_val <= 50000000) or (currency == "CRC" and 500000 <= word_val <= 20000000000):
+            if (currency == "USD" and 1000 <= word_val <= 50000000) or (currency == "CRC" and 500000 <= word_val <= 20000000000):
                 prices.append(word_val)
 
         if not prices:
@@ -1210,7 +1211,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             for num_str in all_numbers:
                 v = parse_cr_price_string(num_str)
                 if v:
-                    if (currency == "USD" and 3000 <= v <= 50000000) or (currency == "CRC" and 500000 <= v <= 20000000000):
+                    if (currency == "USD" and 1000 <= v <= 50000000) or (currency == "CRC" and 500000 <= v <= 20000000000):
                         prices.append(v)
 
         if not prices:
@@ -1248,8 +1249,9 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             extra_m = parse_spanish_words_to_number(ha_match.group(1))
             area = (ha_count * 10000.0) + extra_m
         else:
-            mide_m = re.search(r"(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^\.;\n]+?)(?:linderos|linda|colinda|plano|situada|ubicada|segundo|\.|$)", edict_text, re.I)
-            mide_clause = mide_m.group(1).strip() if mide_m else edict_text
+            normalized_full = re.sub(r'\s+', ' ', edict_text)
+            mide_m = re.search(r'(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^.]+?)(?=\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z]|$)|plano\s*:|\.|$)', normalized_full, re.I)
+            mide_clause = mide_m.group(1).strip() if mide_m else normalized_full
             
             digit_area = re.search(r"([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts|hect[áa]reas|ha)", mide_clause, re.I)
             if digit_area:
@@ -1258,8 +1260,8 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                 if "hect" in digit_area.group(0).lower() or "ha" in digit_area.group(0).lower():
                     area = parsed_val * 10000.0
                 else:
-                    # Check decimeters
-                    dec_m = re.search(r"con\s+([0-9]+|[a-záéíóú\s]+?)\s*(?:dec[íi]metros)", mide_clause, re.I)
+                    # Check decimeters (support words with trailing comma or digits)
+                    dec_m = re.search(r"con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)", mide_clause, re.I)
                     if dec_m:
                         dec_val = parse_spanish_words_to_number(dec_m.group(1))
                         area = parsed_val + (dec_val * 0.01)
