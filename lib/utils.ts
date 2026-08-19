@@ -84,7 +84,7 @@ export function getLiveAuctionProgressionState(
     ['suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled'].includes(auction.sale_status)
   ) {
     return {
-      callStage: auction.call_stage || 'suspended',
+      callStage: auction.call_stage || 'passed_call_3',
       saleStatus: auction.sale_status,
       currentCallNumber: auction.current_call_number ?? null,
       currentBasePrice: auction.current_base_price || auction.base_price_call_1,
@@ -271,7 +271,7 @@ export function calculateInvestorMetrics(auction: Auction, callNumber?: 1 | 2 | 
  */
 export function formatDateCR(dateString: string, lang: string = 'es'): string {
   try {
-    const date = new Date(dateString);
+    const date = parseCostaRicaDate(dateString) ?? new Date(dateString);
     const locale = lang === 'en' ? 'en-US' : 'es-CR';
     return new Intl.DateTimeFormat(locale, {
       weekday: 'short',
@@ -316,13 +316,8 @@ export function isPropertyNewToday(createdAt?: string | null): boolean {
     if (isNaN(created.getTime())) return false;
     
     const now = new Date();
-    const isSameDay = 
-      created.getFullYear() === now.getFullYear() &&
-      created.getMonth() === now.getMonth() &&
-      created.getDate() === now.getDate();
-
     const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-    return isSameDay || (diffHours >= 0 && diffHours <= 24);
+    return diffHours >= 0 && diffHours <= 24;
   } catch {
     return false;
   }

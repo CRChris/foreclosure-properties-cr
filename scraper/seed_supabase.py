@@ -103,7 +103,7 @@ SEED_AUCTIONS = [
         "currency": "USD",
         "base_price_call_1": 410000.00,
         "auction_date_call_1": "2026-09-29T11:00:00-06:00",
-        "base_price_call_2": 30750000.00,
+        "base_price_call_2": 307500.00,
         "auction_date_call_2": "2026-10-20T11:00:00-06:00",
         "base_price_call_3": 102500.00,
         "auction_date_call_3": "2026-11-10T11:00:00-06:00",
@@ -141,6 +141,10 @@ SEED_AUCTIONS = [
 ]
 
 def seed():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("ERROR: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set. Aborting seed.")
+        return
+
     print(f"Connecting to Supabase at: {SUPABASE_URL}...")
     headers = {
         "apikey": SUPABASE_KEY,

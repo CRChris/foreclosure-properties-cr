@@ -87,9 +87,7 @@ def deduplicate_supabase_catalog() -> Dict[str, Any]:
             folio = (row.get("folio_real") or "").strip().upper()
 
             is_duplicate = False
-            if exp and exp in seen_expedientes:
-                is_duplicate = True
-            if folio and folio in seen_folios:
+            if (exp and exp in seen_expedientes) and (folio and folio in seen_folios):
                 is_duplicate = True
 
             if is_duplicate:
@@ -112,6 +110,8 @@ def deduplicate_supabase_catalog() -> Dict[str, Any]:
                 with urllib.request.urlopen(del_req, context=ctx, timeout=15) as del_resp:
                     if del_resp.status in (200, 204):
                         deleted_count += len(chunk)
+                    else:
+                        logger.warning(f"Delete batch failed with status {del_resp.status} for IDs: {chunk}")
             logger.info(f"✓ Successfully deleted {deleted_count} duplicate records from Supabase.")
             return {"deleted": deleted_count, "total_unique_remaining": len(rows) - deleted_count}
         else:

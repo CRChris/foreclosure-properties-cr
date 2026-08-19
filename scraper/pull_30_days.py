@@ -47,6 +47,7 @@ from scraper.main import (
     check_yield_and_alert,
     send_discord_notification,
     compute_reconciliation_metrics,
+    parse_date_spanish,
 )
 from scraper.auction_tracker import sync_auction_progression_via_rpc
 
@@ -63,39 +64,6 @@ logger = logging.getLogger("scraper.30days")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-
-def parse_date_spanish(date_str: str, default_hour: int = 10, default_minute: int = 0) -> Optional[datetime]:
-    """
-    Parses Spanish dates like '02 de setiembre del año 2026', '20 de agosto de 2026', '16 de septiembre de 2026'
-    """
-    months = {
-        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "maayo": 5, "junio": 6,
-        "julio": 7, "agosto": 8, "setiembre": 9, "septiembre": 9, "octubre": 10,
-        "noviembre": 11, "diciembre": 12
-    }
-    
-    # Try regex match
-    m = re.search(r"(\d{1,2})\s+de\s+([a-záéíóú]+)(?:\s+del?\s+año|\s+de)?\s+(\d{4})", date_str, re.I)
-    if m:
-        day = int(m.group(1))
-        month_name = m.group(2).lower()
-        year = int(m.group(3))
-        month = months.get(month_name)
-        if month:
-            # Check if time is mentioned in string
-            hour = default_hour
-            minute = default_minute
-            time_m = re.search(r"(?:a\s+las|ser\s+las)\s+(\d{1,2}):(\d{2})", date_str, re.I)
-            if time_m:
-                hour = int(time_m.group(1))
-                minute = int(time_m.group(2))
-            try:
-                dt = datetime(year, month, day, hour, minute, tzinfo=COSTA_RICA_TZ)
-                return dt
-            except Exception:
-                pass
-    return None
 
 
 def extract_real_estate_foreclosures_from_text(full_text: str, source_label: str) -> List[ForeclosureAuction]:
@@ -129,7 +97,7 @@ def fetch_existing_expedientes_and_folios() -> Tuple[Set[str], Set[str], Set[str
     terminal_expedientes = set()
 
     # Query with fallback if some columns not yet present
-    fetch_url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/auctions?select=expediente_number,folio_real"
+    fetch_url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/auctions?select=expediente_number,folio_real,sale_status"
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -145,11 +113,14 @@ def fetch_existing_expedientes_and_folios() -> Tuple[Set[str], Set[str], Set[str
                     exp = row.get("expediente_number")
                     folio = row.get("folio_real")
                     if exp:
-                        existing_expedientes.add(exp.strip().upper())
+                        exp_norm = exp.strip().upper()
+                        existing_expedientes.add(exp_norm)
+                        if row.get("sale_status") in ("suspended", "adjudicated_to_creditor", "adjudicated_to_bidder", "awarded", "annulled", "settled"):
+                            terminal_expedientes.add(exp_norm)
                     if folio:
                         existing_folios.add(folio.strip().upper())
 
-                logger.info(f"✓ Found {len(existing_expedientes)} existing auctions recorded in Supabase.")
+                logger.info(f"✓ Found {len(existing_expedientes)} existing auctions recorded in Supabase ({len(terminal_expedientes)} terminal).")
     except Exception as err:
         logger.warning(f"Could not query existing Supabase auctions: {err}")
 

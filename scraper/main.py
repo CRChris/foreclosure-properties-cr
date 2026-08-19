@@ -7,13 +7,17 @@ geolocations, and upserts into Supabase PostgreSQL.
 
 import os
 import re
+import io
 import sys
 import json
 import ssl
 import time
 import logging
 import argparse
-from typing import Optional, List, Dict, Any, Tuple
+import unicodedata
+import urllib.request
+import urllib.error
+from typing import Optional, List, Dict, Any, Tuple, Set
 from datetime import datetime, timedelta
 
 try:
@@ -22,9 +26,11 @@ except ImportError:
     class BaseModel:
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
+                if k.endswith("_call_1") and v is None:
+                    raise ValueError(f"Required field '{k}' cannot be None")
                 setattr(self, k, v)
         def model_dump(self):
-            return self.__dict__
+            return {k: v for k, v in self.__dict__.items() if v is not None}
         @classmethod
         def model_validate_json(cls, json_str):
             return cls(**json.loads(json_str))
@@ -39,6 +45,16 @@ try:
 except ImportError:
     requests = None
     BeautifulSoup = None
+
+try:
+    from pypdf import PdfReader
+except ImportError:
+    PdfReader = None
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 def load_env_files():
     """Zero-dependency .env and .env.local reader ensuring credentials load in any Python environment."""
@@ -56,7 +72,7 @@ def load_env_files():
                             k, v = line.split("=", 1)
                             k = k.strip()
                             v = v.strip().strip("'").strip('"')
-                            if k and k not in os.environ:
+                            if k and k not in os.environ and v and v != "None":
                                 os.environ[k] = v
                 except Exception:
                     pass
@@ -321,10 +337,7 @@ SPANISH_WORD_NUMBERS: Dict[str, int] = {
 }
 
 def create_ssl_context():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+    return ssl.create_default_context()
 
 def validate_and_read_response(
     resp,
@@ -386,7 +399,10 @@ def _log_debug_snippet(source_url: str, status: int, content_type: str, data: by
     """Writes failure diagnostics and a raw payload snippet to the debug log."""
     logger.warning(f"⚠️ [Payload Validation Failure]: {err_msg}")
     try:
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8", errors="ignore") as f:
+        mode = "a"
+        if os.path.exists(DEBUG_LOG_PATH) and os.path.getsize(DEBUG_LOG_PATH) > 10 * 1024 * 1024:
+            mode = "w"
+        with open(DEBUG_LOG_PATH, mode, encoding="utf-8", errors="ignore") as f:
             f.write(f"\n{'='*70}\n")
             f.write(f"TIMESTAMP: {datetime.now().isoformat()}\n")
             f.write(f"SOURCE: {source_url}\n")
@@ -437,7 +453,6 @@ def normalize_text(text: str) -> str:
     """Removes accents and normalizes lowercase string for resilient keyword matching."""
     if not text:
         return ""
-    import unicodedata
     n = unicodedata.normalize("NFD", text.lower())
     clean = "".join(c for c in n if unicodedata.category(c) != "Mn")
     clean = re.sub(r"c\s+entimos", "centimos", clean)
@@ -648,14 +663,18 @@ def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -
                 break
 
     # 4. Year extraction
-    year = 2026
-    year_match = re.search(r"(?:dos\s+mil\s+veintiséis|dos\s+mil\s+veintiseis|2026)", d_lower)
+    year = default_date.year if default_date else datetime.now().year
+    year_match = re.search(r"\b(20\d{2})\b", d_lower)
     if year_match:
+        year = int(year_match.group(1))
+    elif "dos mil veintiséis" in d_lower or "dos mil veintiseis" in d_lower:
         year = 2026
-    elif "2027" in d_lower:
+    elif "dos mil veintisiete" in d_lower or "dos mil veintisiete" in d_lower:
         year = 2027
-    elif "2025" in d_lower:
+    elif "dos mil veinticinco" in d_lower or "dos mil veinticinco" in d_lower:
         year = 2025
+    elif "dos mil veinticuatro" in d_lower or "dos mil veinticuatro" in d_lower:
+        year = 2024
 
     if day and month:
         try:
@@ -672,12 +691,6 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     (nexuspj.poder-judicial.go.cr/api/search), filtering specifically for Boletín Judicial
     court foreclosures (Remates Judiciales) with dynamic multi-page result pagination.
     """
-    import urllib.request
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        BeautifulSoup = None
-
     ctx = create_ssl_context()
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/122.0.0.0",
@@ -756,9 +769,9 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
                                         # Split by expediente blocks
                                         blocks = split_into_expediente_blocks(hit_text)
                                         if blocks:
-                                            edicts.extend(blocks)
+                                             edicts.extend(blocks)
                                         else:
-                                            edicts.append(hit_text.strip())
+                                             edicts.append(hit_text.strip())
                         except Exception as doc_err:
                             logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
                             
@@ -802,7 +815,6 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
         "https://www.imprentanacional.go.cr/boletin/",
     ]
     
-    import urllib.request
     ctx = create_ssl_context()
     
     for portal in portals:
@@ -842,41 +854,40 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     logger.info(f"Targeting {len(pdf_urls)} candidate official Boletín Judicial PDF endpoints.")
     
     # Download and parse Boletín Judicial PDFs with pypdf (enforcing >= 10 KB size validation)
-    for pdf_url in pdf_urls[:6]:
-        try:
-            req = urllib.request.Request(pdf_url, headers=headers)
-            with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
-                is_valid, data_bytes, err = validate_and_read_response(resp, pdf_url, min_bytes=10240, is_json=False)
-                if not is_valid:
-                    continue
+    if PdfReader:
+        for pdf_url in pdf_urls[:6]:
+            try:
+                req = urllib.request.Request(pdf_url, headers=headers)
+                with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+                    is_valid, data_bytes, err = validate_and_read_response(resp, pdf_url, min_bytes=10240, is_json=False)
+                    if not is_valid:
+                        continue
 
-                import io
-                from pypdf import PdfReader
-                pdf_file = io.BytesIO(data_bytes)
-                reader = PdfReader(pdf_file)
-                logger.info(f"Downloaded official Boletín Judicial: {pdf_url} ({len(data_bytes):,} bytes, {len(reader.pages)} pages).")
-                
-                full_text = ""
-                for page in reader.pages:
-                    full_text += (page.extract_text() or "") + "\n"
+                    pdf_file = io.BytesIO(data_bytes)
+                    reader = PdfReader(pdf_file)
+                    logger.info(f"Downloaded official Boletín Judicial: {pdf_url} ({len(data_bytes):,} bytes, {len(reader.pages)} pages).")
                     
-                # Target the Remates section and split into case blocks
-                remates_section = slice_remates_section(full_text)
-                
-                # Resilient Fallback: If sliced section captures < 80% of docket markers in full text, use full text
-                dockets_full = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", full_text, re.I)
-                dockets_sliced = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", remates_section, re.I)
-                if len(dockets_full) > len(dockets_sliced) and len(dockets_sliced) < (len(dockets_full) * 0.8):
-                    logger.warning(f"Remates slicing missed {len(dockets_full) - len(dockets_sliced)} dockets. Activating full-text parsing fallback.")
-                    remates_section = full_text
+                    full_text = ""
+                    for page in reader.pages:
+                        full_text += (page.extract_text() or "") + "\n"
+                        
+                    # Target the Remates section and split into case blocks
+                    remates_section = slice_remates_section(full_text)
+                    
+                    # Resilient Fallback: If sliced section captures < 80% of docket markers in full text, use full text
+                    dockets_full = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", full_text, re.I)
+                    dockets_sliced = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", remates_section, re.I)
+                    if len(dockets_full) > len(dockets_sliced) and len(dockets_sliced) < (len(dockets_full) * 0.8):
+                        logger.warning(f"Remates slicing missed {len(dockets_full) - len(dockets_sliced)} dockets. Activating full-text parsing fallback.")
+                        remates_section = full_text
 
-                blocks = split_into_expediente_blocks(remates_section)
-                logger.info(f"Parsed {len(blocks)} expediente blocks from {pdf_url}.")
-                for block in blocks:
-                    if is_foreclosure_edict_text(block):
-                        edicts.append(block)
-        except Exception as e:
-            logger.debug(f"Candidate {pdf_url} skipped: {e}")
+                    blocks = split_into_expediente_blocks(remates_section)
+                    logger.info(f"Parsed {len(blocks)} expediente blocks from {pdf_url}.")
+                    for block in blocks:
+                        if is_foreclosure_edict_text(block):
+                            edicts.append(block)
+            except Exception as e:
+                logger.debug(f"Candidate {pdf_url} skipped: {e}")
             
     logger.info(f"Discovered {len(edicts)} total foreclosure edicts from official Boletín Judicial / Nexus PJ.")
     return edicts
@@ -994,7 +1005,7 @@ def parse_cr_price_string(p_str: str) -> Optional[float]:
             clean = clean.replace(",", "")
     elif "." in clean:
         parts = clean.split(".")
-        if len(parts) > 1 and len(parts[-1]) == 2:
+        if len(parts) > 1 and len(parts[-1]) in (1, 2):
             # Last dot is cents: 17.925.766.16 -> 17925766.16 or 220.00
             clean = "".join(parts[:-1]) + "." + parts[-1]
         elif len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
@@ -1002,7 +1013,7 @@ def parse_cr_price_string(p_str: str) -> Optional[float]:
             clean = clean.replace(".", "")
     elif "," in clean:
         parts = clean.split(",")
-        if len(parts) > 1 and len(parts[-1]) == 2:
+        if len(parts) > 1 and len(parts[-1]) in (1, 2):
             # Last comma is cents: 17,925,766,16 -> 17925766.16
             clean = "".join(parts[:-1]) + "." + parts[-1]
         elif len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
@@ -1122,7 +1133,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # Canton detection: direct regex first, then centroid key matching
         detected_canton = "Central"
-        canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?(?:\d+|[a-záéíóú]+)\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)", edict_text, re.I)
+        canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)", edict_text, re.I)
         if canton_match:
             detected_canton = canton_match.group(1).strip().title()[:30]
         else:
@@ -1133,7 +1144,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # District match
         detected_district = "Central"
-        dist_match = re.search(r"distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?(?:\d+|[a-záéíóú]+)\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)", edict_text, re.I)
+        dist_match = re.search(r"distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)", edict_text, re.I)
         if dist_match:
             detected_district = dist_match.group(1).strip()[:30]
 
@@ -1253,7 +1264,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         category = "Residential"
         if any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
             category = "Condo"
-        elif any(w in text_lower for w in ["finca", "ganadera", "agr[íi]cola", "pasto", "cultivo"]):
+        elif re.search(r"\b(finca|ganadera|agricola|agrícola|pasto|cultivo)\b", text_lower):
             category = "Agricultural"
         elif any(w in text_lower for w in ["terreno", "lote", "solar"]):
             category = "Land/Development"
@@ -1294,14 +1305,13 @@ def extract_single_edict_gemini(edict_text: str, api_key: Optional[str] = None) 
     Uses google-genai SDK with gemini models, automatically falling back to regex parser.
     """
     key = api_key or os.getenv("GEMINI_API_KEY")
-    if not key:
+    if not key or not genai:
         logger.info("Using deterministic rule-based Costa Rican judicial parser.")
         return extract_single_edict_regex_fallback(edict_text)
 
     # Try gemini models
     models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
     try:
-        from google import genai
         client = genai.Client(api_key=key)
         for m in models_to_try:
             try:
@@ -1377,6 +1387,7 @@ def extract_auctions_with_gemini(edict_chunks: List[str], api_key: Optional[str]
                     
             if len(standardized_folios) > 1:
                 logger.info(f"✨ Multi-property notice detected! Found {len(standardized_folios)} distinct folios for case {extracted.expediente_number}: {standardized_folios}")
+                logger.warning(f"Multi-property split: all sub-lots share the same prices and area_m2. Manual validation advised for expediente {extracted.expediente_number}.")
                 for f_idx, fol in enumerate(standardized_folios):
                     prov = prov_code_map.get(fol[0], extracted.province) if "-" in fol else extracted.province
                     prop_item = ForeclosureAuction(
@@ -1421,7 +1432,6 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
     def norm_geo(s: str) -> str:
         if not s:
             return ""
-        import unicodedata
         n = unicodedata.normalize("NFD", s.lower())
         return "".join(c for c in n if unicodedata.category(c) != "Mn").strip()
 
@@ -1514,14 +1524,13 @@ def record_ingestion_log(
     Records an execution entry into the public.ingestion_logs table in Supabase.
     """
     supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     
     if not supabase_url or not supabase_key:
-        logger.debug("Supabase credentials missing. Ingestion log not persisted remotely.")
+        logger.warning("SUPABASE_SERVICE_ROLE_KEY missing. Ingestion log not persisted remotely.")
         return False
         
     try:
-        import urllib.request
         ctx = create_ssl_context()
         url = f"{supabase_url}/rest/v1/ingestion_logs"
         payload_dict = {
@@ -1566,35 +1575,51 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
         return len(records), 0, [r.get("expediente_number", "") for r in records]
         
     try:
-        import urllib.request
         ctx = create_ssl_context()
 
-        # 1. Fetch existing expediente numbers & sale statuses to protect terminal states
+        # 1. Fetch existing expediente numbers & sale statuses with pagination to protect terminal states
         existing_expedientes = set()
         terminal_expedientes = set()
         fetch_url = f"{supabase_url}/rest/v1/auctions?select=expediente_number,sale_status"
-        fetch_headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
-        }
-        try:
-            req_get = urllib.request.Request(fetch_url, headers=fetch_headers)
-            with urllib.request.urlopen(req_get, context=ctx, timeout=10) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    for item in data:
-                        exp = item.get("expediente_number")
-                        if exp:
-                            existing_expedientes.add(exp)
-                            if item.get("sale_status") in ("suspended", "adjudicated_to_creditor", "adjudicated_to_bidder", "awarded", "annulled", "settled"):
-                                terminal_expedientes.add(exp)
-        except Exception as err:
-            logger.debug(f"Could not fetch existing expedientes: {err}")
+        
+        offset = 0
+        limit = 1000
+        while True:
+            fetch_headers = {
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {supabase_key}",
+                "Range": f"{offset}-{offset + limit - 1}",
+                "Range-Unit": "items",
+            }
+            try:
+                req_get = urllib.request.Request(fetch_url, headers=fetch_headers)
+                with urllib.request.urlopen(req_get, context=ctx, timeout=15) as resp:
+                    if resp.status in (200, 206):
+                        data = json.loads(resp.read().decode("utf-8"))
+                        if not data:
+                            break
+                        for item in data:
+                            exp = item.get("expediente_number")
+                            if exp:
+                                existing_expedientes.add(exp.strip().upper())
+                                if item.get("sale_status") in ("suspended", "adjudicated_to_creditor", "adjudicated_to_bidder", "awarded", "annulled", "settled"):
+                                    terminal_expedientes.add(exp.strip().upper())
+                        if len(data) < limit:
+                            break
+                        offset += limit
+                    else:
+                        break
+            except Exception as err:
+                logger.debug(f"Could not fetch existing expedientes (offset {offset}): {err}")
+                break
 
         # 2. Filter out existing and terminal foreclosures
         new_records = [
             r for r in records 
-            if r["expediente_number"] not in existing_expedientes and r["expediente_number"] not in terminal_expedientes
+            if r["expediente_number"].strip().upper() not in existing_expedientes 
+            and r["expediente_number"].strip().upper() not in terminal_expedientes
+            and r["expediente_number"] not in existing_expedientes
+            and r["expediente_number"] not in terminal_expedientes
         ]
         
         skipped_count = len(records) - len(new_records)
@@ -1686,7 +1711,6 @@ def send_discord_notification(
         return False
 
     try:
-        import urllib.request
         ctx = create_ssl_context()
         
         colors = {
@@ -1867,11 +1891,11 @@ def main():
                 sys.exit(1)
             logger.info(f"Reading local file: {args.file}")
             if args.file.lower().endswith(".pdf"):
-                from pypdf import PdfReader
-                reader = PdfReader(args.file)
+                reader = PdfReader(args.file) if PdfReader else None
                 full_text = ""
-                for page in reader.pages:
-                    full_text += (page.extract_text() or "") + "\n"
+                if reader:
+                    for page in reader.pages:
+                        full_text += (page.extract_text() or "") + "\n"
             else:
                 with open(args.file, "r", encoding="utf-8", errors="ignore") as f:
                     full_text = f.read()
@@ -1895,9 +1919,7 @@ def main():
             with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
                 is_valid, data_bytes, err = validate_and_read_response(resp, args.url, min_bytes=50)
                 if is_valid:
-                    if args.url.lower().endswith(".pdf") or (resp.headers.get("Content-Type", "").lower().startswith("application/pdf")):
-                        from pypdf import PdfReader
-                        import io
+                    if (args.url.lower().endswith(".pdf") or (resp.headers.get("Content-Type", "").lower().startswith("application/pdf"))) and PdfReader:
                         reader = PdfReader(io.BytesIO(data_bytes))
                         full_text = "".join((p.extract_text() or "") + "\n" for p in reader.pages)
                     else:

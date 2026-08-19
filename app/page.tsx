@@ -28,14 +28,21 @@ import {
 export default function HomePage() {
   const { t, language } = useLanguage();
   const [auctions, setAuctions] = useState<Auction[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     let isMounted = true;
-    fetchAuctions().then((data) => {
-      if (isMounted && data) {
-        setAuctions(data);
-      }
-    });
+    fetchAuctions()
+      .then((data) => {
+        if (isMounted && data) {
+          setAuctions(data);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Failed to fetch auctions:', err);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -147,18 +154,20 @@ export default function HomePage() {
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={language === 'es' ? 'Buscar por cantón (Escazú, Jacó, Santa Cruz, Belén)...' : 'Search by canton (Escazú, Jacó, Santa Cruz, Belén)...'}
                   className="w-full bg-slate-950/80 text-white placeholder-slate-500 text-sm rounded-xl pl-10 pr-4 py-2.5 border border-slate-800 focus:outline-none focus:border-emerald-500"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      window.location.href = `/auctions?q=${encodeURIComponent((e.target as HTMLInputElement).value)}`;
+                      window.location.href = searchQuery ? `/auctions?q=${encodeURIComponent(searchQuery)}` : '/auctions';
                     }
                   }}
                 />
               </div>
 
               <Link
-                href="/auctions"
+                href={searchQuery ? `/auctions?q=${encodeURIComponent(searchQuery)}` : '/auctions'}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-950/50 transition-all hover:scale-[1.02] shrink-0"
               >
                 <Search className="w-4 h-4" />
