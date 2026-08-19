@@ -278,6 +278,17 @@ function mapRowToAuction(item: any): Auction {
     ? item.longitude 
     : (typeof item.lng === 'number' ? item.lng : (typeof item.coordinates_lng === 'number' ? item.coordinates_lng : null));
 
+  // Debug: log what the DB returned so we can trace coordinate source issues
+  if (process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_COORDS === 'true') {
+    console.log(`[mapRowToAuction] id=${item.id} folio=${item.folio_real}`, {
+      latitude: item.latitude, longitude: item.longitude,
+      lat: item.lat, lng: item.lng,
+      location_type: typeof item.location, location_sample: typeof item.location === 'string' ? item.location.slice(0, 40) : item.location,
+      resolvedLat: lat, resolvedLng: lng,
+    });
+  }
+
+
   let parcelPolygonObj: any = null;
   if (item.parcel_polygon) {
     if (typeof item.parcel_polygon === 'string') {
@@ -584,8 +595,8 @@ export async function fetchAuctions(params?: {
       return results;
     }
 
-    // Standard Query without spatial bounds
-    let query = supabase.from('auctions').select('*');
+    // Standard Query without spatial bounds — uses view that exposes latitude/longitude as numeric columns
+    let query = supabase.from('auctions_with_coords').select('*');
 
     if (params?.province && params.province !== 'all') {
       query = query.ilike('province', params.province);
@@ -653,7 +664,7 @@ export async function fetchAuctionById(id: string): Promise<Auction | null> {
     try {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from('auctions')
+        .from('auctions_with_coords')
         .select('*')
         .eq('id', id)
         .single();
