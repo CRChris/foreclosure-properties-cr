@@ -595,62 +595,61 @@ export async function fetchAuctions(params?: {
       return results;
     }
 
-    // Standard Query without spatial bounds — use get_all_auctions RPC which extracts numeric
-    // lat/lng via ST_Y/ST_X. RPCs bypass the PostgREST schema cache and always work.
-    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_all_auctions', {
-      p_province: params?.province && params.province !== 'all' ? params.province : null,
-      p_canton: params?.canton || null,
-      p_currency: params?.currency && params.currency !== 'all' ? params.currency.toUpperCase() : null,
-      p_call_stage: params?.callStage && params.callStage !== 'all' ? params.callStage : null,
-      p_include_past: params?.includePast || false,
-    });
+    // Standard Query without spatial bounds — queries auctions_with_coords view which has ST_Y/ST_X extracted lat/lng
+    let query = supabase.from('auctions_with_coords').select('*');
 
-    if (rpcErr || !rpcData) {
-      console.warn('get_all_auctions RPC failed, falling back to view query:', rpcErr?.message);
+    if (params?.province && params.province !== 'all') {
+      query = query.ilike('province', params.province);
+    }
+    if (params?.canton) {
+      query = query.ilike('canton', params.canton);
+    }
+    if (params?.currency && params.currency !== 'all') {
+      query = query.eq('currency', params.currency.toUpperCase());
+    }
+    if (params?.minPrice !== undefined && params.minPrice !== null) {
+      query = query.gte('base_price_call_1', params.minPrice);
+    }
+    if (params?.maxPrice !== undefined && params.maxPrice !== null) {
+      query = query.lte('base_price_call_1', params.maxPrice);
+    }
+    if (params?.callStage && params.callStage !== 'all') {
+      query = query.eq('call_stage', params.callStage);
+    } else if (!params?.includePast) {
+      query = query.neq('call_stage', 'passed_call_3').neq('sale_status', 'deserted');
+    }
+    if (params?.query && params.query.trim()) {
+      const sanitized = params.query.replace(/[,()\"]/g, ' ').trim();
+      if (sanitized) {
+        const q = `%${sanitized}%`;
+        query = query.or(`canton.ilike.${q},district.ilike.${q},province.ilike.${q},expediente_number.ilike.${q},folio_real.ilike.${q},plaintiff.ilike.${q}`);
+      }
+    }
+    query = query.order('auction_date_call_1', { ascending: true });
 
-      // Fallback: try the view (may fail if schema cache hasn't refreshed)
-      let query = supabase.from('auctions_with_coords').select('*');
-
-      if (params?.province && params.province !== 'all') {
-        query = query.ilike('province', params.province);
-      }
-      if (params?.canton) {
-        query = query.ilike('canton', params.canton);
-      }
-      if (params?.currency && params.currency !== 'all') {
-        query = query.eq('currency', params.currency.toUpperCase());
-      }
-      if (params?.minPrice !== undefined && params.minPrice !== null) {
-        query = query.gte('base_price_call_1', params.minPrice);
-      }
-      if (params?.maxPrice !== undefined && params.maxPrice !== null) {
-        query = query.lte('base_price_call_1', params.maxPrice);
-      }
-      if (params?.callStage && params.callStage !== 'all') {
-        query = query.eq('call_stage', params.callStage);
-      } else if (!params?.includePast) {
-        query = query.neq('call_stage', 'passed_call_3').neq('sale_status', 'deserted');
-      }
-      if (params?.query && params.query.trim()) {
-        const sanitized = params.query.replace(/[,()\"]/g, ' ').trim();
-        if (sanitized) {
-          const q = `%${sanitized}%`;
-          query = query.or(`canton.ilike.${q},district.ilike.${q},province.ilike.${q},expediente_number.ilike.${q},folio_real.ilike.${q},plaintiff.ilike.${q}`);
-        }
-      }
-      query = query.order('auction_date_call_1', { ascending: true });
-
-      const { data: fallbackData, error: fallbackErr } = await query;
-      if (fallbackErr || !fallbackData) {
-        console.warn('View fallback also failed:', fallbackErr?.message, '— returning mock data');
-        return MOCK_AUCTIONS;
-      }
-
-      return fallbackData.map(mapRowToAuction).filter((a) => {
+    const { data: viewData, error: viewErr } = await query;
+    if (!viewErr && viewData) {
+      return viewData.map(mapRowToAuction).filter((a) => {
         if (params?.includePast) return true;
         const live = getLiveAuctionProgressionState(a);
         return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
       });
+    }
+
+    // Fallback: if view fails, try bounding box RPC
+    console.warn('View query failed, trying get_auctions_in_bounds RPC fallback:', viewErr?.message);
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_auctions_in_bounds', {
+      min_lng: -87,
+      min_lat: 7,
+      max_lng: -82,
+      max_lat: 12,
+      target_currency: params?.currency && params.currency !== 'all' ? params.currency.toUpperCase() : null,
+      max_price: params?.maxPrice !== undefined ? params.maxPrice : null,
+    });
+
+    if (rpcErr || !rpcData) {
+      console.warn('RPC fallback also failed, returning mock data:', rpcErr?.message);
+      return MOCK_AUCTIONS;
     }
 
     let results = (rpcData as any[]).map(mapRowToAuction);
