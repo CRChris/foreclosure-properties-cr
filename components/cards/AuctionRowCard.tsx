@@ -96,9 +96,10 @@ export function AuctionRowCard({
   }
 
   return (
-    <div
+    <Link
+      href={`/auctions/${auction.id}`}
       onClick={() => onSelect && onSelect(auction)}
-      className={`group relative bg-slate-900/90 border-2 rounded-2xl p-4 sm:p-5 transition-all duration-200 cursor-pointer ${
+      className={`group relative block bg-slate-900/90 border-2 rounded-2xl p-4 sm:p-5 transition-all duration-200 cursor-pointer ${
         isSelected
           ? stageConfig.selectedBorderClass
           : `${stageConfig.borderClass} ${stageConfig.hoverBorderClass} hover:shadow-xl hover:shadow-black/40 hover:bg-slate-900/95`
@@ -286,16 +287,15 @@ export function AuctionRowCard({
           </div>
 
           {/* Direct Details Action Button */}
-          <Link
-            href={`/auctions/${auction.id}`}
-            className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/40 hover:shadow-emerald-900/60 transition-all hover:translate-x-0.5 text-center shrink-0"
+          <div
+            className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 group-hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/40 group-hover:shadow-emerald-900/60 transition-all group-hover:translate-x-0.5 text-center shrink-0"
           >
             <span>{t.card.viewDossier}</span>
             <ChevronRight className="w-4 h-4" />
-          </Link>
+          </div>
         </div>
 
       </div>
-    </div>
+    </Link>
   );
 }

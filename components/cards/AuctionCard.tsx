@@ -96,7 +96,8 @@ export function AuctionCard({
   }
 
   return (
-    <div
+    <Link
+      href={`/auctions/${auction.id}`}
       onClick={() => onSelect && onSelect(auction)}
       className={`group relative flex flex-col bg-slate-900/90 border-2 rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
         isSelected
@@ -284,16 +285,15 @@ export function AuctionCard({
           </div>
 
           {/* Action Link */}
-          <Link
-            href={`/auctions/${auction.id}`}
-            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 group-hover:translate-x-0.5 transition-all bg-emerald-950/40 hover:bg-emerald-900/60 px-2.5 py-1.5 rounded-lg border border-emerald-800/50"
+          <div
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 group-hover:text-emerald-300 group-hover:translate-x-0.5 transition-all bg-emerald-950/40 group-hover:bg-emerald-900/60 px-2.5 py-1.5 rounded-lg border border-emerald-800/50"
           >
             <span>{t.card.viewDossier}</span>
             <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
+          </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
