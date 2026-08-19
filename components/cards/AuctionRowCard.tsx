@@ -10,10 +10,11 @@ import {
   calculateInvestorMetrics, 
   detectPropertyCharacteristics,
   getLiveAuctionProgressionState,
+  getCallStageConfig,
   isPropertyNewToday,
 } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { PropertyTypeBadge, PROPERTY_TYPE_CONFIGS } from '@/components/ui/PropertyTypeIcon';
+import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
 import {
   Calendar,
@@ -70,6 +71,7 @@ export function AuctionRowCard({
   };
 
   const liveState = getLiveAuctionProgressionState(auction);
+  const stageConfig = getCallStageConfig(liveState);
   const activeDate = liveState.currentAuctionDate || auction.auction_date_call_1;
   const countdown = getDaysUntilAuction(activeDate, language);
   const metrics = calculateInvestorMetrics(auction, (liveState.currentCallNumber || 1) as (1 | 2 | 3));
@@ -96,10 +98,10 @@ export function AuctionRowCard({
   return (
     <div
       onClick={() => onSelect && onSelect(auction)}
-      className={`group relative bg-slate-900/90 border rounded-2xl p-4 sm:p-5 transition-all duration-200 cursor-pointer ${
+      className={`group relative bg-slate-900/90 border-2 rounded-2xl p-4 sm:p-5 transition-all duration-200 cursor-pointer ${
         isSelected
-          ? 'border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-950/30 bg-slate-900'
-          : 'border-slate-800/90 hover:border-emerald-500/50 hover:shadow-xl hover:shadow-black/40 hover:bg-slate-900/95'
+          ? stageConfig.selectedBorderClass
+          : `${stageConfig.borderClass} ${stageConfig.hoverBorderClass} hover:shadow-xl hover:shadow-black/40 hover:bg-slate-900/95`
       }`}
     >
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 lg:gap-6">
@@ -226,40 +228,16 @@ export function AuctionRowCard({
         <div className="lg:w-[22%] space-y-1.5 lg:border-l lg:border-slate-800/80 lg:pl-6">
           {/* Call Progression Stage Pill */}
           <div>
-            {liveState.saleStatus === 'in_progress' || countdown.isHearing ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-950/90 border border-rose-500/60 text-rose-300 font-extrabold text-[10px] uppercase tracking-wider animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-                {language === 'es' ? 'En Audiencia' : 'In Hearing'}
-              </span>
-            ) : liveState.callStage === 'call_3' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-extrabold text-[10px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                {language === 'es' ? '3° Remate (-75%)' : '3rd Call (-75%)'}
-              </span>
-            ) : liveState.callStage === 'call_2' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-950/90 border border-teal-500/60 text-teal-300 font-extrabold text-[10px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
-                {language === 'es' ? '2° Remate (-25%)' : '2nd Call (-25%)'}
-              </span>
-            ) : liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold text-[10px]">
-                {language === 'es' ? '3° Remate Vencido' : '3rd Call Expired'}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 font-bold text-[10px]">
-                {language === 'es' ? '1° Remate (Base)' : '1st Call (Base)'}
-              </span>
-            )}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg font-extrabold text-[10.5px] border ${stageConfig.tagClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${stageConfig.dotClass} ${stageConfig.colorName === 'rose' ? 'animate-ping' : ''}`} />
+              <span>{language === 'es' ? stageConfig.labelEs : stageConfig.labelEn}</span>
+            </span>
           </div>
 
           {/* Current Active Base Price */}
           <div>
             <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-              {liveState.currentCallNumber === 3
-                ? 'Base 3° Remate'
-                : liveState.currentCallNumber === 2
-                ? 'Base 2° Remate'
-                : 'Precio Base'}
+              {language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}
             </span>
             <p className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tracking-tight">
               {formatCurrency(liveState.currentBasePrice, auction.currency)}

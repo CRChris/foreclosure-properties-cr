@@ -955,5 +955,120 @@ export function calculateTitleSecurityRating(auction: Auction, lang: 'es' | 'en'
   };
 }
 
+export interface CallStageConfig {
+  callNumber: 1 | 2 | 3 | null;
+  labelEs: string;
+  labelEn: string;
+  shortLabelEs: string;
+  shortLabelEn: string;
+  tagClass: string;
+  dotClass: string;
+  borderClass: string;
+  hoverBorderClass: string;
+  selectedBorderClass: string;
+  colorName: 'green' | 'yellow' | 'orange' | 'rose' | 'slate';
+  hexColor: string;
+}
+
+/**
+ * Standardized call stage color mapping:
+ * - 1st Call = Green (emerald)
+ * - 2nd Call = Yellow (yellow)
+ * - 3rd Call = Orange (orange)
+ */
+export function getCallStageConfig(auctionOrState: Auction | ReturnType<typeof getLiveAuctionProgressionState>): CallStageConfig {
+  const live = 'callStage' in auctionOrState && 'currentCallNumber' in auctionOrState
+    ? (auctionOrState as ReturnType<typeof getLiveAuctionProgressionState>)
+    : getLiveAuctionProgressionState(auctionOrState as Auction);
+
+  if (live.saleStatus === 'in_progress' || live.isHearing) {
+    return {
+      callNumber: live.currentCallNumber,
+      labelEs: 'En Audiencia Judicial',
+      labelEn: 'In Judicial Hearing',
+      shortLabelEs: 'Audiencia',
+      shortLabelEn: 'Hearing',
+      tagClass: 'bg-rose-950/90 border-rose-500/60 text-rose-300 animate-pulse',
+      dotClass: 'bg-rose-400',
+      borderClass: 'border-rose-500/60',
+      hoverBorderClass: 'hover:border-rose-400 hover:shadow-rose-950/30',
+      selectedBorderClass: 'border-rose-400 ring-2 ring-rose-500/40 shadow-xl shadow-rose-950/40',
+      colorName: 'rose',
+      hexColor: '#f43f5e',
+    };
+  }
+
+  // 3rd Call = Orange
+  if (live.callStage === 'call_3' || live.currentCallNumber === 3) {
+    return {
+      callNumber: 3,
+      labelEs: '3° Remate (75% DESCUENTO)',
+      labelEn: '3rd Call (75% DISCOUNT)',
+      shortLabelEs: '3° Remate (-75%)',
+      shortLabelEn: '3rd Call (-75%)',
+      tagClass: 'bg-orange-950/90 border-orange-500/60 text-orange-300',
+      dotClass: 'bg-orange-400',
+      borderClass: 'border-orange-500/50',
+      hoverBorderClass: 'hover:border-orange-400 hover:shadow-orange-950/30',
+      selectedBorderClass: 'border-orange-400 ring-2 ring-orange-500/40 shadow-xl shadow-orange-950/40',
+      colorName: 'orange',
+      hexColor: '#f97316',
+    };
+  }
+
+  // 2nd Call = Yellow
+  if (live.callStage === 'call_2' || live.currentCallNumber === 2) {
+    return {
+      callNumber: 2,
+      labelEs: '2° Remate (25% DESCUENTO)',
+      labelEn: '2nd Call (25% DISCOUNT)',
+      shortLabelEs: '2° Remate (-25%)',
+      shortLabelEn: '2nd Call (-25%)',
+      tagClass: 'bg-yellow-950/90 border-yellow-500/60 text-yellow-300',
+      dotClass: 'bg-yellow-400',
+      borderClass: 'border-yellow-500/50',
+      hoverBorderClass: 'hover:border-yellow-400 hover:shadow-yellow-950/30',
+      selectedBorderClass: 'border-yellow-400 ring-2 ring-yellow-500/40 shadow-xl shadow-yellow-950/40',
+      colorName: 'yellow',
+      hexColor: '#eab308',
+    };
+  }
+
+  // Expired / Passed
+  if (live.callStage === 'passed_call_3' || live.saleStatus === 'deserted') {
+    return {
+      callNumber: null,
+      labelEs: '3° Remate Vencido • En Adjudicación',
+      labelEn: '3rd Call Expired • In Adjudication',
+      shortLabelEs: '3° Remate Vencido',
+      shortLabelEn: '3rd Call Expired',
+      tagClass: 'bg-slate-900 border-slate-700 text-slate-400',
+      dotClass: 'bg-slate-500',
+      borderClass: 'border-slate-800',
+      hoverBorderClass: 'hover:border-slate-700',
+      selectedBorderClass: 'border-slate-600 ring-2 ring-slate-700/40 shadow-xl',
+      colorName: 'slate',
+      hexColor: '#64748b',
+    };
+  }
+
+  // 1st Call = Green (Default)
+  return {
+    callNumber: 1,
+    labelEs: '1° Remate (100% Base)',
+    labelEn: '1st Call (100% Base)',
+    shortLabelEs: '1° Remate (Base)',
+    shortLabelEn: '1st Call (Base)',
+    tagClass: 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300',
+    dotClass: 'bg-emerald-400',
+    borderClass: 'border-emerald-500/50',
+    hoverBorderClass: 'hover:border-emerald-400 hover:shadow-emerald-950/30',
+    selectedBorderClass: 'border-emerald-400 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-950/40',
+    colorName: 'green',
+    hexColor: '#10b981',
+  };
+}
+
+
 
 

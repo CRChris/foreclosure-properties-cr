@@ -133,11 +133,11 @@ export function AuctionCallLadder({
                   activeCallNumber === 1
                     ? 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
                     : activeCallNumber === 2
-                    ? 'bg-amber-950/80 border border-amber-500/40 text-amber-300'
-                    : 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
+                    ? 'bg-yellow-950/80 border border-yellow-500/40 text-yellow-300'
+                    : 'bg-orange-950/80 border border-orange-500/40 text-orange-300'
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full animate-ping ${
-                    activeCallNumber === 1 ? 'bg-emerald-400' : activeCallNumber === 2 ? 'bg-amber-400' : 'bg-rose-400'
+                    activeCallNumber === 1 ? 'bg-emerald-400' : activeCallNumber === 2 ? 'bg-yellow-400' : 'bg-orange-400'
                   }`} />
                   {language === 'es' ? `${activeCallNumber}° Remate Activo` : `Call ${activeCallNumber} Active`}
                 </span>
@@ -176,10 +176,10 @@ export function AuctionCallLadder({
 
       {/* 3-Call Cards Ladder Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* CALL 1 (100% Base) */}
+        {/* CALL 1 (100% Base - Green) */}
         <div
           onClick={() => onSelectCall(1)}
-          className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+          className={`relative p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
             isCall1Active
               ? 'bg-slate-900 border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-950/50'
               : isCall1Past
@@ -188,7 +188,7 @@ export function AuctionCallLadder({
                   : 'bg-slate-950/60 border-slate-800/80 text-slate-400 opacity-75 hover:opacity-100 hover:border-slate-700')
               : (selectedCall === 1
                   ? 'bg-slate-900 border-slate-700 ring-1 ring-slate-500'
-                  : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90')
+                  : 'bg-slate-900/60 border-slate-800 hover:border-emerald-500/40 hover:bg-slate-900/90')
           }`}
         >
           {isCall1Active && (
@@ -234,7 +234,7 @@ export function AuctionCallLadder({
             </div>
 
             <div>
-              <p className={`text-2xl font-extrabold tracking-tight ${isCall1Active ? 'text-white' : isCall1Past ? 'text-slate-400' : 'text-slate-200'}`}>
+              <p className={`text-2xl font-extrabold tracking-tight font-mono ${isCall1Active ? 'text-white' : isCall1Past ? 'text-slate-400' : 'text-slate-200'}`}>
                 {formatCurrency(auction.base_price_call_1, auction.currency)}
               </p>
               <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
@@ -257,24 +257,24 @@ export function AuctionCallLadder({
           </div>
         </div>
 
-        {/* CALL 2 (75% Base / -25% Rebaja) */}
+        {/* CALL 2 (75% Base / -25% Rebaja - Yellow) */}
         {auction.base_price_call_2 && auction.auction_date_call_2 ? (
           <div
             onClick={() => onSelectCall(2)}
-            className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+            className={`relative p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
               isCall2Active
-                ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/40 shadow-xl shadow-amber-950/50'
+                ? 'bg-slate-900 border-yellow-500 ring-2 ring-yellow-500/40 shadow-xl shadow-yellow-950/50'
                 : isCall2Past
                 ? (selectedCall === 2
                     ? 'bg-slate-950/80 border-slate-700 ring-1 ring-slate-500 opacity-90'
                     : 'bg-slate-950/60 border-slate-800/80 text-slate-400 opacity-75 hover:opacity-100 hover:border-slate-700')
                 : (selectedCall === 2
                     ? 'bg-slate-900 border-slate-700 ring-1 ring-slate-500'
-                    : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90')
+                    : 'bg-slate-900/60 border-slate-800 hover:border-yellow-500/40 hover:bg-slate-900/90')
             }`}
           >
             {isCall2Active && (
-              <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
+              <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-yellow-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
                 {countdown2?.isHearing
                   ? (language === 'es' ? 'En Audiencia Judicial' : 'In Hearing')
                   : (language === 'es' ? 'Señalamiento Actual' : 'Active Call')}
@@ -284,41 +284,38 @@ export function AuctionCallLadder({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1 ${
-                  isCall2Active ? 'text-amber-400' : isCall2Past ? 'text-slate-400' : 'text-amber-400'
+                  isCall2Active ? 'text-yellow-400' : isCall2Past ? 'text-slate-400' : 'text-yellow-400'
                 }`}>
                   <span>{t.card.secondCall}</span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                     isCall2Active
-                      ? 'bg-amber-950 border border-amber-800/60 text-amber-300'
+                      ? 'bg-yellow-950 border border-yellow-800/60 text-yellow-300'
                       : 'bg-slate-950 border border-slate-800 text-slate-400'
                   }`}>
                     -25%
                   </span>
                 </span>
                 {countdown2 && (
-                  <Badge
-                    variant={
-                      countdown2.isHearing
-                        ? 'danger'
-                        : isCall2Past
-                        ? 'default'
-                        : isCall2Active
-                        ? 'warning'
-                        : 'warning'
-                    }
-                    size="sm"
-                  >
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
+                    countdown2.isHearing
+                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-300'
+                      : isCall2Past
+                      ? 'bg-slate-800/80 border-slate-700 text-slate-400'
+                      : isCall2Active
+                      ? 'bg-yellow-950/80 border-yellow-500/60 text-yellow-300'
+                      : 'bg-yellow-950/60 border-yellow-700/40 text-yellow-300'
+                  }`}>
                     {countdown2.isHearing
                       ? (language === 'es' ? 'En Audiencia' : 'In Hearing')
                       : isCall2Past
                       ? (language === 'es' ? 'Desierto' : 'Past')
                       : countdown2.label}
-                  </Badge>
+                  </span>
                 )}
               </div>
 
               <div>
-                <p className={`text-2xl font-extrabold tracking-tight ${isCall2Active ? 'text-white' : isCall2Past ? 'text-slate-400' : 'text-slate-200'}`}>
+                <p className={`text-2xl font-extrabold tracking-tight font-mono ${isCall2Active ? 'text-white' : isCall2Past ? 'text-slate-400' : 'text-slate-200'}`}>
                   {formatCurrency(auction.base_price_call_2, auction.currency)}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
@@ -353,24 +350,24 @@ export function AuctionCallLadder({
           </div>
         )}
 
-        {/* CALL 3 (25% Base Liquidación / No Reserve) */}
+        {/* CALL 3 (25% Base Liquidación / No Reserve - Orange) */}
         {auction.base_price_call_3 && auction.auction_date_call_3 ? (
           <div
             onClick={() => onSelectCall(3)}
-            className={`relative p-5 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+            className={`relative p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between ${
               isCall3Active
-                ? 'bg-slate-900 border-rose-500 ring-2 ring-rose-500/40 shadow-xl shadow-rose-950/50'
+                ? 'bg-slate-900 border-orange-500 ring-2 ring-orange-500/40 shadow-xl shadow-orange-950/50'
                 : isCall3Past
                 ? (selectedCall === 3
                     ? 'bg-slate-950/80 border-slate-700 ring-1 ring-slate-500 opacity-90'
                     : 'bg-slate-950/60 border-slate-800/80 text-slate-400 opacity-75 hover:opacity-100 hover:border-slate-700')
                 : (selectedCall === 3
                     ? 'bg-slate-900 border-slate-700 ring-1 ring-slate-500'
-                    : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900/90')
+                    : 'bg-slate-900/60 border-slate-800 hover:border-orange-500/40 hover:bg-slate-900/90')
             }`}
           >
             {isCall3Active && (
-              <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-rose-500 text-white font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
+              <div className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-orange-500 text-white font-black text-[10px] uppercase tracking-wider shadow-md animate-pulse">
                 {countdown3?.isHearing
                   ? (language === 'es' ? 'En Audiencia Judicial' : 'In Hearing')
                   : (language === 'es' ? 'Señalamiento Actual' : 'Active Call')}
@@ -380,41 +377,38 @@ export function AuctionCallLadder({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1 ${
-                  isCall3Active ? 'text-rose-400' : isCall3Past ? 'text-slate-400' : 'text-rose-400'
+                  isCall3Active ? 'text-orange-400' : isCall3Past ? 'text-slate-400' : 'text-orange-400'
                 }`}>
                   <span>{t.card.thirdCall}</span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                     isCall3Active
-                      ? 'bg-rose-950 border border-rose-800/60 text-rose-300'
+                      ? 'bg-orange-950 border border-orange-800/60 text-orange-300'
                       : 'bg-slate-950 border border-slate-800 text-slate-400'
                   }`}>
                     25% Base
                   </span>
                 </span>
                 {countdown3 && (
-                  <Badge
-                    variant={
-                      countdown3.isHearing
-                        ? 'danger'
-                        : isCall3Past
-                        ? 'default'
-                        : isCall3Active
-                        ? 'danger'
-                        : 'danger'
-                    }
-                    size="sm"
-                  >
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${
+                    countdown3.isHearing
+                      ? 'bg-rose-950/80 border-rose-500/60 text-rose-300'
+                      : isCall3Past
+                      ? 'bg-slate-800/80 border-slate-700 text-slate-400'
+                      : isCall3Active
+                      ? 'bg-orange-950/80 border-orange-500/60 text-orange-300'
+                      : 'bg-orange-950/60 border-orange-700/40 text-orange-300'
+                  }`}>
                     {countdown3.isHearing
                       ? (language === 'es' ? 'En Audiencia' : 'In Hearing')
                       : isCall3Past
                       ? (language === 'es' ? 'Desierto' : 'Past')
                       : countdown3.label}
-                  </Badge>
+                  </span>
                 )}
               </div>
 
               <div>
-                <p className={`text-2xl font-extrabold tracking-tight ${isCall3Active ? 'text-white' : isCall3Past ? 'text-slate-400' : 'text-slate-200'}`}>
+                <p className={`text-2xl font-extrabold tracking-tight font-mono ${isCall3Active ? 'text-white' : isCall3Past ? 'text-slate-400' : 'text-slate-200'}`}>
                   {formatCurrency(auction.base_price_call_3, auction.currency)}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">

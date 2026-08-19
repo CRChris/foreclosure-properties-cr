@@ -514,14 +514,23 @@ export function AuctionFilterBar({
             </span>
           )}
 
-          {filters.callStage !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
-              <span>{CALL_STAGES.find((c) => c.value === filters.callStage)?.label}</span>
-              <button onClick={() => handleUpdate('callStage', 'all')} className="hover:text-white">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
+          {filters.callStage !== 'all' && (() => {
+            let chipStyle = 'bg-slate-800 text-slate-200 border-slate-700';
+            if (filters.callStage === 'call_1') chipStyle = 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40';
+            if (filters.callStage === 'call_2') chipStyle = 'bg-yellow-950/80 text-yellow-300 border-yellow-500/40';
+            if (filters.callStage === 'call_3') chipStyle = 'bg-orange-950/80 text-orange-300 border-orange-500/40';
+            return (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${chipStyle}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  filters.callStage === 'call_1' ? 'bg-emerald-400' : filters.callStage === 'call_2' ? 'bg-yellow-400' : filters.callStage === 'call_3' ? 'bg-orange-400' : 'bg-slate-400'
+                }`} />
+                <span>{CALL_STAGES.find((c) => c.value === filters.callStage)?.label}</span>
+                <button onClick={() => handleUpdate('callStage', 'all')} className="hover:text-white ml-0.5">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })()}
 
           {filters.dealGrade !== 'all' && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[11px]">

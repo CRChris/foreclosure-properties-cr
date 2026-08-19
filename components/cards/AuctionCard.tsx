@@ -10,6 +10,7 @@ import {
   calculateInvestorMetrics, 
   detectPropertyCharacteristics,
   getLiveAuctionProgressionState,
+  getCallStageConfig,
   isPropertyNewToday,
 } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -70,6 +71,7 @@ export function AuctionCard({
   };
 
   const liveState = getLiveAuctionProgressionState(auction);
+  const stageConfig = getCallStageConfig(liveState);
   const activeDate = liveState.currentAuctionDate || auction.auction_date_call_1;
   const countdown = getDaysUntilAuction(activeDate, language);
   const metrics = calculateInvestorMetrics(auction, (liveState.currentCallNumber || 1) as (1 | 2 | 3));
@@ -96,10 +98,10 @@ export function AuctionCard({
   return (
     <div
       onClick={() => onSelect && onSelect(auction)}
-      className={`group relative flex flex-col bg-slate-900/90 border rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
+      className={`group relative flex flex-col bg-slate-900/90 border-2 rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer ${
         isSelected
-          ? 'border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-950/30 bg-slate-900 -translate-y-0.5'
-          : 'border-slate-800/90 hover:border-emerald-500/50 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-1'
+          ? stageConfig.selectedBorderClass
+          : `${stageConfig.borderClass} ${stageConfig.hoverBorderClass} hover:shadow-xl hover:shadow-black/40 hover:-translate-y-1`
       }`}
     >
       {/* Icon-Based Category Hero Banner (Zero External Image Dependency) */}
@@ -162,40 +164,10 @@ export function AuctionCard({
         <div>
           {/* Call Progression Stage Banner */}
           <div className="pb-2 border-b border-slate-800/70 flex items-center justify-between gap-2">
-            {liveState.saleStatus === 'in_progress' || countdown.isHearing ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/90 border border-rose-500/60 text-rose-300 font-extrabold text-[11px] uppercase tracking-wider animate-pulse shadow-md shadow-rose-950/50">
-                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
-                {language === 'es' ? 'En Audiencia Judicial' : 'In Judicial Hearing'}
-              </span>
-            ) : liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold text-[10.5px]">
-                {language === 'es'
-                  ? '3° Remate Vencido • En Proceso de Adjudicación'
-                  : '3rd Call Expired • In Adjudication Process'}
-              </span>
-            ) : liveState.saleStatus === 'suspended' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-950/80 border border-red-500/40 text-red-300 font-bold text-[10.5px]">
-                {language === 'es' ? 'Remate Suspendido Judicialmente' : 'Judicially Suspended'}
-              </span>
-            ) : liveState.saleStatus === 'adjudicated_to_creditor' || liveState.saleStatus === 'adjudicated_to_bidder' || liveState.callStage === 'awarded' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold text-[10.5px]">
-                {language === 'es' ? 'Propiedad Adjudicada' : 'Property Awarded'}
-              </span>
-            ) : liveState.callStage === 'call_3' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-extrabold text-[10.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                {language === 'es' ? '3° Remate (75% DESCUENTO)' : '3rd Call (75% DISCOUNT)'}
-              </span>
-            ) : liveState.callStage === 'call_2' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-950/90 border border-teal-500/60 text-teal-300 font-extrabold text-[10.5px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
-                {language === 'es' ? '2° Remate (25% DESCUENTO)' : '2nd Call (25% DISCOUNT)'}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-bold text-[10.5px]">
-                {language === 'es' ? '1° Remate (100% Base)' : '1st Call (100% Base)'}
-              </span>
-            )}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg font-extrabold text-[10.5px] border ${stageConfig.tagClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${stageConfig.dotClass} ${stageConfig.colorName === 'rose' ? 'animate-ping' : ''}`} />
+              <span>{language === 'es' ? stageConfig.labelEs : stageConfig.labelEn}</span>
+            </span>
 
             <span className="font-mono text-[10.5px] text-slate-400 font-semibold">
               Folio: {auction.folio_real}
@@ -252,11 +224,7 @@ export function AuctionCard({
           <div className="pt-2.5 flex items-baseline justify-between gap-2">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
-                {liveState.currentCallNumber === 3
-                  ? '3° Remate (-75%)'
-                  : liveState.currentCallNumber === 2
-                  ? '2° Remate (-25%)'
-                  : `${t.card.firstCall} (Base)`}
+                {language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}
               </p>
               <p className="text-xl font-extrabold tracking-tight text-emerald-400">
                 {formatCurrency(liveState.currentBasePrice, auction.currency)}

@@ -3,7 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
-import { formatCurrency, formatArea, detectPropertyCharacteristics, getLocalizedPropertyTitle, getLiveAuctionProgressionState } from '@/lib/utils';
+import { 
+  formatCurrency, 
+  formatArea, 
+  detectPropertyCharacteristics, 
+  getLocalizedPropertyTitle, 
+  getLiveAuctionProgressionState,
+  getCallStageConfig,
+} from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -136,26 +143,34 @@ export default function MapExplorerPage() {
               filteredAuctions.map((auction) => {
                 const isSelected = selectedAuction?.id === auction.id;
                 const { propertyType: propType } = detectPropertyCharacteristics(auction);
+                const liveState = getLiveAuctionProgressionState(auction);
+                const stageConfig = getCallStageConfig(liveState);
                 return (
                   <div
                     key={auction.id}
                     onClick={() => setSelectedAuction(auction)}
-                    className={`p-3 rounded-xl cursor-pointer transition-all ${
+                    className={`p-3 rounded-xl cursor-pointer transition-all border-2 ${
                       isSelected
-                        ? 'bg-slate-800/90 border border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
-                        : 'bg-slate-950/40 hover:bg-slate-800/40 border border-transparent'
+                        ? stageConfig.selectedBorderClass
+                        : `bg-slate-950/60 ${stageConfig.borderClass} ${stageConfig.hoverBorderClass}`
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-white truncate">
-                        {auction.district}, {auction.canton}
+                        {auction.district ? `${auction.district}, ` : ''}{auction.canton}
                       </span>
-                      <PropertyTypeBadge type={propType} language={language} size="sm" />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${stageConfig.tagClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${stageConfig.dotClass}`} />
+                          <span>{language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}</span>
+                        </span>
+                        <PropertyTypeBadge type={propType} language={language} size="sm" />
+                      </div>
                     </div>
 
                     <div className="flex items-baseline justify-between mt-2">
-                      <span className="text-sm font-extrabold text-emerald-400">
-                        {formatCurrency(auction.base_price_call_1, auction.currency)}
+                      <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                        {formatCurrency(liveState.currentBasePrice, auction.currency)}
                       </span>
                       {auction.estimated_margin_pct && (
                         <span className="text-[11px] font-semibold text-emerald-300">
@@ -200,40 +215,50 @@ export default function MapExplorerPage() {
           />
 
           {/* Floating Action Card for selected property */}
-          {selectedAuction && (
-            <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 bg-slate-950/95 border border-slate-800 rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-emerald-400">
-                    {selectedAuction.canton}, {selectedAuction.province}
-                  </p>
-                  <p className="text-xs font-bold text-white line-clamp-1">
-                    {getLocalizedPropertyTitle(selectedAuction, language)}
-                  </p>
+          {selectedAuction && (() => {
+            const selectedLive = getLiveAuctionProgressionState(selectedAuction);
+            const selectedStage = getCallStageConfig(selectedLive);
+            return (
+              <div className={`absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 bg-slate-950/95 border-2 ${selectedStage.borderClass} rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 pb-0.5">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${selectedStage.tagClass}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${selectedStage.dotClass}`} />
+                        <span>{language === 'es' ? selectedStage.shortLabelEs : selectedStage.shortLabelEn}</span>
+                      </span>
+                      <p className="text-[10px] uppercase font-bold text-slate-400">
+                        {selectedAuction.canton}, {selectedAuction.province}
+                      </p>
+                    </div>
+                    <p className="text-xs font-bold text-white line-clamp-1">
+                      {getLocalizedPropertyTitle(selectedAuction, language)}
+                    </p>
+                  </div>
+                  <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
+                    {selectedAuction.currency}
+                  </span>
                 </div>
-                <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
-                  {selectedAuction.currency}
-                </span>
-              </div>
 
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-base font-extrabold text-white">
-                  {formatCurrency(selectedAuction.base_price_call_1, selectedAuction.currency)}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {formatArea(selectedAuction.area_m2)}
-                </span>
-              </div>
+                <div className="flex items-baseline justify-between pt-1">
+                  <span className="text-base font-extrabold text-emerald-400 font-mono">
+                    {formatCurrency(selectedLive.currentBasePrice, selectedAuction.currency)}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {formatArea(selectedAuction.area_m2)}
+                  </span>
+                </div>
 
-              <Link
-                href={`/auctions/${selectedAuction.id}`}
-                className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors shadow-md"
-              >
-                <span>{t.card.viewDossier}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          )}
+                <Link
+                  href={`/auctions/${selectedAuction.id}`}
+                  className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-3 rounded-lg transition-colors shadow-md"
+                >
+                  <span>{t.card.viewDossier}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>

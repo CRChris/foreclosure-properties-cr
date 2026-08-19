@@ -4,9 +4,16 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, getDaysUntilAuction, detectPropertyCharacteristics } from '@/lib/utils';
+import { 
+  formatCurrency, 
+  formatArea, 
+  getDaysUntilAuction, 
+  detectPropertyCharacteristics,
+  getLiveAuctionProgressionState,
+  getCallStageConfig,
+} from '@/lib/utils';
 import Link from 'next/link';
-import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles, AlertTriangle } from 'lucide-react';
+import { ArrowRight, MapPin, Calendar, Maximize2, Scale, TrendingUp, Sparkles, AlertTriangle, Layers } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 
@@ -62,31 +69,39 @@ export function PropertyMap({
 }: PropertyMapProps) {
   const { language } = useLanguage();
 
-  // Color-coded marker generator based on discount margin:
-  // - Green: > 35% Margin (High Discount)
-  // - Yellow/Amber: 20% - 35% Margin (Medium Discount)
-  // - Blue: < 20% / Standard Auction (Standard)
+  // Color-coded marker generator based on Call Stage:
+  // - 1st Call = Green (Emerald)
+  // - 2nd Call = Yellow (Yellow)
+  // - 3rd Call = Orange (Orange)
   const createColorCodedIcon = (auction: Auction, isSelected: boolean) => {
-    const margin = auction.estimated_margin_pct || 0;
+    const liveState = getLiveAuctionProgressionState(auction);
+    const stageConfig = getCallStageConfig(liveState);
     
-    let colorClass = 'bg-blue-600 border-blue-300 text-white shadow-blue-900/50';
-    let ringClass = isSelected ? 'ring-4 ring-blue-400/80 scale-125 z-50' : 'hover:scale-115';
-    let badgeText = margin > 0 ? `+${Math.round(margin)}%` : 'CR';
+    let colorClass = 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-950/70';
+    let ringClass = isSelected ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+    let badgeText = language === 'es' ? '1°' : '1st';
 
-    if (margin >= 35) {
-      colorClass = 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-950/70';
-      ringClass = isSelected ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50 animate-pulse' : 'hover:scale-115';
-    } else if (margin >= 20) {
-      colorClass = 'bg-amber-600 border-amber-300 text-white shadow-amber-950/70';
-      ringClass = isSelected ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+    if (liveState.saleStatus === 'in_progress' || liveState.isHearing) {
+      colorClass = 'bg-rose-600 border-rose-300 text-white shadow-rose-950/70 animate-pulse';
+      ringClass = isSelected ? 'ring-4 ring-rose-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+      badgeText = '🔴';
+    } else if (liveState.callStage === 'call_3' || liveState.currentCallNumber === 3) {
+      colorClass = 'bg-orange-500 border-orange-200 text-white shadow-orange-950/70';
+      ringClass = isSelected ? 'ring-4 ring-orange-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+      badgeText = language === 'es' ? '3°' : '3rd';
+    } else if (liveState.callStage === 'call_2' || liveState.currentCallNumber === 2) {
+      colorClass = 'bg-yellow-500 border-yellow-200 text-slate-950 shadow-yellow-950/70';
+      ringClass = isSelected ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+      badgeText = language === 'es' ? '2°' : '2nd';
     } else {
-      colorClass = 'bg-sky-600 border-sky-300 text-white shadow-sky-950/70';
-      ringClass = isSelected ? 'ring-4 ring-sky-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+      colorClass = 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-950/70';
+      ringClass = isSelected ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50' : 'hover:scale-115';
+      badgeText = language === 'es' ? '1°' : '1st';
     }
 
     const iconHtml = `
       <div class="relative flex items-center justify-center cursor-pointer transition-all duration-300 ${ringClass}">
-        <div class="flex items-center justify-center w-10 h-10 rounded-full border-2 shadow-xl ${colorClass} text-[10.5px] font-extrabold tracking-tight">
+        <div class="flex items-center justify-center w-10 h-10 rounded-full border-2 shadow-xl ${colorClass} text-[11px] font-black tracking-tight">
           ${badgeText}
         </div>
         <div class="absolute -bottom-1 w-2 h-2 rotate-45 ${colorClass.split(' ')[0]}"></div>
@@ -110,7 +125,7 @@ export function PropertyMap({
 
   return (
     <div style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner ${className}`}>
-      {/* Persistent Map Centroid Disclaimer Badge (Centered & Shifted to clear +/- Zoom Controls) */}
+      {/* Persistent Map Centroid Disclaimer Badge */}
       <div className="absolute top-3 left-14 sm:left-1/2 sm:-translate-x-1/2 z-[400] max-w-xs sm:max-w-md bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3 py-2 text-[11px] text-amber-200/95 shadow-2xl flex items-start gap-2 pointer-events-auto">
         <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <p className="leading-tight">
@@ -120,23 +135,23 @@ export function PropertyMap({
         </p>
       </div>
 
-      {/* Interactive Legend Overlay (Top-Right) */}
+      {/* Interactive Legend Overlay (Top-Right): 1st Call = Green, 2nd Call = Yellow, 3rd Call = Orange */}
       <div className="absolute top-3 right-3 z-[400] bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden md:block">
         <p className="font-semibold text-slate-200 flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-emerald-400" />
-          {language === 'es' ? 'Margen de Oportunidad' : 'Opportunity Margin'}
+          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+          <span>{language === 'es' ? 'Señalamiento de Remate' : 'Auction Call Stage'}</span>
         </p>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block ring-2 ring-emerald-500/20" />
-          <span>{language === 'es' ? '> 35% Margen Alto' : '> 35% High Margin'}</span>
+          <span>{language === 'es' ? '1° Remate (Verde)' : '1st Call (Green)'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block ring-2 ring-amber-500/20" />
-          <span>{language === 'es' ? '20% – 35% Margen Medio' : '20% – 35% Medium Margin'}</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block ring-2 ring-yellow-500/20" />
+          <span>{language === 'es' ? '2° Remate (Amarillo)' : '2nd Call (Yellow)'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block ring-2 ring-sky-500/20" />
-          <span>{language === 'es' ? '< 20% Base Estándar' : '< 20% Standard Base'}</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block ring-2 ring-orange-500/20" />
+          <span>{language === 'es' ? '3° Remate (Naranja)' : '3rd Call (Orange)'}</span>
         </div>
       </div>
 
@@ -157,7 +172,10 @@ export function PropertyMap({
 
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
-          const countdown = getDaysUntilAuction(auction.auction_date_call_1, language);
+          const liveState = getLiveAuctionProgressionState(auction);
+          const stageConfig = getCallStageConfig(liveState);
+          const activeDate = liveState.currentAuctionDate || auction.auction_date_call_1;
+          const countdown = getDaysUntilAuction(activeDate, language);
           const { propertyType } = detectPropertyCharacteristics(auction);
 
           return (
@@ -176,7 +194,13 @@ export function PropertyMap({
                   {/* Category Pill & Disclaimer Header */}
                   <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between gap-1">
-                      <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${stageConfig.tagClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${stageConfig.dotClass}`} />
+                          <span>{language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}</span>
+                        </span>
+                        <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+                      </div>
                       {auction.estimated_margin_pct && (
                         <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/40 text-[10.5px] font-extrabold">
                           +{Math.round(auction.estimated_margin_pct)}%
@@ -196,7 +220,7 @@ export function PropertyMap({
                   {/* Title & Expediente */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-white line-clamp-1">
-                      {auction.district}, {auction.canton} • Folio {auction.folio_real}
+                      {auction.district ? `${auction.district}, ` : ''}{auction.canton} • Folio {auction.folio_real}
                     </p>
                     <p className="text-[10px] font-mono text-slate-400 truncate flex items-center gap-1">
                       <Scale className="w-2.5 h-2.5 text-slate-500 shrink-0" />
@@ -207,9 +231,11 @@ export function PropertyMap({
                   {/* Price breakdown */}
                   <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800 space-y-1">
                     <div className="flex justify-between items-baseline text-xs">
-                      <span className="text-slate-400 text-[11px]">{language === 'es' ? 'Base 1er Remate:' : '1st Call Base:'}</span>
-                      <span className="font-extrabold text-emerald-400">
-                        {formatCurrency(auction.base_price_call_1, auction.currency)}
+                      <span className="text-slate-400 text-[11px]">
+                        {language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}:
+                      </span>
+                      <span className="font-extrabold text-emerald-400 font-mono">
+                        {formatCurrency(liveState.currentBasePrice, auction.currency)}
                       </span>
                     </div>
                     {auction.estimated_market_value && (
