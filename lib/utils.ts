@@ -20,9 +20,51 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Lightweight client helper strictly as a fallback UI resolver for zero-latency display.
- * Pinned to Costa Rica Timezone (UTC-6) with 60-minute judicial hearing window.
- * Terminal states (suspended, awarded, annulled) are strictly respected.
+ * Safely parse any Costa Rican judicial foreclosure date string into a Date object.
+ * Guarantees interpretation in America/Costa_Rica timezone (UTC-6) if no explicit offset is present.
+ */
+export function parseCostaRicaDate(dateStr?: string | null): Date | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return null;
+
+  // If string already includes timezone offset (+HH:MM, -HH:MM, or Z), parse directly
+  if (/[zZ]|[+-]\d{2}(:?\d{2})?$/.test(trimmed)) {
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // If format is YYYY-MM-DD HH:mm(:ss) or YYYY-MM-DDTHH:mm(:ss), append Costa Rica timezone (-06:00)
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(trimmed)) {
+    const iso = trimmed.replace(' ', 'T') + '-06:00';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // If date-only format YYYY-MM-DD, set to 08:00 AM Costa Rica Time (morning court opening hour)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const iso = `${trimmed}T08:00:00-06:00`;
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(trimmed);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Dynamic Call Resolution Logic (America/Costa_Rica timezone):
+ * Compares current timestamp against first_call_date, second_call_date, and third_call_date.
+ * 
+ * Rules:
+ * 1. If now <= first_call_date:
+ *    - Active Call = 1 (1st Call box marked as Active Call)
+ * 2. If now > first_call_date AND now <= second_call_date:
+ *    - Active Call = 2 (2nd Call box marked as Active Call, 1st marked as past)
+ * 3. If now > second_call_date AND now <= third_call_date:
+ *    - Active Call = 3 (3rd Call box marked as Active Call, 1st & 2nd marked as past)
+ * 4. If now > third_call_date:
+ *    - Active Call = None / Expired (all 3 calls concluded/deserted)
  */
 export function getLiveAuctionProgressionState(
   auction: Auction,
@@ -36,7 +78,7 @@ export function getLiveAuctionProgressionState(
   currentDiscountPct: number;
   isHearing: boolean;
 } {
-  // If database already locked terminal state, preserve it
+  // If database already locked terminal judicial state, preserve it
   if (
     auction.sale_status &&
     ['suspended', 'adjudicated_to_creditor', 'adjudicated_to_bidder', 'awarded', 'annulled', 'settled'].includes(auction.sale_status)
@@ -53,22 +95,18 @@ export function getLiveAuctionProgressionState(
   }
 
   const nowMs = customNow ? customNow.getTime() : Date.now();
-  const d1Date = new Date(auction.auction_date_call_1);
-  const d1Ms = !isNaN(d1Date.getTime()) ? d1Date.getTime() : nowMs + (14 * 24 * 60 * 60 * 1000);
+  const d1Date = parseCostaRicaDate(auction.auction_date_call_1);
+  const d1Ms = d1Date ? d1Date.getTime() : nowMs + (14 * 24 * 60 * 60 * 1000);
   
-  // If call 2 / 3 dates are not explicitly present in docket, derive statutory Costa Rican intervals (14 days between calls)
+  // 14 days interval statutory default if calls 2/3 are not set in docket
   const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
   const SIXTY_MINS_MS = 60 * 60 * 1000;
 
-  const rawD2 = auction.auction_date_call_2 ? new Date(auction.auction_date_call_2).getTime() : null;
-  const d2Ms = rawD2 && !isNaN(rawD2) ? rawD2 : d1Ms + FOURTEEN_DAYS_MS;
+  const d2Date = parseCostaRicaDate(auction.auction_date_call_2);
+  const d2Ms = d2Date ? d2Date.getTime() : d1Ms + FOURTEEN_DAYS_MS;
 
-  const rawD3 = auction.auction_date_call_3 ? new Date(auction.auction_date_call_3).getTime() : null;
-  const d3Ms = rawD3 && !isNaN(rawD3) ? rawD3 : d2Ms + FOURTEEN_DAYS_MS;
-
-  const d1EndMs = d1Ms + SIXTY_MINS_MS;
-  const d2EndMs = d2Ms + SIXTY_MINS_MS;
-  const d3EndMs = d3Ms + SIXTY_MINS_MS;
+  const d3Date = parseCostaRicaDate(auction.auction_date_call_3);
+  const d3Ms = d3Date ? d3Date.getTime() : d2Ms + FOURTEEN_DAYS_MS;
 
   const p1 = auction.base_price_call_1;
   const p2 = auction.base_price_call_2 || Math.round(p1 * 0.75);
@@ -77,82 +115,49 @@ export function getLiveAuctionProgressionState(
   const d2ISO = auction.auction_date_call_2 || new Date(d2Ms).toISOString();
   const d3ISO = auction.auction_date_call_3 || new Date(d3Ms).toISOString();
 
-  // 1st Call Period
-  if (nowMs < d1Ms) {
+  // Rule 1: If now <= first_call_date -> Active Call = 1
+  if (nowMs <= d1Ms) {
+    const isHearing = nowMs >= d1Ms - (10 * 60 * 1000) && nowMs <= d1Ms + SIXTY_MINS_MS;
     return {
       callStage: 'call_1',
-      saleStatus: 'upcoming',
+      saleStatus: isHearing ? 'in_progress' : 'upcoming',
       currentCallNumber: 1,
       currentBasePrice: p1,
       currentAuctionDate: auction.auction_date_call_1,
       currentDiscountPct: 0,
-      isHearing: false,
+      isHearing,
     };
   }
 
-  if (nowMs >= d1Ms && nowMs <= d1EndMs) {
-    return {
-      callStage: 'call_1',
-      saleStatus: 'in_progress',
-      currentCallNumber: 1,
-      currentBasePrice: p1,
-      currentAuctionDate: auction.auction_date_call_1,
-      currentDiscountPct: 0,
-      isHearing: true,
-    };
-  }
-
-  // 2nd Call Period (25% Discount)
-  if (nowMs > d1EndMs && nowMs < d2Ms) {
+  // Rule 2: If now > first_call_date AND now <= second_call_date -> Active Call = 2
+  if (nowMs > d1Ms && nowMs <= d2Ms) {
+    const isHearing = nowMs >= d2Ms - (10 * 60 * 1000) && nowMs <= d2Ms + SIXTY_MINS_MS;
     return {
       callStage: 'call_2',
-      saleStatus: 'upcoming',
+      saleStatus: isHearing ? 'in_progress' : 'upcoming',
       currentCallNumber: 2,
       currentBasePrice: p2,
       currentAuctionDate: d2ISO,
       currentDiscountPct: 25,
-      isHearing: false,
+      isHearing,
     };
   }
 
-  if (nowMs >= d2Ms && nowMs <= d2EndMs) {
-    return {
-      callStage: 'call_2',
-      saleStatus: 'in_progress',
-      currentCallNumber: 2,
-      currentBasePrice: p2,
-      currentAuctionDate: d2ISO,
-      currentDiscountPct: 25,
-      isHearing: true,
-    };
-  }
-
-  // 3rd Call Period (75% Discount / Liquidation Base)
-  if (nowMs > d2EndMs && nowMs < d3Ms) {
+  // Rule 3: If now > second_call_date AND now <= third_call_date -> Active Call = 3
+  if (nowMs > d2Ms && nowMs <= d3Ms) {
+    const isHearing = nowMs >= d3Ms - (10 * 60 * 1000) && nowMs <= d3Ms + SIXTY_MINS_MS;
     return {
       callStage: 'call_3',
-      saleStatus: 'upcoming',
+      saleStatus: isHearing ? 'in_progress' : 'upcoming',
       currentCallNumber: 3,
       currentBasePrice: p3,
       currentAuctionDate: d3ISO,
       currentDiscountPct: 75,
-      isHearing: false,
+      isHearing,
     };
   }
 
-  if (nowMs >= d3Ms && nowMs <= d3EndMs) {
-    return {
-      callStage: 'call_3',
-      saleStatus: 'in_progress',
-      currentCallNumber: 3,
-      currentBasePrice: p3,
-      currentAuctionDate: d3ISO,
-      currentDiscountPct: 75,
-      isHearing: true,
-    };
-  }
-
-  // Concluded after 3rd Call has completely passed
+  // Rule 4: If now > third_call_date -> Active Call = None / Expired
   return {
     callStage: 'passed_call_3',
     saleStatus: 'deserted',
@@ -163,6 +168,7 @@ export function getLiveAuctionProgressionState(
     isHearing: false,
   };
 }
+
 
 /**
  * Format currency with proper symbols (CRC ₡ or USD $)
@@ -326,11 +332,18 @@ export function isPropertyNewToday(createdAt?: string | null): boolean {
  * Get remaining days until auction with bilingual labels and 60-min hearing window detection
  */
 export function getDaysUntilAuction(
-  dateString: string, 
+  dateString?: string | null, 
   lang: string = 'es'
 ): { days: number; isPast: boolean; isHearing: boolean; label: string } {
+  if (!dateString) {
+    return { days: 0, isPast: false, isHearing: false, label: lang === 'en' ? 'Date pending' : 'Fecha pendiente' };
+  }
   try {
-    const target = new Date(dateString).getTime();
+    const parsedDate = parseCostaRicaDate(dateString);
+    if (!parsedDate) {
+      return { days: 0, isPast: false, isHearing: false, label: lang === 'en' ? 'Date pending' : 'Fecha pendiente' };
+    }
+    const target = parsedDate.getTime();
     const now = Date.now();
     const SIXTY_MINS_MS = 60 * 60 * 1000;
 
@@ -349,7 +362,8 @@ export function getDaysUntilAuction(
 
     if (lang === 'en') {
       if (diffMs < 0) {
-        return { days: Math.abs(diffDays), isPast: true, isHearing: false, label: `Ended ${Math.abs(diffDays)}d ago` };
+        const pastDays = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+        return { days: pastDays, isPast: true, isHearing: false, label: `Concluded (${pastDays}d ago)` };
       }
       if (diffDays === 0) {
         return { days: 0, isPast: false, isHearing: false, label: 'Today!' };
@@ -361,7 +375,8 @@ export function getDaysUntilAuction(
     }
 
     if (diffMs < 0) {
-      return { days: Math.abs(diffDays), isPast: true, isHearing: false, label: `Finalizó hace ${Math.abs(diffDays)}d` };
+      const pastDays = Math.abs(Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      return { days: pastDays, isPast: true, isHearing: false, label: `Concluido (hace ${pastDays}d)` };
     }
     if (diffDays === 0) {
       return { days: 0, isPast: false, isHearing: false, label: '¡Hoy mismo!' };
