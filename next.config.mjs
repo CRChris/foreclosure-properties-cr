@@ -19,6 +19,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**.imprentanacional.go.cr',
       },
+      {
+        protocol: 'https',
+        hostname: '**.poder-judicial.go.cr',
+      },
     ],
   },
 };

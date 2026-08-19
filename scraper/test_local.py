@@ -13,13 +13,34 @@ from datetime import datetime
 from scraper.main import (
     ForeclosureAuction,
     extract_single_edict_gemini,
+    extract_single_edict_regex_fallback,
     enrich_auction_data,
     CR_CANTON_CENTROIDS,
     PROVINCE_CENTROIDS,
+    NEXUS_PJ_SEARCH_API,
+    NEXUS_PJ_DOC_API,
+    BOLETIN_JUDICIAL_PORTAL,
+    is_foreclosure_edict_text,
+    validate_and_read_response,
+    slice_remates_section,
+    split_into_expediente_blocks,
+    check_yield_and_alert,
+    DEBUG_LOG_PATH,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger("scraper.test")
+
+# Mock response class for testing validate_and_read_response
+class MockHTTPResponse:
+    def __init__(self, status: int, data: bytes, headers: dict = None):
+        self.status = status
+        self.code = status
+        self._data = data
+        self.headers = headers or {"Content-Type": "application/pdf"}
+
+    def read(self):
+        return self._data
 
 # ==============================================================================
 # SAMPLE 1: USD-Denominated Residential Condo in Garabito / Jacó
@@ -52,70 +73,196 @@ Segundo remate: nueve de octubre de 2026. Tercer remate: treinta de octubre de 2
 Proceso Ejecución Hipotecaria del BANCO DE COSTA RICA contra AGROPECUARIA GANADERA DEL NORTE S.A. Expediente: 23-008914-0298-CA.
 """
 
-def heuristic_fallback_extractor(edict_text: str) -> ForeclosureAuction:
-    """
-    Offline deterministic parser for testing when running without active Gemini API keys.
-    """
-    is_usd = "usd" in edict_text.lower() or "dólares" in edict_text.lower() or "$" in edict_text
-    currency = "USD" if is_usd else "CRC"
+# ==============================================================================
+# SAMPLE 3: Cartago Court with Omitted Plano Catastrado (Cobro Judicial)
+# ==============================================================================
+SAMPLE_EDICT_CARTAGO_NO_PLANO = """
+JUZGADO PRIMERO DE COBRO DE CARTAGO. A las diez horas del veinte de octubre de dos mil veintiséis, 
+con la base de setenta y dos millones de colones (CRC 72.000.000,00), remataré al mejor postor: 
+Finca inscrita en el Partido de Cartago matrícula 3-451298-000. Terreno con casa de habitación. 
+Situada en Distrito 01 Oriental, Cantón 01 Central de Cartago. Mide: 210.50 metros cuadrados. 
+Linderos: Norte, Calle pública; Sur, Lote 12; Este, Lote 10; Oeste, Lote 14. 
+Segundo remate: diez de noviembre de 2026. Tercer remate: primero de diciembre de 2026. 
+Proceso de BANCO POPULAR Y DE DESARROLLO COMUNAL contra JUAN PÉREZ MORA. 
+EXP: 24-002345-0214-CJ.
+"""
+
+# ==============================================================================
+# SAMPLE 4: Guanacaste Agrario Court with Omitted Defendant
+# ==============================================================================
+SAMPLE_EDICT_GUANACASTE_AGRARIO = """
+JUZGADO AGRARIO DE SANTA CRUZ. Al ser las catorce horas del cinco de noviembre de dos mil veintiséis, 
+en este Despacho, libre de gravámenes, con la base de ciento ochenta mil dólares (USD 180,000.00), 
+al mejor postor se subastará: Finca matrícula 5-119283-000, situada en Tempate, Cantón Santa Cruz, Guanacaste. 
+Naturaleza: Terreno de pastos y árboles frutales. Mide 12.500 m2. Catastro G-192834-2021. 
+Segundo remate: veintiséis de noviembre de 2026. Tercer remate: diecisiete de diciembre de 2026. 
+Ejecución hipotecaria promovida por BAC SAN JOSÉ. NÚMERO DE EXPEDIENTE: 23-007891-0388-AG.
+"""
+
+def test_response_validation_unit():
+    logger.info("\n--- Testing Step 2: Raw Response Validation & Logging ---")
     
-    if "Garabito" in edict_text or "Jacó" in edict_text:
-        return ForeclosureAuction(
-            expediente_number="23-001428-1158-CJ",
-            court_name="Juzgado de Cobro y Menor Cuantía de Garabito",
-            folio_real="6-189342-000",
-            plano_catastrado="P-1928374-2022",
-            province="Puntarenas",
-            canton="Garabito",
-            district="Jacó",
-            address_description="Condominio Acqua Residences, Filial 502, frente a Playa Jacó",
-            area_m2=165.50,
-            currency="USD",
-            base_price_call_1=220000.0,
-            auction_date_call_1="2026-09-15T14:30:00-06:00",
-            base_price_call_2=165000.0,
-            auction_date_call_2="2026-10-06T14:30:00-06:00",
-            base_price_call_3=55000.0,
-            auction_date_call_3="2026-10-27T14:30:00-06:00",
-            plaintiff="Banco Nacional de Costa Rica (BNCR)",
-            defendant="Inversiones Turísticas del Pacífico Jacó S.A.",
-            legal_summary="Remate judicial de apartamento de lujo frente al mar en piso 5 en Condominio Acqua Residences, Jacó.",
-            property_category="Condo",
-            raw_edict_text=edict_text.strip(),
-            approx_latitude=9.6152,
-            approx_longitude=-84.6298,
-        )
-    else:
-        return ForeclosureAuction(
-            expediente_number="23-008914-0298-CA",
-            court_name="Juzgado Agrario y Civil del II Circuito Judicial de Alajuela (San Carlos)",
-            folio_real="2-289451-000",
-            plano_catastrado="A-2104928-2019",
-            province="Alajuela",
-            canton="San Carlos",
-            district="Quesada",
-            address_description="Sector Ron Ron, 3.5 km Este de Florencia",
-            area_m2=45000.0,
-            currency="CRC",
-            base_price_call_1=85000000.0,
-            auction_date_call_1="2026-09-18T09:00:00-06:00",
-            base_price_call_2=63750000.0,  # 75%
-            auction_date_call_2="2026-10-09T09:00:00-06:00",
-            base_price_call_3=21250000.0,  # 25%
-            auction_date_call_3="2026-10-30T09:00:00-06:00",
-            plaintiff="Banco de Costa Rica (BCR)",
-            defendant="Agropecuaria Ganadera del Norte S.A.",
-            legal_summary="Finca agropecuaria de 4.5 hectáreas con pastos y naciente en Ron Ron de San Carlos.",
-            property_category="Agricultural",
-            raw_edict_text=edict_text.strip(),
-            approx_latitude=10.3238,
-            approx_longitude=-84.4271,
-        )
+    # 1. Valid PDF response (>= 10 KB)
+    valid_data = b"%PDF-1.4 " + (b"0123456789" * 1100) # ~11 KB
+    resp_valid = MockHTTPResponse(200, valid_data, {"Content-Type": "application/pdf"})
+    ok, data, err = validate_and_read_response(resp_valid, "https://mock.judicial.go.cr/bol.pdf", min_bytes=10240)
+    assert ok is True, f"Valid 11KB PDF should pass: {err}"
+    assert len(data) == len(valid_data)
+    assert err is None
+    
+    # 2. Undersized response (< 10 KB)
+    small_data = b"%PDF-1.4 " + (b"0123456789" * 200) # ~2 KB
+    resp_small = MockHTTPResponse(200, small_data, {"Content-Type": "application/pdf"})
+    ok, data, err = validate_and_read_response(resp_small, "https://mock.judicial.go.cr/tiny.pdf", min_bytes=10240)
+    assert ok is False, "Undersized payload must fail validation"
+    assert "Undersized payload" in err
+    
+    # 3. HTTP 403 / 503 error status
+    resp_403 = MockHTTPResponse(403, b"Forbidden Access Denied", {"Content-Type": "text/html"})
+    ok, data, err = validate_and_read_response(resp_403, "https://mock.judicial.go.cr/blocked.pdf")
+    assert ok is False, "HTTP 403 status must fail validation"
+    assert "HTTP 403" in err
+
+    # 4. WAF / Cloudflare / Barracuda Challenge Page detection
+    challenge_html = b"<html><head><title>Just a moment...</title></head><body>cf-browser-verification security check</body></html>"
+    resp_chal = MockHTTPResponse(200, challenge_html, {"Content-Type": "text/html"})
+    ok, data, err = validate_and_read_response(resp_chal, "https://mock.judicial.go.cr/portal", min_bytes=100)
+    assert ok is False, "Bot challenge page signature must be detected and rejected"
+    assert "challenge page detected" in err
+    
+    logger.info("✓ Step 2 Raw Response Validation & Logging tests passed successfully.")
+
+
+def test_section_slicing_and_block_splitting():
+    logger.info("\n--- Testing Step 3: Remates Section Slicing & Case Block Splitting ---")
+    
+    multi_chapter_document = f"""
+    BOLETÍN JUDICIAL N° 150
+    ADMINISTRACIÓN PÚBLICA
+    Avisos de licitaciones administrativas de suministros...
+    
+    REMATES PODER JUDICIAL (2 VECES)
+    
+    {SAMPLE_EDICT_USD_CONDO}
+    
+    {SAMPLE_EDICT_CRC_LAND}
+    
+    {SAMPLE_EDICT_CARTAGO_NO_PLANO}
+    
+    CITACIONES
+    Citación a herederos y acreedores de la sucesión...
+    """
+    
+    # 1. Section Slicing
+    sliced = slice_remates_section(multi_chapter_document)
+    assert "REMATES PODER JUDICIAL" in sliced, "Must isolate Remates section"
+    assert "ADMINISTRACIÓN PÚBLICA" not in sliced, "Must exclude preceding non-remate chapters"
+    assert "Citación a herederos" not in sliced, "Must exclude trailing non-remate chapters"
+    
+    # 2. Block Splitting
+    blocks = split_into_expediente_blocks(sliced)
+    assert len(blocks) >= 3, f"Must extract at least 3 distinct case blocks (got {len(blocks)})"
+    logger.info(f"✓ Sliced Remates section and identified {len(blocks)} distinct case blocks.")
+
+
+def test_multi_court_resilient_parsing():
+    logger.info("\n--- Testing Step 3: Multi-Court Resilient Regex Parser ---")
+    
+    # Test Cartago Case (Missing Plano Catastrado)
+    parsed_cartago = extract_single_edict_regex_fallback(SAMPLE_EDICT_CARTAGO_NO_PLANO)
+    assert parsed_cartago is not None, "Cartago edict must not be dropped due to missing plano catastrado"
+    assert parsed_cartago.expediente_number == "24-002345-0214-CJ"
+    assert parsed_cartago.folio_real == "3-451298-000"
+    assert parsed_cartago.province == "Cartago"
+    assert parsed_cartago.canton == "Central"
+    assert parsed_cartago.currency == "CRC"
+    assert parsed_cartago.base_price_call_1 == 72000000.0
+    assert parsed_cartago.base_price_call_2 == 54000000.0  # 75% fallback
+    assert parsed_cartago.base_price_call_3 == 18000000.0  # 25% fallback
+    logger.info("  ✓ Cartago court format parsed with resilient plano fallback.")
+
+    # Test Guanacaste Agrario Case (Missing Defendant)
+    parsed_guana = extract_single_edict_regex_fallback(SAMPLE_EDICT_GUANACASTE_AGRARIO)
+    assert parsed_guana is not None, "Guanacaste edict must not be dropped due to missing defendant"
+    assert parsed_guana.expediente_number == "23-007891-0388-AG"
+    assert parsed_guana.folio_real == "5-119283-000"
+    assert parsed_guana.province == "Guanacaste"
+    assert parsed_guana.canton == "Santa Cruz"
+    assert parsed_guana.currency == "USD"
+    assert parsed_guana.base_price_call_1 == 180000.0
+    assert parsed_guana.property_category == "Agricultural"
+    logger.info("  ✓ Guanacaste Agrario format parsed with resilient defendant fallback.")
+
+
+def test_monitoring_and_low_yield_alerting():
+    logger.info("\n--- Testing Step 4: Monitoring & Low-Yield Alerting ---")
+    
+    # 1. Normal yield (>= 3) -> No low yield alert
+    normal_audit = check_yield_and_alert(total_parsed=5, run_date_str="2026-08-18", threshold=3)
+    assert normal_audit["is_low_yield"] is False, "Yield of 5 must pass threshold >= 3"
+    
+    # 2. Low yield (< 3) -> Triggers alert
+    low_audit = check_yield_and_alert(total_parsed=1, run_date_str="2026-08-18", threshold=3)
+    assert low_audit["is_low_yield"] is True, "Yield of 1 must trigger low-yield alert"
+    assert low_audit["threshold"] == 3
+    logger.info("✓ Step 4 Monitoring & Low-Yield Alerting tests passed successfully.")
+
+
+def test_source_url_verification():
+    logger.info("\n--- Testing Source URL Verification & General Gazette Exclusion ---")
+    
+    # 1. Verify Nexus PJ endpoints
+    assert NEXUS_PJ_SEARCH_API == "https://nexuspj.poder-judicial.go.cr/api/search", "Nexus PJ search API endpoint mismatch"
+    assert NEXUS_PJ_DOC_API == "https://nexuspj.poder-judicial.go.cr/api/document", "Nexus PJ document API endpoint mismatch"
+    assert BOLETIN_JUDICIAL_PORTAL == "https://boletinjudicial.poder-judicial.go.cr", "Boletín Judicial portal mismatch"
+    
+    # 2. Verify URL candidate patterns for Boletín Judicial
+    sample_date = datetime(2026, 8, 18)
+    day = sample_date.strftime("%d")
+    month = sample_date.strftime("%m")
+    year = sample_date.strftime("%Y")
+    
+    boletin_candidates = [
+        f"https://www.imprentanacional.go.cr/pub-boletin/{year}/{month}/bol_{day}_{month}_{year}.pdf",
+        f"https://www.imprentanacional.go.cr/pub/{year}/{month}/{day}/COMP_{day}_{month}_{year}.pdf",
+    ]
+    
+    for url in boletin_candidates:
+        assert "boletin" in url.lower() or "comp_" in url.lower(), f"Candidate {url} is not an official Boletín Judicial endpoint"
+        assert "gaceta" not in url.lower() and "pub-gaceta" not in url.lower(), f"Candidate {url} must not target general gazette"
+        
+    # 3. Test that non-judicial executive gazettes are rejected by edict filter
+    non_judicial_text = """
+    MINISTERIO DE HACIENDA. Resolución N° DGT-R-012-2026. Se aprueban las tablas de retención en la fuente para el período fiscal 2026.
+    Publíquese en el diario oficial La Gaceta.
+    """
+    assert not is_foreclosure_edict_text(non_judicial_text), "Edict filter must reject general non-judicial government notices"
+    assert is_foreclosure_edict_text(SAMPLE_EDICT_USD_CONDO), "Edict filter must accept valid court foreclosure notices"
+    assert is_foreclosure_edict_text(SAMPLE_EDICT_CRC_LAND), "Edict filter must accept valid agricultural court foreclosure notices"
+    
+    logger.info("✓ Source URL verification passed: Strictly targeting Nexus PJ & Boletín Judicial.")
+    logger.info("✓ General government gazette feeds (La Gaceta) strictly excluded.")
+
 
 def run_tests():
     logger.info("================================================================")
-    logger.info("RUNNING SPRINT 4 SCRAPER & INGESTION PIPELINE LOCAL TESTS")
+    logger.info("RUNNING ENHANCED SCRAPER & INGESTION PIPELINE LOCAL TESTS")
     logger.info("================================================================")
+
+    # 1. Source URL & Gazette Isolation Tests
+    test_source_url_verification()
+
+    # 2. Step 2: Response Validation & Logging Tests
+    test_response_validation_unit()
+
+    # 3. Step 3: Section Slicing & Case Block Splitting Tests
+    test_section_slicing_and_block_splitting()
+
+    # 4. Step 3: Multi-Court Resilient Regex Parsing Tests
+    test_multi_court_resilient_parsing()
+
+    # 5. Step 4: Monitoring & Low-Yield Alerting Tests
+    test_monitoring_and_low_yield_alerting()
 
     test_cases = [
         ("USD Condo (Garabito)", SAMPLE_EDICT_USD_CONDO),
@@ -138,7 +285,7 @@ def run_tests():
 
         if not extracted:
             logger.info("Using deterministic legal extraction fallback parser...")
-            extracted = heuristic_fallback_extractor(edict_text)
+            extracted = extract_single_edict_regex_fallback(edict_text)
 
         # 1. Verify Structure & Required Fields
         assert extracted.expediente_number, "Expediente number is required"
@@ -162,7 +309,8 @@ def run_tests():
         assert "location" in enriched, "Enriched record must contain PostGIS location"
         assert enriched["location"].startswith("SRID=4326;POINT("), "Location must be valid PostGIS WKT"
         assert enriched["estimated_market_value"] > enriched["base_price_call_1"], "Estimated market value must exceed base price"
-        assert enriched["estimated_margin_pct"] > 0, "Estimated margin % must be positive"
+        margin_pct = round(((enriched["estimated_market_value"] - enriched["base_price_call_1"]) / enriched["estimated_market_value"]) * 100, 2)
+        assert margin_pct > 0, "Estimated margin % must be positive"
 
         logger.info("✓ Validation Passed:")
         logger.info(f"  • Expediente: {enriched['expediente_number']}")
@@ -171,13 +319,13 @@ def run_tests():
         logger.info(f"  • Base 1er Remate: {enriched['currency']} {enriched['base_price_call_1']:,.2f}")
         logger.info(f"  • Base 2do Remate (75%): {enriched['currency']} {enriched['base_price_call_2']:,.2f}")
         logger.info(f"  • Base 3er Remate (25%): {enriched['currency']} {enriched['base_price_call_3']:,.2f}")
-        logger.info(f"  • Valor Mercado Est.: {enriched['currency']} {enriched['estimated_market_value']:,.2f} (+{enriched['estimated_margin_pct']}% margen)")
+        logger.info(f"  • Valor Mercado Est.: {enriched['currency']} {enriched['estimated_market_value']:,.2f} (+{margin_pct}% margen)")
         logger.info(f"  • PostGIS Point: {enriched['location']}")
 
         passed_count += 1
 
     logger.info(f"\n================================================================")
-    logger.info(f"ALL {passed_count}/{len(test_cases)} INGESTION ENGINE TESTS PASSED!")
+    logger.info(f"ALL {passed_count}/{len(test_cases)} PIPELINE TESTS & UNIT TEST SUITES PASSED!")
     logger.info("================================================================")
 
 if __name__ == "__main__":

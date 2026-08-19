@@ -171,10 +171,10 @@ export function IngestionLogModal({ isOpen, onClose }: IngestionLogModalProps) {
                 {language === 'es' ? 'Fuente Oficial' : 'Official Data Source'}
               </span>
               <p className="text-xs font-semibold text-slate-200">
-                Imprenta Nacional de Costa Rica
+                Poder Judicial de Costa Rica
               </p>
-              <p className="text-[10.5px] text-slate-500">
-                Boletín Judicial & La Gaceta Judicial
+              <p className="text-[10.5px] text-slate-400">
+                Nexus PJ · Boletín Judicial (nexuspj.poder-judicial.go.cr)
               </p>
             </div>
           </div>

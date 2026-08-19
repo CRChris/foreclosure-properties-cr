@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Pull 30 Days of Judicial Foreclosure Auctions from La Gaceta & Boletín Judicial
-(Imprenta Nacional de Costa Rica)
+Pull 30 Days of Judicial Foreclosure Auctions from Nexus PJ & Boletín Judicial
+(Poder Judicial & Imprenta Nacional de Costa Rica)
 
-- Scans past 30 days of official publications
+- Scans past 30 days of official judicial publications (nexuspj.poder-judicial.go.cr)
 - Extracts all authentic judicial foreclosure edicts (Remates Judiciales)
+- Strictly excludes general government gazette feeds (La Gaceta)
 - Deduplicates in-memory and against live Supabase database
 - Strictly protects terminal states (suspended, awarded, annulled)
 - Enriches with PostGIS coordinates, legal characteristics, and market valuations
@@ -41,6 +42,11 @@ from scraper.main import (
     extract_single_edict_regex_fallback,
     enrich_auction_data,
     upsert_to_supabase,
+    fetch_from_nexuspj_api,
+    validate_and_read_response,
+    slice_remates_section,
+    split_into_expediente_blocks,
+    check_yield_and_alert,
 )
 from scraper.auction_tracker import sync_auction_progression_via_rpc
 
@@ -374,6 +380,7 @@ def fetch_existing_expedientes_and_folios() -> Tuple[Set[str], Set[str], Set[str
 def extract_edicts_from_pdf_stream(pdf_bytes: bytes, source_name: str) -> List[ForeclosureAuction]:
     """
     Extracts structured auctions from a PDF byte buffer.
+    Isolates the 'Remates' section and splits by case identifier blocks.
     """
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -393,7 +400,21 @@ def extract_edicts_from_pdf_stream(pdf_bytes: bytes, source_name: str) -> List[F
         if not full_text:
             return []
 
-        return extract_real_estate_foreclosures_from_text(full_text, source_name)
+        remates_section = slice_remates_section(full_text)
+        blocks = split_into_expediente_blocks(remates_section)
+        logger.info(f"  ✓ Parsed {len(blocks)} case identifier blocks from {source_name}.")
+
+        extracted: List[ForeclosureAuction] = []
+        for block in blocks:
+            parsed = extract_single_edict_regex_fallback(block)
+            if parsed and parsed.folio_real and parsed.base_price_call_1 > 5000:
+                extracted.append(parsed)
+
+        # Fallback to broad parser if blocks didn't yield
+        if not extracted:
+            extracted = extract_real_estate_foreclosures_from_text(full_text, source_name)
+
+        return extracted
     except Exception as e:
         logger.warning(f"Error parsing PDF stream from {source_name}: {e}")
         return []
@@ -401,30 +422,46 @@ def extract_edicts_from_pdf_stream(pdf_bytes: bytes, source_name: str) -> List[F
 
 def pull_30_days_data():
     now_cr = datetime.now(COSTA_RICA_TZ)
+    now_date_str = now_cr.strftime("%Y-%m-%d")
     logger.info("=================================================================")
-    logger.info(f"🚀 INGESTION ENGINE: Pulling 30 Days of Gazette Foreclosures")
+    logger.info(f"🚀 INGESTION ENGINE: Pulling 30 Days of Nexus PJ / Boletín Judicial Foreclosures")
     logger.info(f"🕒 Current Costa Rica Time: {now_cr.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     logger.info("=================================================================")
 
     # 1. Fetch existing auctions to prevent ANY duplicates
     existing_expedientes, existing_folios, terminal_expedientes = fetch_existing_expedientes_and_folios()
 
+    all_extracted: Dict[str, ForeclosureAuction] = {}
+    processed_urls: Set[str] = set()
+
+    # 2. Query Nexus PJ API directly for recent Boletín Judicial foreclosure notices
+    logger.info("📡 Querying official Nexus PJ Search API for Boletín Judicial foreclosures...")
+    try:
+        nexus_raw_edicts = fetch_from_nexuspj_api(now_cr)
+        logger.info(f"Nexus PJ returned {len(nexus_raw_edicts)} raw foreclosure notices.")
+        for edict_str in nexus_raw_edicts:
+            parsed = extract_single_edict_regex_fallback(edict_str)
+            if parsed and parsed.folio_real and parsed.base_price_call_1 > 5000:
+                exp_norm = parsed.expediente_number.strip().upper()
+                folio_norm = parsed.folio_real.strip().upper()
+                if exp_norm not in existing_expedientes and folio_norm not in existing_folios and exp_norm not in all_extracted:
+                    all_extracted[exp_norm] = parsed
+                    logger.info(f"    ✨ New Nexus PJ Foreclosure: [{parsed.expediente_number}] Folio: {parsed.folio_real} | {parsed.currency} {parsed.base_price_call_1:,.2f} ({parsed.canton}, {parsed.province})")
+    except Exception as nex_err:
+        logger.warning(f"Nexus PJ API query note: {nex_err}")
+
+    # 3. Iterate through past 30 days of official daily Boletín Judicial PDF publications
+    logger.info("📅 Scanning 30 days of official daily Boletín Judicial feeds...")
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
     }
     ctx = create_ssl_context()
-
-    all_extracted: Dict[str, ForeclosureAuction] = {}
-    processed_urls: Set[str] = set()
-
-    # 2. Iterate through the past 30 days of official publications
-    logger.info("📅 Scanning 30 days of official publications from La Imprenta Nacional...")
     
     for day_offset in range(30):
         target_d = now_cr - timedelta(days=day_offset)
         
-        # Skip weekends (Costa Rican official gazettes publish Monday-Friday)
+        # Skip weekends (Costa Rican official judicial bulletins publish Monday-Friday)
         if target_d.weekday() >= 5:
             continue
 
@@ -432,11 +469,11 @@ def pull_30_days_data():
         month_str = target_d.strftime("%m")
         year_str = target_d.strftime("%Y")
 
+        # Strictly official Boletín Judicial candidate endpoints (zero general gazettes)
         candidates = [
             f"https://www.imprentanacional.go.cr/pub/{year_str}/{month_str}/{day_str}/COMP_{day_str}_{month_str}_{year_str}.pdf",
             f"https://www.imprentanacional.go.cr/pub-boletin/{year_str}/{month_str}/bol_{day_str}_{month_str}_{year_str}.pdf",
             f"https://www.imprentanacional.go.cr/pub-boletin/{year_str}/{month_str}//bol_{day_str}_{month_str}_{year_str}.pdf",
-            f"https://www.imprentanacional.go.cr/pub-gaceta/{year_str}/{month_str}/gac_{day_str}_{month_str}_{year_str}.pdf",
         ]
 
         for url in candidates:
@@ -447,27 +484,26 @@ def pull_30_days_data():
             try:
                 req = urllib.request.Request(url, headers=headers)
                 with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-                    if resp.status == 200:
-                        pdf_data = resp.read()
-                        if len(pdf_data) > 5000:
-                            auctions = extract_edicts_from_pdf_stream(pdf_data, f"URL: {url}")
-                            for a in auctions:
-                                exp_norm = a.expediente_number.strip().upper()
-                                folio_norm = a.folio_real.strip().upper()
+                    is_valid, pdf_data, err = validate_and_read_response(resp, url, min_bytes=10240, is_json=False)
+                    if is_valid:
+                        auctions = extract_edicts_from_pdf_stream(pdf_data, f"URL: {url}")
+                        for a in auctions:
+                            exp_norm = a.expediente_number.strip().upper()
+                            folio_norm = a.folio_real.strip().upper()
 
-                                # Strictly verify NO DUPLICATES in database or current run
-                                if exp_norm not in existing_expedientes and folio_norm not in existing_folios and exp_norm not in all_extracted:
-                                    all_extracted[exp_norm] = a
-                                    logger.info(f"    ✨ New Unique Foreclosure: [{a.expediente_number}] Folio: {a.folio_real} | {a.currency} {a.base_price_call_1:,.2f} ({a.canton}, {a.province})")
-                                else:
-                                    logger.debug(f"    ⏩ Skipping duplicate: {exp_norm} ({folio_norm})")
+                            # Strictly verify NO DUPLICATES in database or current run
+                            if exp_norm not in existing_expedientes and folio_norm not in existing_folios and exp_norm not in all_extracted:
+                                all_extracted[exp_norm] = a
+                                logger.info(f"    ✨ New Unique Foreclosure: [{a.expediente_number}] Folio: {a.folio_real} | {a.currency} {a.base_price_call_1:,.2f} ({a.canton}, {a.province})")
+                            else:
+                                logger.debug(f"    ⏩ Skipping duplicate: {exp_norm} ({folio_norm})")
             except urllib.error.HTTPError as he:
                 logger.debug(f"HTTP {he.code} for candidate {url}")
             except Exception as e:
                 logger.debug(f"Candidate {url} unreachable: {e}")
 
-    # 3. Check local PDFs in workspace if available
-    local_pdfs = ["today_gaceta.pdf", "sample_boletin.pdf"]
+    # 4. Check local sample Boletín Judicial PDFs in workspace if available
+    local_pdfs = ["sample_boletin.pdf"]
     for local_name in local_pdfs:
         if os.path.exists(local_name):
             try:
@@ -486,24 +522,32 @@ def pull_30_days_data():
     unique_new_auctions = list(all_extracted.values())
     logger.info(f"\n📊 30-Day Extraction Complete: Extracted {len(unique_new_auctions)} brand-new unique foreclosures.")
 
+    # Step 4: Low-Yield Monitoring & Alerting Check
+    check_yield_and_alert(
+        total_parsed=len(unique_new_auctions),
+        run_date_str=now_date_str,
+        threshold=3,
+        extra_context="30-day cumulative ingestion run"
+    )
+
     if not unique_new_auctions:
         logger.info("All scanned foreclosures are already up-to-date in Supabase. Zero duplicates needed.")
         return
 
-    # 4. Enrich records with PostGIS and market valuations
+    # 5. Enrich records with PostGIS and market valuations
     logger.info(f"🗺️  Enriching {len(unique_new_auctions)} records with PostGIS coordinates and market valuations...")
     enriched_records = [enrich_auction_data(a) for a in unique_new_auctions]
 
-    # 5. Insert new records to Supabase PostGIS
+    # 6. Insert new records to Supabase PostGIS
     logger.info(f"💾 Upserting {len(enriched_records)} unique records to Supabase PostGIS...")
     inserted_count = upsert_to_supabase(enriched_records)
     logger.info(f"✓ Successfully inserted {inserted_count} new unique foreclosures into Supabase!")
 
-    # 6. Trigger Master Lifecycle Progression RPC
+    # 7. Trigger Master Lifecycle Progression RPC
     logger.info("⚡ Synchronizing lifecycle statuses via RPC...")
     progression_result = sync_auction_progression_via_rpc()
     logger.info(f"✓ Lifecycle Progression: {progression_result}")
-    logger.info("🎉 30-Day Gazette Foreclosure Ingestion Finished Successfully!")
+    logger.info("🎉 30-Day Nexus PJ / Boletín Judicial Ingestion Finished Successfully!")
 
 
 if __name__ == "__main__":

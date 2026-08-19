@@ -277,31 +277,350 @@ class ForeclosureAuction(BaseModel):
     approx_longitude: Optional[float] = Field(None, description="Longitude in Costa Rica")
 
 # ==============================================================================
-# 3. ROBUST BOLETÍN JUDICIAL FETCHER & CHUNKER
+# 3. OFFICIAL NEXUS PJ & BOLETÍN JUDICIAL FETCHER & CHUNKER
 # ==============================================================================
+NEXUS_PJ_BASE_URL = "https://nexuspj.poder-judicial.go.cr"
+NEXUS_PJ_SEARCH_API = "https://nexuspj.poder-judicial.go.cr/api/search"
+NEXUS_PJ_DOC_API = "https://nexuspj.poder-judicial.go.cr/api/document"
+BOLETIN_JUDICIAL_PORTAL = "https://boletinjudicial.poder-judicial.go.cr"
+DEBUG_LOG_PATH = os.path.join(os.path.dirname(__file__), "debug_raw_response.log")
+
+SPANISH_MONTHS: Dict[str, int] = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "setiembre": 9, "septiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12
+}
+
+SPANISH_WORD_NUMBERS: Dict[str, int] = {
+    "un": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
+    "diez": 10, "once": 11, "doce": 12, "trece": 13, "catorce": 14, "quince": 15, "dieciséis": 16, "dieciseis": 16,
+    "diecisiete": 17, "dieciocho": 18, "diecinueve": 19, "veinte": 20, "veintiuno": 21, "veintidós": 22, "veintidos": 22,
+    "veintitrés": 23, "veintitres": 23, "veinticuatro": 24, "veinticinco": 25, "veintiséis": 26, "veintiseis": 26,
+    "veintisiete": 27, "veintiocho": 28, "veintinueve": 29, "treinta": 30, "treinta y uno": 31
+}
+
 def create_ssl_context():
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return ctx
 
+def validate_and_read_response(
+    resp,
+    source_url: str,
+    min_bytes: int = 10240,
+    is_json: bool = False
+) -> Tuple[bool, bytes, Optional[str]]:
+    """
+    Step 2: Raw Response Validation & Logging.
+    Inspects and logs HTTP status, Content-Type, and body length (bytes).
+    Detects undersized payloads (< 10 KB default) and challenge / WAF / bot-block pages
+    (e.g., 403, 503, Cloudflare/Barracuda challenge, Captcha).
+    Saves raw snippets to debug_raw_response.log upon failure without silent empty writes.
+    """
+    try:
+        status = getattr(resp, "status", getattr(resp, "code", 200))
+        content_type = resp.headers.get("Content-Type", "") if hasattr(resp, "headers") else ""
+        data = resp.read()
+        body_len = len(data)
+
+        logger.info(
+            f"📡 Response from {source_url} | HTTP {status} | "
+            f"Content-Type: '{content_type}' | Length: {body_len:,} bytes"
+        )
+
+        if status != 200:
+            err_msg = f"HTTP {status} received from {source_url}"
+            _log_debug_snippet(source_url, status, content_type, data, err_msg)
+            return False, data, err_msg
+
+        # Challenge / Bot-Protection detection
+        text_snippet = data[:4096].decode("utf-8", errors="ignore").lower()
+        challenge_signatures = [
+            "cf-browser-verification", "challenge-running", "captcha",
+            "barracuda networks", "access denied", "just a moment...",
+            "attention required", "security check", "bot detection", "incapsula",
+            "cloudflare", "waf-block", "403 forbidden"
+        ]
+        
+        detected_challenges = [sig for sig in challenge_signatures if sig in text_snippet]
+        if detected_challenges:
+            err_msg = f"Bot verification / WAF challenge page detected ({', '.join(detected_challenges)}) from {source_url}"
+            _log_debug_snippet(source_url, status, content_type, data, err_msg)
+            return False, data, err_msg
+
+        # Payload size validation (PDFs and HTML portals must be >= min_bytes)
+        if not is_json and body_len < min_bytes:
+            err_msg = f"Undersized payload ({body_len:,} bytes < {min_bytes:,} bytes minimum) from {source_url}"
+            _log_debug_snippet(source_url, status, content_type, data, err_msg)
+            return False, data, err_msg
+
+        return True, data, None
+    except Exception as ex:
+        err_msg = f"Exception reading response from {source_url}: {ex}"
+        logger.error(err_msg)
+        return False, b"", err_msg
+
+def _log_debug_snippet(source_url: str, status: int, content_type: str, data: bytes, err_msg: str):
+    """Writes failure diagnostics and a raw payload snippet to the debug log."""
+    logger.warning(f"⚠️ [Payload Validation Failure]: {err_msg}")
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8", errors="ignore") as f:
+            f.write(f"\n{'='*70}\n")
+            f.write(f"TIMESTAMP: {datetime.now().isoformat()}\n")
+            f.write(f"SOURCE: {source_url}\n")
+            f.write(f"HTTP STATUS: {status} | CONTENT-TYPE: {content_type} | BYTES: {len(data):,}\n")
+            f.write(f"ERROR: {err_msg}\n")
+            f.write("RAW SNIPPET (First 2048 bytes):\n")
+            f.write(data[:2048].decode("utf-8", errors="ignore"))
+            f.write(f"\n{'='*70}\n")
+    except Exception as write_err:
+        logger.debug(f"Could not write to {DEBUG_LOG_PATH}: {write_err}")
+
+def slice_remates_section(full_text: str) -> str:
+    """
+    Step 3: Targets the main judicial auction section (e.g., 'REMATES PODER JUDICIAL (2 VECES)' / 'REMATES').
+    Falls back to full text if no explicit section boundary is present.
+    """
+    section_patterns = [
+        r'(?:REMATES\s+PODER\s+JUDICIAL(?:\s*\(\s*2\s*VECES\s*\))?|REMATES\s+JUDICIALES|SECCI[ÓO]N\s+(?:DE\s+)?REMATES|\bAVISOS\s+DE\s+REMATE\b|\bREMATES\b)',
+    ]
+    for p in section_patterns:
+        m = re.search(p, full_text, re.IGNORECASE)
+        if m:
+            start_idx = m.start()
+            # Boundary stopping if another non-remate major chapter begins
+            end_match = re.search(
+                r'\n\s*(?:EDICTOS\s+MATRIMONIALES|MARCAS\s+DE\s+FÁBRICA|CITACIONES|T[IÍ]TULOS\s+SUPLETORIOS|ADMINISTRACI[ÓO]N\s+P[ÚU]BLICA)\b',
+                full_text[start_idx:],
+                re.IGNORECASE
+            )
+            if end_match:
+                section_len = end_match.start()
+                logger.info(f"Targeted isolated 'Remates' section ({section_len:,} chars).")
+                return full_text[start_idx:start_idx + section_len]
+            logger.info(f"Targeted 'Remates' section from character index {start_idx:,}.")
+            return full_text[start_idx:]
+    return full_text
+
+def split_into_expediente_blocks(text: str) -> List[str]:
+    """
+    Step 3: Splits judicial publication text by case identifier blocks:
+    - Variations of 'EXP:', 'EXPEDIENTE:', 'NÚMERO DE EXPEDIENTE:', 'NO. DE EXP:'
+    - Standard Costa Rican judicial docket formats: XX-XXXXXX-XXXX-XX or XX-XXXXX-XXXX-XX
+    - Court headings: 'JUZGADO...', 'Al ser las...', 'En la puerta...', 'Por disposición...'
+    """
+    pattern = re.compile(
+        r'(?=(?:(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*[0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+|'
+        r'\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b|'
+        r'(?:JUZGADO|TRIBUNAL)\s+[\w\s,]+?(?:DE\s+COBRO|CIVIL|AGRARIO|CONCURSAL)|'
+        r'En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|'
+        r'Al\s+ser\s+las\s+\d+|A\s+las\s+\d+\s+horas|'
+        r'AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
+        re.IGNORECASE
+    )
+    raw_blocks = pattern.split(text)
+    cleaned_blocks: List[str] = []
+    for b in raw_blocks:
+        b_str = b.strip()
+        if len(b_str) >= 100 and is_foreclosure_edict_text(b_str):
+            cleaned_blocks.append(b_str)
+    return cleaned_blocks
+
+def is_foreclosure_edict_text(text: str) -> bool:
+    """
+    Validates whether an edict text contains authentic real estate foreclosure auction markers.
+    """
+    if len(text) < 100:
+        return False
+    t_lower = text.lower()
+    has_auction_kw = any(w in t_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor", "al mejor postor"])
+    has_property_kw = any(w in t_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide", "lote", "propiedad", "naturaleza"])
+    has_judicial_kw = any(w in t_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de", "dólares", "colones", "horas"])
+    return has_auction_kw and has_property_kw and has_judicial_kw
+
+def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -> str:
+    """
+    Parses complex written Spanish judicial auction dates with Costa Rica UTC-6 offset.
+    Examples:
+      'quince de setiembre de dos mil veintiséis' -> '2026-09-15T14:30:00-06:00'
+      '18 de setiembre de 2026' -> '2026-09-18T09:00:00-06:00'
+    """
+    base_fallback = default_date or (datetime.now() + timedelta(days=21))
+    fallback_iso = base_fallback.strftime("%Y-%m-%dT14:30:00-06:00")
+    
+    if not date_str:
+        return fallback_iso
+
+    d_lower = date_str.lower()
+
+    # 1. Hour and minute extraction
+    hour, minute = 14, 30
+    time_match = re.search(r"(?:a\s+las|al\s+ser\s+las|las)\s+(\w+)\s+horas(?:\s+y\s+(\w+)\s+minutos)?", d_lower)
+    if time_match:
+        h_word = time_match.group(1).strip()
+        m_word = time_match.group(2).strip() if time_match.group(2) else "cero"
+        hour = SPANISH_WORD_NUMBERS.get(h_word, 14)
+        minute = SPANISH_WORD_NUMBERS.get(m_word, 0)
+    else:
+        dig_time = re.search(r"(\d{1,2}):(\d{2})", d_lower)
+        if dig_time:
+            hour = int(dig_time.group(1))
+            minute = int(dig_time.group(2))
+
+    # 2. Day extraction
+    day = None
+    day_digit_match = re.search(r"(\d{1,2})\s+de\s+([a-záéíóú]+)", d_lower)
+    if day_digit_match:
+        day = int(day_digit_match.group(1))
+        month_word = day_digit_match.group(2).strip()
+    else:
+        day_word_match = re.search(r"del\s+([a-z\s]+?)\s+de\s+([a-záéíóú]+)", d_lower)
+        if day_word_match:
+            d_word = day_word_match.group(1).strip()
+            month_word = day_word_match.group(2).strip()
+            day = SPANISH_WORD_NUMBERS.get(d_word)
+        else:
+            month_word = ""
+
+    # 3. Month extraction
+    month = SPANISH_MONTHS.get(month_word)
+    if not month:
+        for m_name, m_num in SPANISH_MONTHS.items():
+            if m_name in d_lower:
+                month = m_num
+                break
+
+    # 4. Year extraction
+    year = 2026
+    year_match = re.search(r"(?:dos\s+mil\s+veintiséis|dos\s+mil\s+veintiseis|2026)", d_lower)
+    if year_match:
+        year = 2026
+    elif "2027" in d_lower:
+        year = 2027
+    elif "2025" in d_lower:
+        year = 2025
+
+    if day and month:
+        try:
+            parsed_dt = datetime(year, month, day, hour, minute)
+            return parsed_dt.strftime("%Y-%m-%dT%H:%M:00-06:00")
+        except Exception:
+            pass
+
+    return fallback_iso
+
+def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
+    """
+    Pulls structured foreclosure notices directly from the official Nexus PJ search API
+    (nexuspj.poder-judicial.go.cr/api/search), filtering specifically for Boletín Judicial
+    court foreclosures (Remates Judiciales).
+    """
+    import urllib.request
+    ctx = create_ssl_context()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+    }
+    
+    edicts: List[str] = []
+    
+    # Query for Boletín Judicial foreclosure notices
+    search_payloads = [
+        {
+            "q": "tipoInformacion:(Boletín AND Judicial) AND (remate OR remates OR subasta OR \"primer remate\")",
+            "size": 50,
+            "page": 1,
+            "sort": {"field": "fechaResolucion", "order": "desc"}
+        },
+        {
+            "q": "tipoInformacion:(Boletín AND Judicial) AND (finca OR matrícula OR hipotecario)",
+            "size": 50,
+            "page": 1,
+            "sort": {"field": "fechaResolucion", "order": "desc"}
+        }
+    ]
+    
+    logger.info(f"Connecting to official Nexus PJ API endpoint: {NEXUS_PJ_SEARCH_API}")
+    
+    for payload in search_payloads:
+        try:
+            req_data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(NEXUS_PJ_SEARCH_API, data=req_data, headers=headers, method="POST")
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                is_valid, data_bytes, err = validate_and_read_response(resp, NEXUS_PJ_SEARCH_API, min_bytes=200, is_json=True)
+                if not is_valid:
+                    continue
+
+                res_json = json.loads(data_bytes.decode("utf-8", errors="ignore"))
+                hits = res_json.get("hits", [])
+                total = res_json.get("total", 0)
+                logger.info(f"Nexus PJ search returned {len(hits)} hits (total available: {total}).")
+                
+                for hit in hits:
+                    hit_text = ""
+                    # Collect all available text fields from Nexus PJ document
+                    for field_name in ["texto", "contenido", "resumen", "encabezado", "observaciones", "despacho"]:
+                        val = hit.get(field_name)
+                        if val and isinstance(val, str):
+                            hit_text += "\n" + val
+                    
+                    # If hit text contains edicts or requires document fetch
+                    doc_id = hit.get("idDocument") or hit.get("id")
+                    if (not hit_text or len(hit_text) < 150) and doc_id:
+                        try:
+                            doc_req_data = json.dumps({"idDocument": doc_id}).encode("utf-8")
+                            doc_req = urllib.request.Request(NEXUS_PJ_DOC_API, data=doc_req_data, headers=headers, method="POST")
+                            with urllib.request.urlopen(doc_req, context=ctx, timeout=10) as doc_resp:
+                                doc_valid, doc_bytes, _ = validate_and_read_response(doc_resp, f"{NEXUS_PJ_DOC_API}?id={doc_id}", min_bytes=100, is_json=True)
+                                if doc_valid:
+                                    doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
+                                    doc_hits = doc_body.get("hits", {})
+                                    hit_text += "\n" + (doc_hits.get("texto") or doc_hits.get("contenido") or "")
+                        except Exception as doc_err:
+                            logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
+                    
+                    # Slice and split into individual edict blocks
+                    section_text = slice_remates_section(hit_text)
+                    blocks = split_into_expediente_blocks(section_text)
+                    if blocks:
+                        edicts.extend(blocks)
+                    elif is_foreclosure_edict_text(hit_text):
+                        edicts.append(hit_text.strip())
+        except Exception as e:
+            logger.debug(f"Nexus PJ API query attempt skipped: {e}")
+            
+    logger.info(f"Extracted {len(edicts)} foreclosure edict blocks directly from Nexus PJ API feed.")
+    return edicts
+
 def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     """
     Discovers, downloads, and chunks official Costa Rican judicial foreclosure publications.
+    Strictly queries the official daily Nexus PJ / Boletín Judicial feed (nexuspj.poder-judicial.go.cr
+    and boletinjudicial.poder-judicial.go.cr), completely excluding general government gazette feeds.
     """
     date = target_date or datetime.now()
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
     }
     
-    pdf_urls: List[str] = []
+    edicts: List[str] = []
     
-    # 1. Discover PDFs from portals
+    # 1. Primary Strategy: Fetch directly from Nexus PJ REST API
+    try:
+        nexus_edicts = fetch_from_nexuspj_api(date)
+        if nexus_edicts:
+            edicts.extend(nexus_edicts)
+    except Exception as e:
+        logger.warning(f"Primary Nexus PJ API query encountered exception: {e}")
+        
+    # 2. Secondary Strategy: Scrape official daily Boletín Judicial PDF feeds
+    pdf_urls: List[str] = []
     portals = [
+        BOLETIN_JUDICIAL_PORTAL,
         "https://www.imprentanacional.go.cr/boletin/",
-        "https://www.imprentanacional.go.cr/",
-        "https://www.imprentanacional.go.cr/gaceta/",
     ]
     
     import urllib.request
@@ -311,18 +630,21 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
         try:
             req = urllib.request.Request(portal, headers=headers)
             with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
-                if resp.status == 200:
-                    html = resp.read().decode("utf-8", errors="ignore")
+                is_valid, data_bytes, _ = validate_and_read_response(resp, portal, min_bytes=1024)
+                if is_valid:
+                    html = data_bytes.decode("utf-8", errors="ignore")
                     found = re.findall(r'href=[\"\x27]([^\"\x27]+\.pdf)[\"\x27]', html, re.IGNORECASE)
                     for f in found:
+                        if "gaceta" in f.lower() or "gac_" in f.lower():
+                            continue
                         if not f.startswith("http"):
                             f = f"https://www.imprentanacional.go.cr{f if f.startswith('/') else '/' + f}"
                         if f not in pdf_urls:
                             pdf_urls.append(f)
         except Exception as e:
-            logger.debug(f"Portal check {portal}: {e}")
+            logger.debug(f"Boletín Judicial Portal check {portal}: {e}")
             
-    # 2. Add direct URL patterns for target date and past 4 business days
+    # Add direct Boletín Judicial URL patterns for target date and past 4 business days
     for days_back in range(5):
         d = date - timedelta(days=days_back)
         day = d.strftime("%d")
@@ -333,59 +655,43 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
             f"https://www.imprentanacional.go.cr/pub-boletin/{year}/{month}/bol_{day}_{month}_{year}.pdf",
             f"https://www.imprentanacional.go.cr/pub-boletin/{year}/{month}//bol_{day}_{month}_{year}.pdf",
             f"https://www.imprentanacional.go.cr/pub/{year}/{month}/{day}/COMP_{day}_{month}_{year}.pdf",
-            f"https://www.imprentanacional.go.cr/pub-gaceta/{year}/{month}/gac_{day}_{month}_{year}.pdf",
-            f"https://www.imprentanacional.go.cr/gaceta/{year}/{month}/g_{day}_{month}_{year}.pdf",
         ]
         for c in candidates:
             if c not in pdf_urls:
                 pdf_urls.append(c)
                 
-    logger.info(f"Targeting {len(pdf_urls)} candidate publication endpoints.")
+    logger.info(f"Targeting {len(pdf_urls)} candidate official Boletín Judicial PDF endpoints.")
     
-    edicts: List[str] = []
-    
-    # 3. Download and parse PDFs with pypdf
+    # Download and parse Boletín Judicial PDFs with pypdf (enforcing >= 10 KB size validation)
     for pdf_url in pdf_urls[:6]:
         try:
             req = urllib.request.Request(pdf_url, headers=headers)
             with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
-                if resp.status == 200:
-                    import io
-                    from pypdf import PdfReader
-                    data = resp.read()
-                    if len(data) < 2000:
-                        continue
+                is_valid, data_bytes, err = validate_and_read_response(resp, pdf_url, min_bytes=10240, is_json=False)
+                if not is_valid:
+                    continue
+
+                import io
+                from pypdf import PdfReader
+                pdf_file = io.BytesIO(data_bytes)
+                reader = PdfReader(pdf_file)
+                logger.info(f"Downloaded official Boletín Judicial: {pdf_url} ({len(data_bytes):,} bytes, {len(reader.pages)} pages).")
+                
+                full_text = ""
+                for page in reader.pages:
+                    full_text += (page.extract_text() or "") + "\n"
                     
-                    pdf_file = io.BytesIO(data)
-                    reader = PdfReader(pdf_file)
-                    logger.info(f"Downloaded {pdf_url} ({len(data):,} bytes, {len(reader.pages)} pages).")
-                    
-                    full_text = ""
-                    for page in reader.pages:
-                        full_text += (page.extract_text() or "") + "\n"
-                        
-                    # Broad court foreclosure edict boundary regex
-                    pattern = re.compile(
-                        r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
-                        re.IGNORECASE
-                    )
-                    raw_chunks = pattern.split(full_text)
-                    
-                    for chunk in raw_chunks:
-                        chunk = chunk.strip()
-                        c_lower = chunk.lower()
-                        # Strict real estate legal keyword filter
-                        if (
-                            len(chunk) > 120 and
-                            any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor"]) and
-                            any(w in c_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide"]) and
-                            any(w in c_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de"])
-                        ):
-                            edicts.append(chunk)
+                # Target the Remates section and split into case blocks
+                remates_section = slice_remates_section(full_text)
+                blocks = split_into_expediente_blocks(remates_section)
+                logger.info(f"Parsed {len(blocks)} expediente blocks from {pdf_url}.")
+                for block in blocks:
+                    if is_foreclosure_edict_text(block):
+                        edicts.append(block)
         except Exception as e:
             logger.debug(f"Candidate {pdf_url} skipped: {e}")
             
-    logger.info(f"Discovered {len(edicts)} foreclosure edicts matching statutory criteria.")
+    logger.info(f"Discovered {len(edicts)} total foreclosure edicts from official Boletín Judicial / Nexus PJ.")
     return edicts
 
 # ==============================================================================
@@ -421,110 +727,239 @@ EDICT TEXT:
 {edict_text}
 """
 
+def parse_cr_price_string(p_str: str) -> Optional[float]:
+    """
+    Parses Costa Rican and international currency strings into float.
+    Handles:
+      '72.000.000,00' -> 72000000.0
+      '220,000.00' -> 220000.0
+      '85.000.000' -> 85000000.0
+      '180,000' -> 180000.0
+    """
+    if not p_str:
+        return None
+    clean = p_str.strip().replace("CRC", "").replace("USD", "").replace("$", "").replace("₡", "").replace("¢", "").strip()
+    if not clean:
+        return None
+
+    if "," in clean and "." in clean:
+        if clean.rfind(",") > clean.rfind("."):
+            # European/CR format: 72.000.000,00
+            clean = clean.replace(".", "").replace(",", ".")
+        else:
+            # US format: 72,000,000.00
+            clean = clean.replace(",", "")
+    elif "." in clean and "," not in clean:
+        parts = clean.split(".")
+        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
+            # European thousand separator: 72.000.000 or 85.000
+            clean = clean.replace(".", "")
+    elif "," in clean and "." not in clean:
+        parts = clean.split(",")
+        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
+            # US thousand separator: 72,000,000 or 180,000
+            clean = clean.replace(",", "")
+        elif len(parts) == 2 and len(parts[1]) == 2:
+            clean = clean.replace(",", ".")
+
+    try:
+        val = float(clean)
+        return val
+    except ValueError:
+        return None
+
 def extract_single_edict_regex_fallback(edict_text: str) -> Optional[ForeclosureAuction]:
     """
-    Deterministic rule-based extractor using regular expressions.
-    Guarantees authentic real estate data extraction.
+    Step 3: Resilient multi-court regex fallback parser.
+    Robustly extracts structured property foreclosure data from varied Juzgados de Cobro / Civiles / Agrarios formats.
+    Ensures missing non-critical fields (e.g., plano, defendant, exact district) do not drop the block.
     """
     try:
         text_lower = edict_text.lower()
 
-        # 1. Expediente
-        exp_match = re.search(r"(?:Expediente|Exp\.?|N[ºo]\.?)\s*[:\s]*([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-[A-Z0-9]+)", edict_text, re.I)
-        expediente = exp_match.group(1).strip() if exp_match else None
-        if not expediente:
-            generic_exp = re.search(r"([0-9]{2}-[0-9]{6}-[0-9]{4}-[A-Z0-9]+)", edict_text)
-            if generic_exp:
-                expediente = generic_exp.group(1).strip()
-            else:
-                return None  # Skip chunks without authentic court expediente
+        # 1. Expediente Docket Number (Fuzzy multi-pattern)
+        exp_patterns = [
+            r"(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.?|CAUSA\s+N[ºo]?)\s*[:\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+)",
+            r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*)\b",
+            r"\b([0-9]{2}-[0-9]{6}-[0-9]{4}-[A-Z0-9]+)\b",
+        ]
+        expediente = None
+        for ep in exp_patterns:
+            m = re.search(ep, edict_text, re.IGNORECASE)
+            if m:
+                expediente = m.group(1).strip()
+                break
 
-        # 2. Juzgado
-        court_match = re.search(r"(Juzgado\s+[\w\s,]+?)(?:\.|$|\n|;|–|-)", edict_text, re.I)
+        if not expediente:
+            # Fallback docket identifier
+            in_match = re.search(r"\(\s*(IN[0-9]{8,14})\s*\)", edict_text)
+            if in_match:
+                expediente = f"ED-{in_match.group(1)}"
+            else:
+                return None  # Real estate foreclosure must have a traceable docket
+
+        # 2. Court / Juzgado Name
+        court_match = re.search(r"((?:Juzgado|Tribunal)\s+[\w\s,.-]+?)(?:\.|$|\n|;|–|-|con\s+la\s+base|en\s+la\s+puerta|hace\s+saber)", edict_text, re.I)
         court = court_match.group(1).strip() if court_match else "Juzgado de Cobro Judicial"
 
-        # 3. Province & Canton detection
+        # 3. Property Folio Real / Matrícula
+        folio_patterns = [
+            r"(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})",
+            r"\b([1-7]-[0-9]{5,7}-[0-9]{3})\b",
+            r"(?:finca\s+inscrita\s+en\s+el\s+Registro\s+Público[^\(]*\()([0-9]-[0-9]+-[0-9]+|[0-9]+-[0-9]+)",
+        ]
+        folio = None
+        for fp in folio_patterns:
+            fm = re.search(fp, edict_text, re.IGNORECASE)
+            if fm:
+                folio = fm.group(1).strip()
+                break
+
+        if not folio:
+            f_gen = re.search(r"finca\s+(?:número\s+)?([0-9]{5,8})", edict_text, re.I)
+            if f_gen:
+                folio = f_gen.group(1).strip()
+            else:
+                return None  # Real estate foreclosure must have a Folio Real
+
+        # 4. Province, Canton & District Detection
+        prov_code_map = {
+            "1": "San José", "2": "Alajuela", "3": "Cartago", "4": "Heredia",
+            "5": "Guanacaste", "6": "Puntarenas", "7": "Limón"
+        }
         detected_prov = "San José"
-        detected_canton = "Central"
-
-        for prov, prefix in PROVINCE_PREFIXES.items():
-            if prov in text_lower or f"partido de {prov}" in text_lower:
-                detected_prov = prov.title()
-                break
-
-        for canton in CR_CANTON_CENTROIDS.keys():
-            if canton in text_lower or f"cantón {canton}" in text_lower:
-                detected_canton = canton.title()
-                break
-
-        # 4. Folio Real
-        prov_code = PROVINCE_PREFIXES.get(detected_prov.lower(), "1")
-        folio_match = re.search(r"(?:matr[íi]cula|finca)\s+(?:n[úu]mero|de\s+)?([0-9]-[0-9]+-[0-9]+|[0-9]+-[0-9]+|[0-9]{5,8})", edict_text, re.I)
-        if folio_match:
-            raw_folio = folio_match.group(1).strip()
-            if "-" in raw_folio:
-                folio = raw_folio
-            else:
-                folio = f"{prov_code}-{raw_folio}-000"
+        
+        # Ground from Folio Real leading digit if hyphenated
+        if "-" in folio and folio[0] in prov_code_map:
+            detected_prov = prov_code_map[folio[0]]
         else:
-            # Look for number near folio real
-            fr_match = re.search(r"folio\s+real\s*[:\s]*([0-9]-[0-9]+-[0-9]+|[0-9]+)", edict_text, re.I)
-            if fr_match:
-                folio = fr_match.group(1).strip()
+            for prov in PROVINCE_PREFIXES.keys():
+                if f"partido de {prov}" in text_lower or f"provincia de {prov}" in text_lower or f", {prov}" in text_lower or f" {prov}." in text_lower:
+                    detected_prov = prov.title()
+                    break
             else:
-                return None # Must have real estate folio to be a property foreclosure
+                for prov in PROVINCE_PREFIXES.keys():
+                    if prov in text_lower and not (prov == "san josé" and "bac san josé" in text_lower):
+                        detected_prov = prov.title()
+                        break
 
-        # 5. Plano Catastrado
-        plano_match = re.search(r"(?:plano|catastro)\s+(?:n[úu]mero\s+)?([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
+        # Standardize Folio Real format (e.g. 1-123456-000)
+        if "-" not in folio:
+            p_code = PROVINCE_PREFIXES.get(detected_prov.lower(), "1")
+            folio = f"{p_code}-{folio}-000"
+        elif folio.count("-") == 1:
+            folio = f"{folio}-000"
+
+        # Canton detection: direct regex first, then centroid key matching
+        detected_canton = "Central"
+        canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s+)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+mide)", edict_text, re.I)
+        if canton_match:
+            detected_canton = canton_match.group(1).strip().title()[:30]
+        else:
+            for canton in CR_CANTON_CENTROIDS.keys():
+                if f"cantón {canton}" in text_lower or f"cantón de {canton}" in text_lower or f" {canton}," in text_lower or f" {canton} " in text_lower:
+                    detected_canton = canton.title()
+                    break
+
+        # District match
+        detected_district = "Central"
+        dist_match = re.search(r"distrito\s+(?:n[úu]mero\s+\d+\s+|[0-9]{2}\s+)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+mide)", edict_text, re.I)
+        if dist_match:
+            detected_district = dist_match.group(1).strip()[:30]
+
+        # 5. Plano Catastrado (Optional - does not drop if missing)
+        plano_match = re.search(r"(?:plano\s+(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s+|:)?|catastro\s+n[úu]mero\s+)([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        # 6. Currency & Prices
+        # 6. Currency & 3-Call Base Prices
         is_usd = ("dólar" in text_lower or "$" in edict_text or "usd" in text_lower)
         currency = "USD" if is_usd else "CRC"
 
-        price_matches = re.findall(r"(?:base\s+de\s+)?(?:\$|₡|USD)?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:\.[0-9]{2})?)", edict_text)
+        raw_price_matches = re.findall(
+            r'(?:USD|CRC|\$|₡|¢)\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})|'
+            r'(?:base\s+(?:de\s+)?|con\s+la\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})',
+            edict_text,
+            re.I
+        )
         prices = []
-        for p in price_matches:
-            val = float(p.replace(",", ""))
-            if val > 1000:
-                prices.append(val)
+        for match_tuple in raw_price_matches:
+            matched_str = match_tuple[0] or match_tuple[1]
+            if matched_str:
+                val = parse_cr_price_string(matched_str)
+                if val:
+                    if currency == "USD" and val >= 2000:
+                        prices.append(val)
+                    elif currency == "CRC" and val >= 500000:
+                        prices.append(val)
 
         if not prices:
-            return None # Must have real base price
+            # Fallback broader price search
+            all_numbers = re.findall(r'([0-9]{1,3}(?:[\.,][0-9]{3})+(?:[\.,][0-9]{2})?)', edict_text)
+            for num_str in all_numbers:
+                v = parse_cr_price_string(num_str)
+                if v:
+                    if (currency == "USD" and v >= 2000) or (currency == "CRC" and v >= 500000):
+                        prices.append(v)
+
+        if not prices:
+            return None  # Must have valid real estate base price
 
         base_1 = prices[0]
         base_2 = prices[1] if len(prices) > 1 else round(base_1 * 0.75, 2)
         base_3 = prices[2] if len(prices) > 2 else round(base_1 * 0.25, 2)
 
-        # 7. Area in m2
-        area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:m2|metros|mts)", edict_text, re.I)
-        if not area_match:
-            area_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(?:metros\s+cuadrados|m²|m2)", edict_text, re.I)
-        
-        area = float(area_match.group(1)) if area_match else 250.0
+        # 7. Naturaleza / Legal Description
+        nat_match = re.search(r"(?:naturaleza\s*[:\s]*|la\s+cual\s+es\s+|terreno\s+de\s+)([^\.\n;]+)", edict_text, re.I)
+        naturaleza = nat_match.group(1).strip() if nat_match else f"Inmueble en {detected_canton}, {detected_prov}"
 
-        # 8. Plaintiff & Defendant
-        plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+de\s+[\w\s]+\s+de)\s+([\w\s,.-]+?)\s+contra", edict_text, re.I)
-        plaintiff = plaintiff_match.group(1).strip() if plaintiff_match else "Banco de Costa Rica / Entidad Acreedora"
+        # 8. Area in m2
+        area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:m2|metros|mts|hect[áa]reas|ha)", edict_text, re.I)
+        area = 250.0
+        if area_match:
+            try:
+                area_str = area_match.group(1).replace(",", ".")
+                area_val = float(area_str)
+                if "hect" in area_match.group(0).lower() or "ha" in area_match.group(0).lower():
+                    area = area_val * 10000.0
+                else:
+                    area = area_val
+            except Exception:
+                area = 250.0
 
-        defendant_match = re.search(r"contra\s+([\w\s,.-]+?)(?:\.|$|\n|;|Expediente)", edict_text, re.I)
+        # 9. Plaintiff & Defendant
+        plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+(?:de\s+)?[\w\s]+\s+de|actor\s*:?|ejecutante\s*:?)\s+([\w\s,.-]+?)\s+(?:contra|demandad)", edict_text, re.I)
+        plaintiff = plaintiff_match.group(1).strip() if plaintiff_match else "Banco de Costa Rica / Entidad Financiera"
+
+        defendant_match = re.search(r"(?:contra|demandado\s*:?|ejecutado\s*:?)\s+([\w\s,.-]+?)(?:\.|$|\n|;|Expediente)", edict_text, re.I)
         defendant = defendant_match.group(1).strip() if defendant_match else None
 
-        # 9. Category
+        # 10. Dates (1st, 2nd, 3rd remates)
+        date_1_str = None
+        d1_match = re.search(r"(?:a\s+las\s+[\w\s]+del\s+[\w\s]+(?:dos\s+mil|202\d)|al\s+ser\s+las\s+[\w\s]+del\s+[\w\s]+(?:dos\s+mil|202\d))", edict_text, re.I)
+        if d1_match:
+            date_1_str = d1_match.group(0)
+        auction_date_1 = parse_date_spanish(date_1_str or "", default_date=datetime.now() + timedelta(days=21))
+
+        # 2nd call date
+        d2_match = re.search(r"(?:segundo\s+remate[^\.\n;]+)", edict_text, re.I)
+        auction_date_2 = parse_date_spanish(d2_match.group(0) if d2_match else "", default_date=datetime.now() + timedelta(days=35))
+
+        # 3rd call date
+        d3_match = re.search(r"(?:tercer\s+remate[^\.\n;]+)", edict_text, re.I)
+        auction_date_3 = parse_date_spanish(d3_match.group(0) if d3_match else "", default_date=datetime.now() + timedelta(days=49))
+
+        # 11. Property Category Classification
         category = "Residential"
         if any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
             category = "Condo"
-        elif any(w in text_lower for w in ["finca", "ganadera", "agr[íi]cola"]):
+        elif any(w in text_lower for w in ["finca", "ganadera", "agr[íi]cola", "pasto", "cultivo"]):
             category = "Agricultural"
         elif any(w in text_lower for w in ["terreno", "lote", "solar"]):
             category = "Land/Development"
-        elif any(w in text_lower for w in ["local", "comercial", "bodega"]):
+        elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina"]):
             category = "Commercial"
-        elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina"]):
+        elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina", "mar"]):
             category = "Luxury Estate"
-
-        # 10. Date (default to 3 weeks ahead)
-        auction_date = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%dT14:30:00-06:00")
 
         return ForeclosureAuction(
             expediente_number=expediente,
@@ -533,19 +968,19 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             plano_catastrado=plano,
             province=detected_prov,
             canton=detected_canton,
-            district="Central",
-            address_description=f"Inmueble judicial en {detected_canton}, {detected_prov}",
+            district=detected_district,
+            address_description=f"Inmueble judicial ({naturaleza[:60]}) en {detected_canton}, {detected_prov}",
             area_m2=area,
             currency=currency,
             base_price_call_1=base_1,
-            auction_date_call_1=auction_date,
+            auction_date_call_1=auction_date_1,
             base_price_call_2=base_2,
-            auction_date_call_2=(datetime.now() + timedelta(days=35)).strftime("%Y-%m-%dT14:30:00-06:00"),
+            auction_date_call_2=auction_date_2,
             base_price_call_3=base_3,
-            auction_date_call_3=(datetime.now() + timedelta(days=49)).strftime("%Y-%m-%dT14:30:00-06:00"),
+            auction_date_call_3=auction_date_3,
             plaintiff=plaintiff,
             defendant=defendant,
-            legal_summary=f"Subasta judicial en {detected_canton} ({detected_prov}). Expediente {expediente} con base de {currency} {base_1:,.2f}.",
+            legal_summary=f"Remate judicial en {detected_canton} ({detected_prov}). Expediente {expediente} con base de {currency} {base_1:,.2f}.",
             property_category=category,
             raw_edict_text=edict_text,
         )
@@ -707,7 +1142,7 @@ def record_ingestion_log(
         url = f"{supabase_url}/rest/v1/ingestion_logs"
         payload_dict = {
             "run_date": run_date or datetime.now().strftime("%Y-%m-%d"),
-            "source": "boletin_judicial",
+            "source": "nexuspj_boletin_judicial",
             "status": status,
             "total_edicts_found": total_edicts,
             "properties_added": added,
@@ -809,11 +1244,90 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
         return 0, len(records), []
 
 # ==============================================================================
-# 7. MAIN CLI ORCHESTRATION PIPELINE
+# 7. MONITORING & LOW-YIELD ALERTING (Step 4)
+# ==============================================================================
+def check_yield_and_alert(
+    total_parsed: int,
+    run_date_str: str,
+    threshold: int = 3,
+    extra_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Step 4: Monitoring & Low-Yield Alerting.
+    Performs post-execution audit checking if total parsed properties < threshold (default 3).
+    Triggers diagnostic alert logging and dispatches a webhook notification if configured.
+    """
+    is_low_yield = total_parsed < threshold
+    alert_info = {
+        "is_low_yield": is_low_yield,
+        "total_parsed": total_parsed,
+        "threshold": threshold,
+        "run_date": run_date_str,
+        "webhook_dispatched": False,
+    }
+
+    if not is_low_yield:
+        logger.info(f"✓ Post-execution yield check passed: {total_parsed} properties parsed (threshold: >={threshold}).")
+        return alert_info
+
+    alert_msg = (
+        f"⚠️ [LOW-YIELD ALERT] Run on {run_date_str} yielded ONLY {total_parsed} property foreclosures "
+        f"(expected >= {threshold}). Possible causes: upstream portal layout changes, downtime, "
+        f"or bot challenge pages. Check '{DEBUG_LOG_PATH}' for raw snippets."
+    )
+    logger.warning("=" * 70)
+    logger.warning(alert_msg)
+    if extra_context:
+        logger.warning(f"Context: {extra_context}")
+    logger.warning("=" * 70)
+
+    # Check for Webhook URL in environment
+    webhook_url = os.getenv("ALERT_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
+    if webhook_url:
+        try:
+            import urllib.request
+            ctx = create_ssl_context()
+            is_discord = "discord.com" in webhook_url or "discordapp.com" in webhook_url
+            if is_discord:
+                payload = {
+                    "content": (
+                        f"🚨 **[Foreclosure Ingestion Alert] Low-Yield Warning**\n"
+                        f"• **Date:** `{run_date_str}`\n"
+                        f"• **Extracted Properties:** `{total_parsed}` (Minimum Expected: `{threshold}`)\n"
+                        f"• **Status:** Possible layout change, upstream challenge page, or empty feed.\n"
+                        f"• **Diagnostic File:** Check `scraper/debug_raw_response.log` for details."
+                    )
+                }
+            else:
+                payload = {
+                    "text": (
+                        f"🚨 [Foreclosure Ingestion Alert] Low-Yield Detected for {run_date_str}: "
+                        f"Only {total_parsed} properties extracted (expected >= {threshold}). "
+                        f"Please inspect scraper/debug_raw_response.log or portal status."
+                    )
+                }
+            req_data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                webhook_url,
+                data=req_data,
+                headers={"Content-Type": "application/json", "User-Agent": "CR-Foreclosure-Alerts/1.0"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+                if resp.status in (200, 204):
+                    logger.info("✓ Low-yield alert webhook successfully dispatched.")
+                    alert_info["webhook_dispatched"] = True
+        except Exception as wh_err:
+            logger.warning(f"Failed to dispatch alert webhook: {wh_err}")
+
+    return alert_info
+
+# ==============================================================================
+# 8. MAIN CLI ORCHESTRATION PIPELINE
 # ==============================================================================
 def main():
     start_time = time.time()
-    parser = argparse.ArgumentParser(description="Boletín Judicial Foreclosure Ingestion Engine")
+    parser = argparse.ArgumentParser(description="Nexus PJ / Boletín Judicial Foreclosure Ingestion Engine")
     parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF file to parse")
     parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
     parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
@@ -840,15 +1354,8 @@ def main():
             for page in reader.pages:
                 full_text += (page.extract_text() or "") + "\n"
             
-            pattern = re.compile(
-                r'(?=(?:En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|Al\s+ser\s+las|A\s+las\s+\d+|Se\s+hace\s+saber|Por\s+disposición|JUZGADO|EDICTO|AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
-                re.IGNORECASE
-            )
-            for chunk in pattern.split(full_text):
-                chunk = chunk.strip()
-                c_lower = chunk.lower()
-                if len(chunk) > 120 and any(w in c_lower for w in ["remate", "rematará", "remataré", "subasta", "postor"]):
-                    raw_edicts.append(chunk)
+            remates_text = slice_remates_section(full_text)
+            raw_edicts = split_into_expediente_blocks(remates_text)
         else:
             target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
             raw_edicts = fetch_daily_bulletin(target_date)
@@ -856,12 +1363,15 @@ def main():
         if not raw_edicts:
             logger.info("No judicial foreclosure edicts found for the given target. Ingestion cycle complete.")
             duration = time.time() - start_time
+            # Low-yield alerting check on 0 edicts
+            check_yield_and_alert(total_parsed=0, run_date_str=target_date_str, threshold=3)
             if not args.dry_run:
                 record_ingestion_log(
-                    status="no_new_properties",
+                    status="warning" if target_date_str == datetime.now().strftime("%Y-%m-%d") else "no_new_properties",
                     total_edicts=0,
                     added=0,
                     skipped=0,
+                    error_message="Low-yield: 0 foreclosure edicts discovered from feeds.",
                     duration_seconds=duration,
                     run_date=target_date_str
                 )
@@ -871,15 +1381,23 @@ def main():
         extracted_auctions = extract_auctions_with_gemini(raw_edicts)
         logger.info(f"Successfully extracted {len(extracted_auctions)} valid structured auctions.")
 
+        # Step 4: Low-Yield Monitoring & Alerting Check
+        yield_audit = check_yield_and_alert(
+            total_parsed=len(extracted_auctions),
+            run_date_str=target_date_str,
+            threshold=3
+        )
+
         if not extracted_auctions:
             logger.info("No structured records were generated from the edicts. Ingestion finished.")
             duration = time.time() - start_time
             if not args.dry_run:
                 record_ingestion_log(
-                    status="no_new_properties",
+                    status="warning",
                     total_edicts=len(raw_edicts),
                     added=0,
                     skipped=0,
+                    error_message="Low-yield alert: 0 properties extracted from candidate edicts.",
                     duration_seconds=duration,
                     run_date=target_date_str
                 )
@@ -910,12 +1428,18 @@ def main():
 
         duration = time.time() - start_time
         status_str = "success" if inserted_count > 0 else "no_new_properties"
+        error_msg = None
+        if yield_audit["is_low_yield"]:
+            status_str = "warning"
+            error_msg = f"Low-yield warning: only {len(extracted_auctions)} properties parsed (expected >= 3)."
+
         record_ingestion_log(
             status=status_str,
             total_edicts=len(raw_edicts),
             added=inserted_count,
             skipped=skipped_count,
             expedientes=new_expedientes,
+            error_message=error_msg,
             duration_seconds=duration,
             run_date=target_date_str
         )

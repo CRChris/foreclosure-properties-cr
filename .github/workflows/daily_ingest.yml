@@ -1,4 +1,4 @@
-name: Daily Judicial Foreclosure Ingestion Pipeline
+name: Daily Nexus PJ & Boletín Judicial Foreclosure Ingestion Pipeline
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   ingest:
-    name: Scrape, Extract & Ingest Boletín Judicial Auctions
+    name: Scrape, Extract & Ingest Nexus PJ / Boletín Judicial Auctions
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -36,6 +36,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           python scraper/main.py
 
@@ -48,4 +49,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           python scraper/auction_tracker.py --sync-once
+
+      - name: Upload Debug Payload Log (If Generated)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-debug-log
+          path: scraper/debug_raw_response.log
+          if-no-files-found: ignore
 
