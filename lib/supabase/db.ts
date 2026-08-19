@@ -24,30 +24,146 @@ export interface WatchlistItem {
   auction?: Auction;
 }
 
-const CANTON_COORDINATES: Record<string, [number, number]> = {
-  'garabito': [9.6152, -84.6298],
-  'jacó': [9.6152, -84.6298],
-  'escazú': [9.9248, -84.1432],
+function normalizeGeoKey(str?: string | null): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const COSTA_RICA_CENTROIDS: Record<string, [number, number]> = {
+  // San José Province
+  'san jose': [9.9281, -84.0907],
+  'escazu': [9.9248, -84.1432],
+  'desamparados': [9.8988, -84.0678],
+  'puriscal': [9.8456, -84.3128],
+  'tarrazu': [9.6601, -84.0272],
+  'aserri': [9.8322, -84.1167],
+  'mora': [9.9142, -84.2464],
+  'goicoechea': [9.9482, -84.0489],
+  'santa ana': [9.9326, -84.1825],
+  'alajuelita': [9.8978, -84.0997],
+  'coronado': [9.9753, -84.0086],
+  'vazquez de coronado': [9.9753, -84.0086],
+  'acosta': [9.7972, -84.1611],
+  'tibas': [9.9575, -84.0817],
+  'moravia': [9.9678, -84.0489],
+  'montes de oca': [9.9372, -84.0514],
+  'san pedro': [9.9372, -84.0514],
+  'turrubares': [9.8000, -84.4833],
+  'dota': [9.6542, -83.9278],
   'curridabat': [9.9156, -84.0353],
   'granadilla': [9.9285, -84.0241],
-  'la unión': [9.9076, -83.9875],
-  'tres ríos': [9.9076, -83.9875],
+  'perez zeledon': [9.3739, -83.7058],
+  'san isidro de el general': [9.3739, -83.7058],
+  'san isidro': [9.3739, -83.7058],
+  'daniel flores': [9.3500, -83.6833],
+  'rivas': [9.4300, -83.6500],
+  'platanares': [9.2800, -83.6100],
+  'pejibaye': [9.2100, -83.6600],
+  'cajon': [9.2600, -83.5600],
+  'baru': [9.2700, -83.8200],
+  'rio nuevo': [9.4500, -83.8300],
+  'paramo': [9.4800, -83.7100],
+  'la amistad': [9.2400, -83.4700],
+  'leon cortes': [9.6806, -84.0806],
+
+  // Puntarenas Province
+  'puntarenas': [9.9763, -84.8384],
+  'esparza': [9.9944, -84.6667],
+  'buenos aires': [9.1667, -83.3333],
+  'montes de oro': [10.1500, -84.7333],
+  'osa': [8.8833, -83.5167],
+  'palmar': [8.9500, -83.4500],
+  'quepos': [9.4319, -84.1619],
+  'aguirre': [9.4319, -84.1619],
+  'manuel antonio': [9.3889, -84.1528],
+  'golfito': [8.6333, -83.1667],
+  'coto brus': [8.9000, -82.9500],
+  'san vito': [8.8200, -82.9700],
+  'parrita': [9.5167, -84.3333],
+  'corredores': [8.6000, -82.9500],
+  'ciudad neily': [8.6500, -82.9400],
+  'garabito': [9.6152, -84.6298],
+  'jaco': [9.6152, -84.6298],
+  'herradura': [9.6450, -84.6380],
+  'playa hermosa': [9.5780, -84.6050],
+  'tarcoles': [9.7640, -84.6280],
+  'puerto jimenez': [8.5333, -83.3000],
+  'monteverde': [10.3000, -84.8167],
+
+  // Alajuela Province
   'alajuela': [10.0163, -84.2116],
-  'la guácima': [9.9722, -84.2889],
+  'san ramon': [10.0872, -84.4700],
+  'grecia': [10.0739, -84.3117],
+  'san mateo': [9.9500, -84.5333],
+  'atenas': [9.9792, -84.3778],
+  'naranjo': [10.0989, -84.3789],
+  'palmares': [10.0578, -84.4333],
+  'poas': [10.1333, -84.2333],
+  'orotina': [9.9114, -84.5217],
   'san carlos': [10.3238, -84.4271],
+  'ciudad quesada': [10.3238, -84.4271],
+  'zarcero': [10.1833, -84.3833],
+  'valverde vega': [10.1333, -84.3167],
+  'sarchi': [10.1333, -84.3167],
+  'upala': [10.8989, -85.0167],
+  'los chiles': [11.0333, -84.7167],
+  'guatuso': [10.6667, -84.8333],
+  'rio cuarto': [10.3456, -84.2167],
+  'la guacima': [9.9722, -84.2889],
+
+  // Cartago Province
+  'cartago': [9.8644, -83.9194],
+  'paraiso': [9.8389, -83.8667],
+  'la union': [9.9076, -83.9875],
+  'tres rios': [9.9076, -83.9875],
+  'jimenez': [9.7833, -83.7333],
+  'turrialba': [9.9047, -83.6833],
+  'alvarado': [9.9667, -83.8167],
+  'oreamuno': [9.8833, -83.9000],
+  'el guarco': [9.8167, -83.9333],
+
+  // Heredia Province
   'heredia': [9.9989, -84.1167],
-  'belén': [9.9812, -84.1795],
+  'barva': [10.0167, -84.1167],
+  'santo domingo': [9.9833, -84.0833],
+  'santa barbara': [10.0333, -84.1667],
+  'san rafael': [10.0167, -84.1000],
+  'belen': [9.9812, -84.1795],
+  'flores': [10.0000, -84.1500],
+  'san pablo': [9.9917, -84.0972],
+  'sarapiqui': [10.4500, -84.0167],
+
+  // Guanacaste Province
+  'liberia': [10.6333, -85.4333],
+  'nicoya': [10.1444, -85.4542],
   'santa cruz': [10.2625, -85.5853],
   'tamarindo': [10.2993, -85.8402],
+  'bagaces': [10.5167, -85.2500],
   'carrillo': [10.4667, -85.5500],
   'playas del coco': [10.5500, -85.6967],
-  'quepos': [9.4319, -84.1619],
-  'manuel antonio': [9.3889, -84.1528],
-  'pérez zeledón': [9.3739, -83.7058],
-  'san josé': [9.9281, -84.0907],
-  'cartago': [9.8644, -83.9194],
-  'puntarenas': [9.9763, -84.8384],
-  'limón': [9.9907, -83.0360],
+  'canas': [10.4333, -85.0833],
+  'abangares': [10.2833, -84.9500],
+  'tilaran': [10.4667, -84.9667],
+  'nandayure': [9.9833, -85.2500],
+  'la cruz': [11.0667, -85.6333],
+  'hojancha': [10.0667, -85.4167],
+  'guanacaste': [10.4667, -85.5500],
+
+  // Limón Province
+  'limon': [9.9907, -83.0360],
+  'pococi': [10.2000, -83.7833],
+  'guapiles': [10.2167, -83.7833],
+  'siquirres': [10.1000, -83.5167],
+  'talamanca': [9.6333, -82.8500],
+  'puerto viejo': [9.6550, -82.7540],
+  'matina': [10.0833, -83.3333],
+  'guacimo': [10.2167, -83.6833],
 };
 
 const UNIQUE_REAL_ESTATE_GALLERIES: string[][] = [
@@ -142,17 +258,49 @@ function mapRowToAuction(item: any): Auction {
     }
   }
 
-  if (!lat || !lng) {
-    const districtKey = (item.district || '').toLowerCase().trim();
-    const cantonKey = (item.canton || '').toLowerCase().trim();
-    const provKey = (item.province || 'san josé').toLowerCase().trim();
+  const normalizedDistrict = normalizeGeoKey(item.district);
+  const normalizedCanton = normalizeGeoKey(item.canton);
+  const normalizedProv = normalizeGeoKey(item.province || 'san jose');
+  const fullText = `${item.canton || ''} ${item.district || ''} ${item.address_description || ''} ${item.legal_summary || ''}`.toLowerCase();
 
-    if (CANTON_COORDINATES[districtKey]) {
-      [lat, lng] = CANTON_COORDINATES[districtKey];
-    } else if (CANTON_COORDINATES[cantonKey]) {
-      [lat, lng] = CANTON_COORDINATES[cantonKey];
-    } else if (CANTON_COORDINATES[provKey]) {
-      [lat, lng] = CANTON_COORDINATES[provKey];
+  // Safeguard: If property is for Pérez Zeledón, ensure it is accurately grounded at [9.3739, -83.7058]
+  // (Prevents any Pérez Zeledón property from showing up on Jacó pin 9.6152, -84.6298)
+  const isPerezZeledon = 
+    normalizedCanton.includes('perez zeledon') ||
+    normalizedDistrict.includes('perez zeledon') ||
+    normalizedDistrict === 'daniel flores' ||
+    normalizedDistrict === 'rivas' ||
+    fullText.includes('perez zeledon') ||
+    fullText.includes('pérez zeledón') ||
+    fullText.includes('san isidro de el general');
+
+  const isGarabitoOrJaco =
+    normalizedCanton.includes('garabito') ||
+    normalizedDistrict.includes('jaco') ||
+    normalizedDistrict.includes('jacó') ||
+    fullText.includes('garabito') ||
+    fullText.includes('jaco') ||
+    fullText.includes('jacó') ||
+    fullText.includes('herradura');
+
+  if (isPerezZeledon && !isGarabitoOrJaco) {
+    // If coordinates are missing or mistakenly placed at Jacó / West Coast Puntarenas, override to Pérez Zeledón
+    if (!lat || !lng || (lat > 9.55 && lat < 9.70 && lng < -84.50 && lng > -84.75)) {
+      lat = 9.3739;
+      lng = -83.7058;
+    }
+  } else if (isGarabitoOrJaco && !isPerezZeledon) {
+    if (!lat || !lng || (lat < 9.45 && lng > -83.85)) {
+      lat = 9.6152;
+      lng = -84.6298;
+    }
+  } else if (!lat || !lng) {
+    if (COSTA_RICA_CENTROIDS[normalizedDistrict]) {
+      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedDistrict];
+    } else if (COSTA_RICA_CENTROIDS[normalizedCanton]) {
+      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedCanton];
+    } else if (COSTA_RICA_CENTROIDS[normalizedProv]) {
+      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedProv];
     } else {
       lat = 9.9281;
       lng = -84.0907;

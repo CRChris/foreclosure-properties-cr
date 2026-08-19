@@ -31,15 +31,20 @@ function MapController({
   selectedAuction?: Auction | null;
 }) {
   const map = useMap();
+  const prevSelectedId = React.useRef<string | null>(null);
 
   useEffect(() => {
     if (selectedAuction && selectedAuction.latitude && selectedAuction.longitude) {
-      map.flyTo([selectedAuction.latitude, selectedAuction.longitude], Math.max(map.getZoom(), 13), {
-        duration: 0.9,
-        easeLinearity: 0.25,
-      });
+      if (prevSelectedId.current !== selectedAuction.id) {
+        prevSelectedId.current = selectedAuction.id;
+        map.flyTo([selectedAuction.latitude, selectedAuction.longitude], Math.max(map.getZoom(), 12), {
+          duration: 0.9,
+          easeLinearity: 0.25,
+        });
+      }
     } else if (center) {
-      map.flyTo(center, zoom || 8, { duration: 1.0 });
+      prevSelectedId.current = null;
+      map.flyTo(center, zoom || 7.5, { duration: 1.0 });
     }
   }, [center, zoom, selectedAuction, map]);
 
@@ -50,8 +55,8 @@ export function PropertyMap({
   auctions,
   selectedAuctionId,
   onSelectAuction,
-  center = [9.7489, -83.7534], // Central Costa Rica
-  zoom = 8,
+  center = [9.7489, -84.05], // Whole country Costa Rica center
+  zoom = 7.5, // Zoomed out to view entire country
   height = '100%',
   className = '',
 }: PropertyMapProps) {

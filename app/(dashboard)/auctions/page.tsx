@@ -61,7 +61,7 @@ export default function AuctionsPage() {
     fetchAuctions().then((data) => {
       if (isMounted && data && data.length > 0) {
         setAuctionsData(data);
-        if (data[0]) setSelectedAuctionId(data[0].id);
+        // Do not auto-select first auction so map starts showing all of Costa Rica
       }
     });
 
@@ -373,9 +373,9 @@ export default function AuctionsPage() {
                   center={
                     selectedAuction?.latitude && selectedAuction?.longitude
                       ? [selectedAuction.latitude, selectedAuction.longitude]
-                      : [9.7489, -83.7534]
+                      : [9.7489, -84.05]
                   }
-                  zoom={selectedAuction ? 12 : 8}
+                  zoom={selectedAuction ? 13 : 7.5}
                   height="100%"
                 />
               </div>
@@ -406,9 +406,9 @@ export default function AuctionsPage() {
                 center={
                   selectedAuction?.latitude && selectedAuction?.longitude
                     ? [selectedAuction.latitude, selectedAuction.longitude]
-                    : [9.7489, -83.7534]
+                    : [9.7489, -84.05]
                 }
-                zoom={selectedAuction ? 13 : 8}
+                zoom={selectedAuction ? 13 : 7.5}
                 height="100%"
               />
 

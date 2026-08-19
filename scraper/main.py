@@ -187,7 +187,7 @@ PROVINCE_CENTROIDS = {
     "cartago": (9.8644, -83.9194),
     "heredia": (9.9989, -84.1167),
     "guanacaste": (10.4667, -85.5500),
-    "puntarenas": (9.6152, -84.6298),
+    "puntarenas": (9.9763, -84.8384),
     "limón": (9.9907, -83.0360),
 }
 
@@ -1210,20 +1210,38 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
     Enriches auction with PostGIS coordinates from Canton/Province centroids lookup,
     computes estimated market value based on regional property benchmarks, and formats PostGIS WKT.
     """
-    lat = getattr(auction, "approx_latitude", None)
-    lng = getattr(auction, "approx_longitude", None)
-    
+    def norm_geo(s: str) -> str:
+        if not s:
+            return ""
+        import unicodedata
+        n = unicodedata.normalize("NFD", s.lower())
+        return "".join(c for c in n if unicodedata.category(c) != "Mn").strip()
+
     if not lat or not lng:
-        district_key = (getattr(auction, "district", "") or "").lower().strip()
-        canton_key = (getattr(auction, "canton", "") or "").lower().strip()
-        
-        if district_key in CR_CANTON_CENTROIDS:
-            lat, lng = CR_CANTON_CENTROIDS[district_key]
-        elif canton_key in CR_CANTON_CENTROIDS:
-            lat, lng = CR_CANTON_CENTROIDS[canton_key]
+        d_raw = (getattr(auction, "district", "") or "").strip()
+        c_raw = (getattr(auction, "canton", "") or "").strip()
+        p_raw = (getattr(auction, "province", "san josé") or "san josé").strip()
+        full_info = f"{c_raw} {d_raw} {getattr(auction, 'address_description', '')} {getattr(auction, 'legal_summary', '')}".lower()
+
+        d_norm = norm_geo(d_raw)
+        c_norm = norm_geo(c_raw)
+        p_norm = norm_geo(p_raw)
+
+        # Safeguard: Explicit Pérez Zeledón check (prevents any overlap with Jacó/Garabito)
+        if "perez zeledon" in c_norm or "perez zeledon" in d_norm or "perez zeledon" in full_info or "pérez zeledón" in full_info or "san isidro de el general" in full_info:
+            lat, lng = 9.3739, -83.7058
+        elif "garabito" in c_norm or "jaco" in d_norm or "jaco" in full_info or "jacó" in full_info or "herradura" in full_info:
+            lat, lng = 9.6152, -84.6298
+        elif d_raw.lower() in CR_CANTON_CENTROIDS:
+            lat, lng = CR_CANTON_CENTROIDS[d_raw.lower()]
+        elif d_norm in CR_CANTON_CENTROIDS:
+            lat, lng = CR_CANTON_CENTROIDS[d_norm]
+        elif c_raw.lower() in CR_CANTON_CENTROIDS:
+            lat, lng = CR_CANTON_CENTROIDS[c_raw.lower()]
+        elif c_norm in CR_CANTON_CENTROIDS:
+            lat, lng = CR_CANTON_CENTROIDS[c_norm]
         else:
-            prov_key = (getattr(auction, "province", "san josé") or "san josé").lower().strip()
-            lat, lng = PROVINCE_CENTROIDS.get(prov_key, (9.9281, -84.0907))
+            lat, lng = PROVINCE_CENTROIDS.get(p_raw.lower(), PROVINCE_CENTROIDS.get(p_norm, (9.9281, -84.0907)))
             
     base = auction.base_price_call_1
     multiplier = 1.38

@@ -34,13 +34,7 @@ export default function MapExplorerPage() {
     fetchAuctions().then((data) => {
       if (isMounted && data && data.length > 0) {
         setAuctions(data);
-        const active = data.filter((a) => {
-          const live = getLiveAuctionProgressionState(a);
-          return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
-        });
-        if (active.length > 0) {
-          setSelectedAuction(active[0]);
-        }
+        // Do not auto-select first auction so the map opens showing all of Costa Rica
       }
     });
 
@@ -72,7 +66,7 @@ export default function MapExplorerPage() {
 
   const centerCoordinates: [number, number] = selectedAuction?.latitude && selectedAuction?.longitude
     ? [selectedAuction.latitude, selectedAuction.longitude]
-    : [9.7489, -83.7534];
+    : [9.7489, -84.05];
 
   return (
     <div className="space-y-4">
@@ -201,7 +195,7 @@ export default function MapExplorerPage() {
             selectedAuctionId={selectedAuction?.id}
             onSelectAuction={(auction) => setSelectedAuction(auction)}
             center={centerCoordinates}
-            zoom={selectedAuction ? 13 : 8}
+            zoom={selectedAuction ? 13 : 7.5}
             height="100%"
           />
 
