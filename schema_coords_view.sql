@@ -1,27 +1,44 @@
 -- ==============================================================================
--- MIGRATION: auctions_with_coords view + schema cache reload + get_all_auctions RPC
+-- MIGRATION v2: Safe column additions + view + get_all_auctions RPC
 -- ==============================================================================
 -- Run this ENTIRE script in the Supabase SQL editor.
+-- This version safely adds missing columns before creating the view and RPC.
 -- ==============================================================================
 
--- Step 1: Create or replace the view
+-- Step 1: Ensure required columns exist (safe IF NOT EXISTS)
+ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS location_type VARCHAR(32) DEFAULT 'approximate_town';
+ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS parcel_polygon JSONB;
+ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS plano_catastrado VARCHAR(64);
+
+-- Step 2: Add constraint if not already present
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'check_auctions_location_type'
+    ) THEN
+        ALTER TABLE public.auctions
+        ADD CONSTRAINT check_auctions_location_type
+        CHECK (location_type IN ('exact_cadastral', 'approximate_town'));
+    END IF;
+END $$;
+
+-- Step 3: Create or replace view
 CREATE OR REPLACE VIEW public.auctions_with_coords AS
-SELECT 
+SELECT
     a.*,
     ST_Y(a.location::geometry)::DOUBLE PRECISION AS latitude,
     ST_X(a.location::geometry)::DOUBLE PRECISION AS longitude
 FROM public.auctions a;
 
--- Step 2: Grant access to the view
+-- Step 4: Grant access
 GRANT SELECT ON public.auctions_with_coords TO anon;
 GRANT SELECT ON public.auctions_with_coords TO authenticated;
 GRANT SELECT ON public.auctions_with_coords TO service_role;
 
--- Step 3: Force PostgREST schema cache reload so the JS client can see the view
+-- Step 5: Force PostgREST schema cache reload
 NOTIFY pgrst, 'reload schema';
 
--- Step 4: Create a fallback RPC that returns all auctions with numeric lat/lng
--- (avoids schema cache issues entirely — RPCs always work)
+-- Step 6: Create get_all_auctions RPC (primary coord source, bypasses schema cache)
 CREATE OR REPLACE FUNCTION public.get_all_auctions(
     p_province TEXT DEFAULT NULL,
     p_canton TEXT DEFAULT NULL,
@@ -137,13 +154,18 @@ BEGIN
         AND (p_canton IS NULL OR a.canton ILIKE p_canton)
         AND (p_currency IS NULL OR a.currency = p_currency)
         AND (p_call_stage IS NULL OR p_call_stage = 'all' OR a.call_stage = p_call_stage)
-        AND (p_include_past OR a.call_stage NOT IN ('passed_call_3'))
-        AND (p_include_past OR a.sale_status NOT IN ('deserted'))
+        AND (p_include_past OR (
+            COALESCE(a.call_stage, 'call_1') NOT IN ('passed_call_3')
+            AND COALESCE(a.sale_status, 'upcoming') NOT IN ('deserted')
+        ))
     ORDER BY a.auction_date_call_1 ASC;
 END;
 $$;
 
--- Grant RPC access
+-- Step 7: Grant RPC access
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO service_role;
+
+-- Step 8: Reload schema cache again after all changes
+NOTIFY pgrst, 'reload schema';
