@@ -27,6 +27,7 @@ import {
   TrendingUp, 
   Compass, 
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function MapExplorerPage() {
@@ -192,12 +193,31 @@ export default function MapExplorerPage() {
                 );
               })
             ) : (
-              <div className="p-8 text-center space-y-2 text-slate-400">
+              <div className="p-6 text-center space-y-2.5 text-slate-400">
                 <Scale className="w-6 h-6 mx-auto text-slate-400 dark:text-slate-500" />
-                <p className="text-xs font-semibold text-slate-900 dark:text-white">{t.empty.waitingTitle}</p>
-                <p className="text-[11px] text-slate-500">
-                  {t.empty.waitingDesc}
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">
+                  {searchQuery.trim() || selectedProvince !== 'all' || auctions.length > 0
+                    ? t.empty.noResultsTitle
+                    : t.empty.waitingTitle}
                 </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {searchQuery.trim() || selectedProvince !== 'all' || auctions.length > 0
+                    ? t.empty.noResultsDesc
+                    : t.empty.waitingDesc}
+                </p>
+                {(searchQuery.trim() || selectedProvince !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedProvince('all');
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline pt-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>{t.empty.resetFilters}</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -189,6 +189,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     empty: {
       waitingTitle: 'Esperando Próxima Publicación Judicial',
       waitingDesc: 'La base de datos está lista. El extractor automatizado monitorea y procesa nuevos edictos de remate de los Juzgados de Cobro y Civiles de Costa Rica directamente desde el Boletín Judicial (Nexus PJ) de lunes a viernes a las 8:15 AM.',
+      noResultsTitle: 'No hay propiedades disponibles para este filtro',
+      noResultsDesc: 'No hay propiedades disponibles para este filtro, vuelva a consultar mañana a las 8:30am hora de Costa Rica para posibles nuevas propiedades que se ajusten a su criterio.',
       resetFilters: 'Restablecer Filtros',
       connectedStatus: 'Extractor conectado a Nexus PJ / Boletín Judicial',
     },
@@ -425,6 +427,8 @@ export const TRANSLATIONS: Record<Language, Translations> = {
     empty: {
       waitingTitle: 'Awaiting Next Judicial Publication',
       waitingDesc: 'The database is ready. The automated ingestion worker monitors and parses new court foreclosure edicts directly from Nexus PJ / Boletín Judicial Monday through Friday at 8:15 AM.',
+      noResultsTitle: 'No properties available for this filter',
+      noResultsDesc: 'There are no properties available for this filter, check back tomorrow at 8:30am Costa Rica time for possible new properties that fit your criteria.',
       resetFilters: 'Reset Filters',
       connectedStatus: 'Ingestion engine connected to Nexus PJ & Boletín Judicial',
     },

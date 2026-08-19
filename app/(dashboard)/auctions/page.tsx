@@ -225,6 +225,22 @@ export default function AuctionsPage() {
     };
   }, [filteredAuctions]);
 
+  // Check if user has active filters
+  const hasActiveFilters = [
+    filters.search.trim() !== '',
+    filters.propertyType !== 'all',
+    filters.province !== 'all',
+    filters.callStage !== 'all',
+    filters.dealGrade !== 'all',
+    filters.currency !== 'all',
+    filters.priceBracket !== 'all' || filters.minPrice !== '' || filters.maxPrice !== '',
+    filters.constructionStatus !== 'all',
+    filters.roadFrontage !== 'all',
+    filters.mortgagePriority !== 'all',
+    filters.minMargin > 0,
+    filters.timeframe !== 'all',
+  ].some(Boolean);
+
   const handleResetFilters = () => {
     setFilters(INITIAL_FILTERS);
   };
@@ -307,17 +323,19 @@ export default function AuctionsPage() {
         </div>
       ) : (
         /* Empty State */
-        <div className="p-12 text-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto my-12 shadow-xl backdrop-blur-md">
+        <div className="p-10 sm:p-12 text-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto my-12 shadow-xl backdrop-blur-md">
           <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
             <Scale className="w-8 h-8" />
           </div>
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{t.empty.waitingTitle}</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
-              {t.empty.waitingDesc}
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              {hasActiveFilters || auctionsData.length > 0 ? t.empty.noResultsTitle : t.empty.waitingTitle}
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-md mx-auto">
+              {hasActiveFilters || auctionsData.length > 0 ? t.empty.noResultsDesc : t.empty.waitingDesc}
             </p>
           </div>
-          {filters.search || filters.province !== 'all' || filters.currency !== 'all' ? (
+          {hasActiveFilters ? (
             <Button variant="secondary" size="sm" onClick={handleResetFilters} className="font-semibold text-xs">
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
               {t.empty.resetFilters}

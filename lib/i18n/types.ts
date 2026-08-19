@@ -188,6 +188,8 @@ export interface Translations {
   empty: {
     waitingTitle: string;
     waitingDesc: string;
+    noResultsTitle: string;
+    noResultsDesc: string;
     resetFilters: string;
     connectedStatus: string;
   };
