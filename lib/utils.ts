@@ -426,9 +426,49 @@ export function detectPropertyCharacteristics(data: {
   mortgage_priority?: MortgagePriority;
 }) {
   // Combine all descriptive text sources while avoiding court name noise (e.g. "Juzgado Civil y Agrario")
+  const natRaw = (data.naturaleza_raw || '').toLowerCase();
   const text = `${data.naturaleza_raw || ''} ${data.address_description || ''} ${data.legal_summary || ''} ${data.raw_edict_text || ''}`.toLowerCase();
 
-  // 1. High-confidence specific signal detectors
+  // 1. Explicit construction presence markers (Costa Rica Legal Semantics)
+  const hasExplicitBuiltConstruction = (
+    text.includes('con una casa') ||
+    text.includes('con casa de habitacion') ||
+    text.includes('con casa de habitación') ||
+    text.includes('con casa') ||
+    text.includes('con edificio') ||
+    text.includes('con construcciones') ||
+    text.includes('con edificacion') ||
+    text.includes('con edificación') ||
+    text.includes('con mejoras') ||
+    text.includes('finca con casa') ||
+    text.includes('local comercial') ||
+    text.includes('edificio comercial') ||
+    text.includes('nave industrial') ||
+    text.includes('bodega') ||
+    text.includes('apartamento') ||
+    text.includes('penthouse') ||
+    text.includes('dormitorios en suite') ||
+    text.includes('habitaciones') ||
+    text.includes('piscina privada')
+  );
+
+  // 2. Bare land / future-intent phrases (MUST be vacant lot: hasConstruction = false)
+  const isBareLandPhrase = (
+    natRaw.includes('terreno para construir') ||
+    natRaw.includes('lote para construir') ||
+    natRaw.includes('terreno de solar') ||
+    natRaw.includes('lote para vivienda') ||
+    natRaw.includes('terreno de agricultura') ||
+    natRaw.includes('terreno apto para') ||
+    natRaw.includes('terreno sin construir') ||
+    natRaw.includes('lote sin edificar') ||
+    natRaw.includes('solar sin edificar') ||
+    natRaw.includes('solar') ||
+    (natRaw.includes('terreno') && !hasExplicitBuiltConstruction) ||
+    (natRaw.includes('lote') && !hasExplicitBuiltConstruction)
+  );
+
+  // 3. High-confidence specific signal detectors
   const isCondoSignal = (
     text.includes('condominio') ||
     text.includes('finca filial') ||
@@ -473,12 +513,6 @@ export function detectPropertyCharacteristics(data: {
     text.includes('chalet') ||
     text.includes('residencia') ||
     text.includes('vivienda') ||
-    text.includes('4 dormitorios') ||
-    text.includes('3 dormitorios') ||
-    text.includes('2 dormitorios') ||
-    text.includes('dormitorios en suite') ||
-    text.includes('habitaciones') ||
-    text.includes('piscina privada') ||
     text.includes('con una casa') ||
     text.includes('con casa') ||
     text.includes('con edificación') ||
@@ -512,67 +546,40 @@ export function detectPropertyCharacteristics(data: {
     text.includes('arboles frutales')
   );
 
-  const isLotSignal = (
-    text.includes('lote para construir') ||
-    text.includes('terreno para construir') ||
-    text.includes('lote para desarrollo') ||
-    text.includes('solar') ||
-    text.includes('terreno sin construir') ||
-    text.includes('lote sin edificar') ||
-    text.includes('terreno yermo')
-  );
-
-  // 2. Resolve Property Type using legal precedence
+  // 4. Resolve Property Type using legal precedence
   let propertyType: PropertyType = 'other';
 
-  if (isCondoSignal) {
+  if (isBareLandPhrase && !hasExplicitBuiltConstruction) {
+    propertyType = isAgriculturalSignal ? 'agricultural_land' : 'building_lot';
+  } else if (isCondoSignal) {
     propertyType = 'condo_apartment';
   } else if (isCommercialSignal) {
     propertyType = 'commercial_industrial';
-  } else if (isResidentialSignal) {
-    // If it has a villa/home/bedrooms/pool, it is a Single-Family Home even if registered as finca
+  } else if (hasExplicitBuiltConstruction || isResidentialSignal) {
     propertyType = 'single_family_home';
   } else if (isAgriculturalSignal) {
     propertyType = 'agricultural_land';
-  } else if (isLotSignal) {
-    propertyType = 'building_lot';
-  } else if (data.property_type && data.property_type !== 'other' && data.property_type !== 'agricultural_land') {
+  } else if (data.property_type && data.property_type !== 'other') {
     propertyType = data.property_type;
-  } else if (text.includes('casa') || text.includes('unifamiliar')) {
-    propertyType = 'single_family_home';
-  } else if (text.includes('terreno') || text.includes('lote')) {
+  } else if (text.includes('terreno') || text.includes('lote') || text.includes('solar')) {
     propertyType = 'building_lot';
   }
 
-  // 3. Has Construction
+  // 5. Has Construction (False for bare land/terreno para construir; True only if existing building cited)
   let hasConstruction = data.has_construction;
   if (typeof hasConstruction !== 'boolean') {
-    const constructionKeywords = [
-      'casa', 'edificio', 'edificación', 'edificacion', 'construcción', 'construccion',
-      'bodega', 'local', 'oficina', 'oficinas', 'filial', 'apartamento', 'penthouse',
-      'villa', 'quinta', 'residencia', 'mejoras', 'planta', 'habitaciones', 'baños',
-      'banos', 'cochera', 'garaje', 'piscina', 'mampostería', 'mamposteria', 'piso',
-      'techada', 'seguridad', 'acabados', 'dormitorios'
-    ];
-    
-    const unbuiltKeywords = [
-      'terreno sin construir', 'lote sin construir', 'terreno yermo', 'solar sin edificar',
-      'terreno apto para', 'lote para construir', 'finca rústica', 'finca rustica'
-    ];
-    
-    const hasBuiltMention = constructionKeywords.some(k => text.includes(k));
-    const hasExplicitUnbuilt = unbuiltKeywords.some(k => text.includes(k));
-
-    if (propertyType === 'single_family_home' || propertyType === 'condo_apartment' || propertyType === 'commercial_industrial') {
+    if (isBareLandPhrase && !hasExplicitBuiltConstruction) {
+      hasConstruction = false;
+    } else if (hasExplicitBuiltConstruction) {
       hasConstruction = true;
-    } else if (propertyType === 'building_lot' || propertyType === 'agricultural_land') {
-      hasConstruction = hasBuiltMention && !hasExplicitUnbuilt;
+    } else if (propertyType === 'single_family_home' || propertyType === 'condo_apartment' || propertyType === 'commercial_industrial') {
+      hasConstruction = true;
     } else {
-      hasConstruction = hasBuiltMention;
+      hasConstruction = false;
     }
   }
 
-  // 4. Public Road Frontage
+  // 6. Public Road Frontage
   let hasPublicRoad = data.has_public_road_frontage;
   if (typeof hasPublicRoad !== 'boolean') {
     hasPublicRoad = (
@@ -587,7 +594,7 @@ export function detectPropertyCharacteristics(data: {
     );
   }
 
-  // 5. Is Condominio
+  // 7. Is Condominio
   let isCondominio = data.is_condominio;
   if (typeof isCondominio !== 'boolean') {
     isCondominio = (
@@ -596,7 +603,7 @@ export function detectPropertyCharacteristics(data: {
     );
   }
 
-  // 6. Mortgage Priority
+  // 8. Mortgage Priority
   let mortgagePriority: MortgagePriority = data.mortgage_priority || '1st_mortgage';
   if (!data.mortgage_priority) {
     if (text.includes('segundo grado') || text.includes('segunda hipoteca')) {

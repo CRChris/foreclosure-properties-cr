@@ -104,6 +104,42 @@ Segundo remate: veintiséis de noviembre de 2026. Tercer remate: diecisiete de d
 Ejecución hipotecaria promovida por BAC SAN JOSÉ. NÚMERO DE EXPEDIENTE: 23-007891-0388-AG.
 """
 
+# ==============================================================================
+# SAMPLE 5: Tarcoles Vacant Lot ("TERRENO PARA CONSTRUIR" -> is_constructed = False)
+# ==============================================================================
+SAMPLE_EDICT_TARCOLES_VACANT_LOT = """
+JUZGADO DE COBRO DE GARABITO. A las diez horas del doce de octubre de dos mil veintiséis, remataré al mejor postor: 
+Finca inscrita en el Registro Público, Partido de Puntarenas, Folio Real matrícula 6-234567-000. 
+NATURALEZA: TERRENO PARA CONSTRUIR. Situada en Tárcoles, Cantón Garabito, Provincia de Puntarenas. 
+MIDE: DOSCIENTOS OCHENTA Y OCHO METROS CUADRADOS. Plano: P-0948699-2004. 
+Linderos: Norte, Calle pública con diez metros; Sur, Lote 15; Este, Lote 12; Oeste, Lote 14. 
+Con la base de veinticinco millones de colones exactos (CRC 25.000.000,00). 
+Ejecución hipotecaria de BANCO POPULAR contra PROYECTOS PACÍFICO CENTRAL S.A. Expediente: 22-000123-1234-CJ.
+"""
+
+# ==============================================================================
+# SAMPLE 6: Constructed House ("TERRENO PARA CONSTRUIR CON CASA DE HABITACIÓN")
+# ==============================================================================
+SAMPLE_EDICT_CONSTRUCTED_HOUSE = """
+JUZGADO PRIMERO DE COBRO DE SAN JOSÉ. A las nueve horas del quince de noviembre de dos mil veintiséis, con la base de 
+ciento cincuenta mil dólares (USD 150,000.00), remataré: Finca matrícula 1-345678-000, situada en San Rafael, Escazú. 
+NATURALEZA: TERRENO PARA CONSTRUIR CON UNA CASA DE HABITACIÓN DE DOS PLANTAS. 
+MIDE: TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS CUADRADOS. Plano: SJ-1492019-2020. 
+Linderos: Norte, Calle pública; Sur, Río Tiribí; Este, Propiedad privada; Oeste, Calle. 
+Proceso hipotecario de SCOTIABANK contra RESIDENCIAS DEL OESTE S.A. Expediente: 24-001234-1158-CJ.
+"""
+
+# ==============================================================================
+# SAMPLE 7: Large Agricultural Parcel ("UNA HECTÁREA CON TRES MIL METROS")
+# ==============================================================================
+SAMPLE_EDICT_HECTARES_PARCEL = """
+JUZGADO AGRARIO DE PÉREZ ZELEDÓN. A las catorce horas del primero de diciembre de dos mil veintiséis, 
+con la base de noventa millones de colones (CRC 90.000.000,00), remataré al mejor postor: 
+Finca matrícula 1-892145-000. NATURALEZA: TERRENO DE AGRICULTURA Y CAFÉ. 
+Situada en Daniel Flores, Pérez Zeledón. MIDE: UNA HECTÁREA CON TRES MIL METROS. Plano: 1-1928374-2018. 
+Expediente: 23-009876-0298-CA.
+"""
+
 def test_response_validation_unit():
     logger.info("\n--- Testing Step 2: Raw Response Validation & Logging ---")
     
@@ -197,6 +233,46 @@ def test_multi_court_resilient_parsing():
     assert parsed_guana.base_price_call_1 == 180000.0
     assert parsed_guana.property_category == "Agricultural"
     logger.info("  ✓ Guanacaste Agrario format parsed with resilient defendant fallback.")
+
+
+def test_costa_rica_legal_semantics():
+    logger.info("\n--- Testing Costa Rica Legal Semantics (Classification & Written Area) ---")
+
+    # 1. Test Tarcoles Vacant Lot ("TERRENO PARA CONSTRUIR" -> has_construction = False, area = 288.00)
+    parsed_tarcoles = extract_single_edict_regex_fallback(SAMPLE_EDICT_TARCOLES_VACANT_LOT)
+    assert parsed_tarcoles is not None, "Tarcoles edict must parse successfully"
+    assert parsed_tarcoles.expediente_number == "22-000123-1234-CJ"
+    assert parsed_tarcoles.folio_real == "6-234567-000"
+    assert parsed_tarcoles.plano_catastrado == "P-0948699-2004"
+    assert parsed_tarcoles.province == "Puntarenas"
+    assert parsed_tarcoles.canton == "Garabito"
+    assert parsed_tarcoles.has_construction is False, "TERRENO PARA CONSTRUIR must be marked as has_construction = False"
+    assert parsed_tarcoles.property_type == "building_lot", f"Expected building_lot, got {parsed_tarcoles.property_type}"
+    assert parsed_tarcoles.area_m2 == 288.0, f"DOSCIENTOS OCHENTA Y OCHO METROS CUADRADOS must convert to 288.0 (got {parsed_tarcoles.area_m2})"
+    assert parsed_tarcoles.base_price_call_1 == 25000000.0
+    assert parsed_tarcoles.currency == "CRC"
+    logger.info("  ✓ Tarcoles Vacant Lot parsed: has_construction=False, property_type='building_lot', area=288.0 m²")
+
+    # 2. Test Constructed House ("TERRENO PARA CONSTRUIR CON CASA..." -> has_construction = True, area = 3500.50)
+    parsed_house = extract_single_edict_regex_fallback(SAMPLE_EDICT_CONSTRUCTED_HOUSE)
+    assert parsed_house is not None, "House edict must parse successfully"
+    assert parsed_house.expediente_number == "24-001234-1158-CJ"
+    assert parsed_house.folio_real == "1-345678-000"
+    assert parsed_house.has_construction is True, "TERRENO PARA CONSTRUIR CON UNA CASA... must be marked as has_construction = True"
+    assert parsed_house.property_type == "single_family_home", f"Expected single_family_home, got {parsed_house.property_type}"
+    assert abs(parsed_house.area_m2 - 3500.50) < 0.01, f"TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS must convert to 3500.50 (got {parsed_house.area_m2})"
+    assert parsed_house.base_price_call_1 == 150000.0
+    assert parsed_house.currency == "USD"
+    logger.info("  ✓ Constructed House parsed: has_construction=True, property_type='single_family_home', area=3500.50 m²")
+
+    # 3. Test Hectares compound conversion ("UNA HECTÁREA CON TRES MIL METROS" -> 13000.0)
+    parsed_ha = extract_single_edict_regex_fallback(SAMPLE_EDICT_HECTARES_PARCEL)
+    assert parsed_ha is not None, "Hectares edict must parse successfully"
+    assert parsed_ha.expediente_number == "23-009876-0298-CA"
+    assert parsed_ha.area_m2 == 13000.0, f"UNA HECTÁREA CON TRES MIL METROS must convert to 13000.0 (got {parsed_ha.area_m2})"
+    assert parsed_ha.has_construction is False
+    assert parsed_ha.property_type == "agricultural_land"
+    logger.info("  ✓ Large Agricultural Parcel parsed: area=13000.0 m² (1 ha + 3,000 m²)")
 
 
 def test_monitoring_and_low_yield_alerting():
@@ -313,9 +389,15 @@ def run_tests():
     # 7. Reconciliation Coverage Audit Tests
     test_reconciliation_audit()
 
+    # 8. Costa Rica Legal Semantics & Area Disambiguation Tests
+    test_costa_rica_legal_semantics()
+
     test_cases = [
         ("USD Condo (Garabito)", SAMPLE_EDICT_USD_CONDO),
         ("CRC Agricultural Land (San Carlos)", SAMPLE_EDICT_CRC_LAND),
+        ("Tarcoles Vacant Lot (Garabito)", SAMPLE_EDICT_TARCOLES_VACANT_LOT),
+        ("Constructed House (Escazú)", SAMPLE_EDICT_CONSTRUCTED_HOUSE),
+        ("Large Agricultural Parcel (Pérez Zeledón)", SAMPLE_EDICT_HECTARES_PARCEL),
     ]
 
     has_gemini_key = bool(os.getenv("GEMINI_API_KEY"))

@@ -893,33 +893,38 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     return edicts
 
 # ==============================================================================
-# 4. HYBRID EXTRACTION ENGINE (Gemini 2.5 Flash + Deterministic Rule-Based Fallback)
+# 4. HYBRID EXTRACTION ENGINE (Gemini Flash + Deterministic Rule-Based Fallback)
 # ==============================================================================
 EXTRACTION_PROMPT = """
-You are an expert Costa Rican judicial real estate analyst.
-Extract all structured data from the following Costa Rican judicial foreclosure edict published in the official 'Boletín Judicial'.
+You are an expert Costa Rican legal real estate notary parsing "Edictos de Remate Judicial" published in the Boletín Judicial.
+Extract structured property data from the provided notice text following these mandatory domain rules:
 
-Follow these legal parsing rules:
-1. 'expediente_number': Standard judicial docket format: YY-XXXXXX-XXXX-CJ / CI / CA.
-2. 'folio_real': Property registry matricula in Costa Rica: Province-Number-Sublot (e.g. '6-189342-000', '1-452109-000').
+--- 1. PROPERTY TYPE & CONSTRUCTION STATUS ---
+Analyze the exact clause starting with "NATURALEZA:".
+- "NATURALEZA: TERRENO PARA CONSTRUIR", "TERRENO DE SOLAR", "TERRENO DE AGRICULTURA", "LOTE PARA VIVIENDA":
+  -> MUST be classified as: property_type = "building_lot" (or "other") and has_construction = false.
+  -> DO NOT classify as constructed just because the phrase contains the word "construir".
+- ONLY mark has_construction = true (and property_type = "single_family_home" | "commercial_industrial" | "condo_apartment") if the text explicitly states:
+  "CON UNA CASA", "CON CASA DE HABITACION", "CON EDIFICIO", "CON CONSTRUCCIONES", "LOCAL COMERCIAL", "FINCA CON CASA", or "EDIFICACIÓN".
+- If the edict lists "TERRENO PARA CONSTRUIR CON UNA CASA...", then property_type = "single_family_home" and has_construction = true.
+
+--- 2. LOT SIZE (AREA IN SQUARE METERS) ---
+Analyze the exact clause starting with "MIDE:".
+- Court edicts write area in words (e.g., "MIDE: DOSCIENTOS CINCUENTA METROS CUADRADOS" -> 250.00, "TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS CUADRADOS" -> 3500.50, "UNA HECTÁREA CON TRES MIL METROS" -> 13000.00).
+- Convert written Spanish area units strictly into numeric square meters (area_m2 as Float). Note: 1 decímetro cuadrado (dm²) = 0.01 m², 1 hectárea (ha) = 10,000 m².
+- If the edict describes multiple fincas/properties in one notice, parse each property block independently and map the exact "MIDE" and "PLANO" to the corresponding "FINCA/MATRÍCULA" block. Do not mix measurements between parcels.
+
+--- 3. IDENTIFIERS & METADATA ---
+- 'expediente_number': Standard judicial docket format: YY-XXXXXX-XXXX-CJ / CI / CA.
+- 'folio_real': Property registry matricula in Costa Rica: Province-Number-Sublot (e.g. '6-189342-000', '1-452109-000').
    Province codes: 1=San José, 2=Alajuela, 3=Cartago, 4=Heredia, 5=Guanacaste, 6=Puntarenas, 7=Limón.
-3. 'plano_catastrado': Cadastral survey code (e.g., 'P-1928374-2022', 'SJ-1489201-2020').
-4. 'currency': USD or CRC. Note 'colones' or '₡' -> CRC, 'dólares' or '$' -> USD.
-5. 'base_price_call_1' & 'auction_date_call_1': 1st call base and ISO datetime (with UTC-6 Costa Rica offset: e.g. '2026-09-15T14:30:00-06:00').
-6. 'base_price_call_2': If not specified, calculate 75% of base_price_call_1.
-7. 'base_price_call_3': If not specified, calculate 25% of base_price_call_1.
-8. 'area_m2': Surface area in square meters. If given in hectares (ha), convert: 1 ha = 10,000 m2.
-9. 'plaintiff': Foreclosing bank (BNCR, BCR, BAC, Promerica, Davivienda, Popular, Scotiabank, private lender, etc.).
-10. 'defendant': Debtor / foreclosed party name.
-11. 'legal_summary': 2-3 sentence executive investor overview in Spanish describing the asset, rooms, land, location, and potential.
-12. 'property_type': Classify as one of: 'single_family_home' (casa), 'condo_apartment' (condominio/filial), 'building_lot' (lote), 'agricultural_land' (finca/terreno agrícola), 'commercial_industrial' (local/bodega), or 'other'.
-13. 'naturaleza_raw': Exact legal naturaleza description (e.g. 'Terreno para construir con una casa de habitación').
-14. 'has_construction': True if the property mentions casa, mejoras, edificación, bodega, etc.
-15. 'has_public_road_frontage': True if linderos mention 'calle pública' or 'frente a calle'.
-16. 'is_condominio': True if mentions 'finca filial' or condominium regime.
-17. 'lindero_norte', 'lindero_sur', 'lindero_este', 'lindero_oeste': Extract the 4 bordering boundaries (linderos).
-18. 'servidumbres_notes': Note any registered easements (servidumbre de paso, acueducto, etc.).
-19. 'mortgage_priority': '1st_mortgage' if hipoteca en primer grado, '2nd_mortgage' if segundo grado, 'embargo_judicial' if execution by embargo.
+- 'plano_catastrado': Cadastral survey code (e.g., 'P-1928374-2022', 'SJ-1489201-2020').
+- 'currency': USD or CRC. Note 'colones' or '₡' -> CRC, 'dólares' or '$' -> USD.
+- 'base_price_call_1' & 'auction_date_call_1': 1st call base and ISO datetime (with UTC-6 Costa Rica offset: e.g. '2026-09-15T14:30:00-06:00').
+- 'base_price_call_2': If not specified, calculate 75% of base_price_call_1.
+- 'base_price_call_3': If not specified, calculate 25% of base_price_call_1.
+- 'naturaleza_raw': The exact verbatim text under NATURALEZA (e.g. 'Terreno para construir').
+- 'legal_summary': 2-3 sentence executive investor overview in Spanish describing the asset, land, location, and potential.
 
 EDICT TEXT:
 {edict_text}
@@ -932,27 +937,37 @@ def parse_spanish_words_to_number(text: str) -> float:
       'SIETE MILLONES DE COLONES' -> 7000000.0
       'DOSCIENTOS VEINTE MIL DÓLARES' -> 220000.0
       'DIEZ MILLONES QUINIENTOS MIL COLONES' -> 10500000.0
-      'DIECISIETE MILLONES NOVECIENTOS VEINTICINCO MIL SETECIENTOS SESENTA Y SEIS COLONES CON DIECISÉIS CÉNTIMOS' -> 17925766.16
+      'DOSCIENTOS OCHENTA Y OCHO METROS CUADRADOS' -> 288.0
+      'TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS CUADRADOS' -> 3500.50
+      'UNA HECTÁREA CON TRES MIL METROS' -> 13000.0
     """
     if not text:
         return 0.0
     norm = normalize_text(text)
-    
-    # Extract cents / céntimos
-    cents = 0.0
-    cents_match = re.search(r"con\s+([a-z\s]+?)\s+(?:centimos|centavos)", norm)
-    if cents_match:
-        c_words = [w for w in re.split(r"[\s,-]+", cents_match.group(1)) if w and w not in ("de", "y")]
+
+    # Check for compound hectare + meters pattern (e.g. "una hectarea con tres mil metros")
+    ha_compound = re.search(r'(?:(una|[0-9]+)\s+hectareas?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²|$)', norm)
+    if ha_compound:
+        ha_count = 1 if ha_compound.group(1) == "una" else (float(ha_compound.group(1)) if ha_compound.group(1).isdigit() else 1)
+        extra_words = ha_compound.group(2).strip()
+        extra_val = parse_spanish_words_to_number(extra_words)
+        return (ha_count * 10000.0) + extra_val
+
+    # Extract decimals / céntimos / decímetros
+    fractional = 0.0
+    dec_match = re.search(r"con\s+([a-z\s]+?)\s+(?:decimetros|centimos|centavos|decimas|centesimas)", norm)
+    if dec_match:
+        c_words = [w for w in re.split(r"[\s,-]+", dec_match.group(1)) if w and w not in ("de", "y")]
         c_val = 0.0
         for w in c_words:
             if w in SPANISH_WORD_NUMBERS:
                 c_val += SPANISH_WORD_NUMBERS[w]
-        cents = c_val / 100.0
-        norm = norm[:cents_match.start()].strip()
+        fractional = c_val / 100.0
+        norm = norm[:dec_match.start()].strip()
 
     words = [
         w for w in re.split(r"[\s,-]+", norm) 
-        if w and w not in ("de", "con", "y", "del", "colones", "dolares", "moneda", "nacional", "exactos", "netos", "americanos", "base", "la", "una", "por")
+        if w and w not in ("de", "con", "y", "del", "colones", "dolares", "moneda", "nacional", "exactos", "netos", "americanos", "base", "la", "una", "por", "metros", "cuadrados", "m2", "m²")
     ]
     
     total = 0.0
@@ -976,7 +991,7 @@ def parse_spanish_words_to_number(text: str) -> float:
             total += current * 1000000000000
             current = 0
             
-    total += current + cents
+    total += current + fractional
     return total
 
 def parse_cr_price_string(p_str: str) -> Optional[float]:
@@ -1035,6 +1050,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
     """
     try:
         text_lower = edict_text.lower()
+        norm = normalize_text(edict_text)
 
         # Enforce real estate inclusion & exclusion pipeline
         if not is_real_estate_foreclosure_edict(edict_text):
@@ -1054,12 +1070,10 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                 break
 
         if not expediente:
-            # Check for general judicial docket format XX-XXXXXX-XXXX-XX anywhere in block
             gen_match = re.search(r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-[A-Za-z0-9]+)\b", edict_text)
             if gen_match:
                 expediente = gen_match.group(1).strip()
             else:
-                # Look for publication reference e.g. Referencia N°: 2026-001 or IN2026...
                 ref_m = re.search(r"(?:Referencia\s+N[º°o]?\s*:|publicaci[óo]n\s+n[úu]mero\s*:)\s*([A-Za-z0-9-]+)", edict_text, re.I)
                 in_m = re.search(r"\(\s*(IN[0-9]{8,14})\s*\)", edict_text)
                 if ref_m:
@@ -1091,7 +1105,6 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             if f_gen:
                 folio = f_gen.group(1).strip()
             else:
-                # Check for Folio Real in written Spanish words
                 f_words = re.search(r"finca\s+(?:de\s+la\s+provincia\s+de\s+([a-záéíóú\s]+?),\s*)?n[úu]mero\s+([a-záéíóú\s]+?)(?:[–-]|cero\s+cero\s+cero|,|\.|\s+ubicada|\s+sita)", edict_text, re.I)
                 if f_words:
                     prov_candidate = f_words.group(1).strip().lower() if f_words.group(1) else "san jose"
@@ -1110,7 +1123,6 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         }
         detected_prov = "San José"
         
-        # Ground from Folio Real leading digit if hyphenated
         if "-" in folio and folio[0] in prov_code_map:
             detected_prov = prov_code_map[folio[0]]
         else:
@@ -1131,7 +1143,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         elif folio.count("-") == 1:
             folio = f"{folio}-000"
 
-        # Canton detection: direct regex first, then centroid key matching
+        # Canton detection
         detected_canton = "Central"
         canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)", edict_text, re.I)
         if canton_match:
@@ -1148,14 +1160,13 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         if dist_match:
             detected_district = dist_match.group(1).strip()[:30]
 
-        # 5. Plano Catastrado (Optional - does not drop if missing)
-        plano_match = re.search(r"(?:plano\s+(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s+|:)?|catastro\s+n[úu]mero\s+)([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
+        # 5. Plano Catastrado
+        plano_match = re.search(r"(?:plano\s*(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s*[:\.]?|[:\.]\s*|\s+)?|catastro\s*n[úu]mero\s*[:\.]?\s*)([A-Z0-9]{1,4}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        # Clean inline line breaks for seamless sentence parsing
         clean_text = re.sub(r'(?<!\n)\n(?!\n)', ' ', edict_text)
 
-        # 6. Currency & 3-Call Base Prices (Handles Digits and Spelled-Out Spanish Words)
+        # 6. Currency & 3-Call Base Prices
         base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|siguiente\s+base\s*:|base\s*:)\s*([^\;\.]{1,250})(?:\.|\;|\n\n)", clean_text, re.I)
         if not base_match:
             base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+)", edict_text, re.I)
@@ -1189,14 +1200,12 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                     elif currency == "CRC" and 500000 <= val <= 20000000000:
                         prices.append(val)
 
-        # Spelled-out Spanish words fallback (e.g. "SIETE MILLONES DE COLONES")
         if not prices:
             word_val = parse_spanish_words_to_number(base_sentence)
             if (currency == "USD" and 3000 <= word_val <= 50000000) or (currency == "CRC" and 500000 <= word_val <= 20000000000):
                 prices.append(word_val)
 
         if not prices:
-            # Fallback broader price search in whole text
             all_numbers = re.findall(r'([0-9]{1,3}(?:[\.,][0-9]{3})+(?:[\.,][0-9]{2})?)', edict_text)
             for num_str in all_numbers:
                 v = parse_cr_price_string(num_str)
@@ -1205,38 +1214,61 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                         prices.append(v)
 
         if not prices:
-            return None  # Must have valid real estate base price
+            return None
 
         base_1 = prices[0]
         base_2 = prices[1] if len(prices) > 1 else round(base_1 * 0.75, 2)
         base_3 = prices[2] if len(prices) > 2 else round(base_1 * 0.25, 2)
 
-        # 7. Naturaleza / Legal Description
-        nat_match = re.search(r"(?:naturaleza\s*[:\s]*|la\s+cual\s+es\s+|terreno\s+de\s+)([^\.\n;]+)", edict_text, re.I)
+        # 7. Naturaleza / Legal Description & Construction Flag Disambiguation
+        nat_match = re.search(r"(?:naturaleza\s*[:\s]*|la\s+cual\s+es\s+|terreno\s+de\s+|finca\s+que\s+es\s+)([^\.\n;]+)", edict_text, re.I)
         naturaleza = nat_match.group(1).strip() if nat_match else f"Inmueble en {detected_canton}, {detected_prov}"
+        nat_norm = normalize_text(naturaleza)
+
+        # Explicit construction check (Costa Rica Legal Semantics)
+        explicit_construction = any(k in norm for k in [
+            "con una casa", "con casa de habitacion", "con casa de habitación", "con casa",
+            "con edificio", "con construcciones", "con edificacion", "con edificación",
+            "con mejoras", "local comercial", "finca con casa", "edificacion"
+        ])
+        
+        is_bare_land = (any(k in nat_norm for k in [
+            "terreno para construir", "lote para construir", "terreno de solar", "lote para vivienda",
+            "terreno de agricultura", "terreno apto para", "terreno sin construir", "solar"
+        ]) or ("terreno" in nat_norm or "lote" in nat_norm)) and not explicit_construction
+
+        has_construction = bool(explicit_construction)
 
         # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
-        area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:m2|metros|mts|hect[áa]reas|ha)", edict_text, re.I)
+        # Check compound hectare phrase first (e.g. "una hectárea con tres mil metros")
+        ha_match = re.search(r"(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)", edict_text, re.I)
         area = 250.0
-        if area_match:
-            try:
-                area_str = area_match.group(1).replace(",", ".")
-                area_val = float(area_str)
-                if "hect" in area_match.group(0).lower() or "ha" in area_match.group(0).lower():
-                    area = area_val * 10000.0
-                else:
-                    area = area_val
-            except Exception:
-                area = 250.0
+        if ha_match:
+            ha_count = 1 if "una" in ha_match.group(0).lower() else 1
+            extra_m = parse_spanish_words_to_number(ha_match.group(1))
+            area = (ha_count * 10000.0) + extra_m
         else:
-            word_area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([a-záéíóú\s]+?)\s*(?:metros\s+cuadrados|m2|m²|hect[áa]reas|ha)", edict_text, re.I)
-            if word_area_match:
-                w_val = parse_spanish_words_to_number(word_area_match.group(1))
-                if 10 <= w_val <= 100000000:
-                    if "hect" in word_area_match.group(0).lower() or "ha" in word_area_match.group(0).lower():
-                        area = w_val * 10000.0
+            mide_m = re.search(r"(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^\.;\n]+?)(?:linderos|linda|colinda|plano|situada|ubicada|segundo|\.|$)", edict_text, re.I)
+            mide_clause = mide_m.group(1).strip() if mide_m else edict_text
+            
+            digit_area = re.search(r"([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts|hect[áa]reas|ha)", mide_clause, re.I)
+            if digit_area:
+                val_str = digit_area.group(1).strip()
+                parsed_val = parse_cr_price_string(val_str) or 250.0
+                if "hect" in digit_area.group(0).lower() or "ha" in digit_area.group(0).lower():
+                    area = parsed_val * 10000.0
+                else:
+                    # Check decimeters
+                    dec_m = re.search(r"con\s+([0-9]+|[a-záéíóú\s]+?)\s*(?:dec[íi]metros)", mide_clause, re.I)
+                    if dec_m:
+                        dec_val = parse_spanish_words_to_number(dec_m.group(1))
+                        area = parsed_val + (dec_val * 0.01)
                     else:
-                        area = w_val
+                        area = parsed_val
+            else:
+                word_val = parse_spanish_words_to_number(mide_clause)
+                if 5.0 <= word_val <= 100000000.0:
+                    area = word_val
 
         # 9. Plaintiff & Defendant
         plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+(?:de\s+)?[\w\s]+\s+de|actor\s*:?|ejecutante\s*:?)\s+([\w\s,.-]+?)\s+(?:contra|demandad)", edict_text, re.I)
@@ -1252,26 +1284,43 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             date_1_str = d1_match.group(0)
         auction_date_1 = parse_date_spanish(date_1_str or "", default_date=datetime.now() + timedelta(days=21))
 
-        # 2nd call date
         d2_match = re.search(r"(?:segundo\s+remate[^\.\n;]+)", edict_text, re.I)
         auction_date_2 = parse_date_spanish(d2_match.group(0) if d2_match else "", default_date=datetime.now() + timedelta(days=35))
 
-        # 3rd call date
         d3_match = re.search(r"(?:tercer\s+remate[^\.\n;]+)", edict_text, re.I)
         auction_date_3 = parse_date_spanish(d3_match.group(0) if d3_match else "", default_date=datetime.now() + timedelta(days=49))
 
-        # 11. Property Category Classification
-        category = "Residential"
-        if any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
-            category = "Condo"
-        elif re.search(r"\b(finca|ganadera|agricola|agrícola|pasto|cultivo)\b", text_lower):
+        # 11. Property Category & Property Type Classification
+        is_agri = bool(re.search(r"\b(agricultura|ganadera|ganadero|agricola|agrícola|pasto|pastos|cultivo|cultivos|frutales|cafetal|finca\s+(?:agricola|agrícola|ganadera|forestal|lechera))\b", norm))
+        
+        if explicit_construction:
+            if any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
+                category = "Condo"
+                prop_type = "condo_apartment"
+            elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina"]):
+                category = "Commercial"
+                prop_type = "commercial_industrial"
+            elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina"]):
+                category = "Luxury Estate"
+                prop_type = "single_family_home"
+            else:
+                category = "Residential"
+                prop_type = "single_family_home"
+        elif is_agri:
             category = "Agricultural"
-        elif any(w in text_lower for w in ["terreno", "lote", "solar"]):
-            category = "Land/Development"
+            prop_type = "agricultural_land"
+        elif any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
+            category = "Condo"
+            prop_type = "condo_apartment"
         elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina"]):
             category = "Commercial"
-        elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina", "mar"]):
-            category = "Luxury Estate"
+            prop_type = "commercial_industrial"
+        elif is_bare_land or any(w in text_lower for w in ["terreno", "lote", "solar"]):
+            category = "Land/Development"
+            prop_type = "building_lot"
+        else:
+            category = "Residential"
+            prop_type = "single_family_home"
 
         return ForeclosureAuction(
             expediente_number=expediente,
@@ -1294,6 +1343,9 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             defendant=defendant,
             legal_summary=f"Remate judicial en {detected_canton} ({detected_prov}). Expediente {expediente} con base de {currency} {base_1:,.2f}.",
             property_category=category,
+            property_type=prop_type,
+            naturaleza_raw=naturaleza,
+            has_construction=has_construction,
             raw_edict_text=edict_text,
         )
     except Exception as e:
@@ -1302,14 +1354,14 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
 def extract_single_edict_gemini(edict_text: str, api_key: Optional[str] = None) -> Optional[ForeclosureAuction]:
     """
-    Uses google-genai SDK with gemini models, automatically falling back to regex parser.
+    Uses google-genai SDK with Gemini Flash models, automatically falling back to regex parser.
     """
     key = api_key or os.getenv("GEMINI_API_KEY")
     if not key or not genai:
         logger.info("Using deterministic rule-based Costa Rican judicial parser.")
         return extract_single_edict_regex_fallback(edict_text)
 
-    # Try gemini models
+    # Try Gemini Flash models
     models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
     try:
         client = genai.Client(api_key=key)
