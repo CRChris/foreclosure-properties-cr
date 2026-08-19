@@ -281,8 +281,8 @@ def pull_30_days_data():
             except Exception as e:
                 logger.debug(f"Candidate {url} unreachable: {e}")
 
-    # 4. Check local sample Boletín Judicial PDFs in workspace if available
-    local_pdfs = ["sample_boletin.pdf"]
+    # 4. Check local sample Boletín Judicial / Gaceta PDFs in workspace if available
+    local_pdfs = ["sample_boletin.pdf", "today_gaceta.pdf"]
     for local_name in local_pdfs:
         if os.path.exists(local_name):
             try:

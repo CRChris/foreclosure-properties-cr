@@ -439,7 +439,10 @@ def normalize_text(text: str) -> str:
         return ""
     import unicodedata
     n = unicodedata.normalize("NFD", text.lower())
-    return "".join(c for c in n if unicodedata.category(c) != "Mn").strip()
+    clean = "".join(c for c in n if unicodedata.category(c) != "Mn")
+    clean = re.sub(r"c\s+entimos", "centimos", clean)
+    clean = re.sub(r"c\s+entavos", "centavos", clean)
+    return clean.strip()
 
 def is_real_estate_foreclosure_edict(text: str) -> bool:
     """
@@ -552,16 +555,25 @@ def segment_document_blocks(text: str) -> List[str]:
         if len(valid_pub_blocks) > 1:
             return valid_pub_blocks
 
-    # 2. Secondary boundary: Imprenta Nacional closure markers "\d+ vez.—( IN... )"
+    # 2. Secondary boundary: Imprenta Nacional closure markers "\d+ vez.—( IN... )" or "( IN... )"
     close_pattern = re.compile(
-        r"(?<=\b(?:1|2|3)\s+vez\.—\s*\(\s*IN[0-9]+\s*\)\s*\.?)\s*\n+",
+        r"(\(\s*IN[0-9]{8,14}\s*\)[^\n]*\n+|\b(?:1|2|3)\s*(?:vez|veces|v\.)[.—\s]*\(\s*IN[0-9]+\s*\)[^\n]*\n+)",
         re.IGNORECASE
     )
-    close_parts = close_pattern.split(text)
-    if len(close_parts) > 1:
-        valid_close_blocks = [p.strip() for p in close_parts if len(p.strip()) >= 80]
-        if len(valid_close_blocks) > 1:
-            return valid_close_blocks
+    parts = close_pattern.split(text)
+    if len(parts) > 1:
+        combined_blocks = []
+        curr = ""
+        for p in parts:
+            curr += p
+            if close_pattern.search(p):
+                if len(curr.strip()) >= 80:
+                    combined_blocks.append(curr.strip())
+                curr = ""
+        if curr.strip() and len(curr.strip()) >= 80:
+            combined_blocks.append(curr.strip())
+        if len(combined_blocks) > 1:
+            return combined_blocks
 
     # 3. Tertiary boundary: Court headers and docket identifiers at line starts
     line_start_pattern = re.compile(
@@ -1068,7 +1080,17 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             if f_gen:
                 folio = f_gen.group(1).strip()
             else:
-                return None  # Real estate foreclosure must have a Folio Real
+                # Check for Folio Real in written Spanish words
+                f_words = re.search(r"finca\s+(?:de\s+la\s+provincia\s+de\s+([a-záéíóú\s]+?),\s*)?n[úu]mero\s+([a-záéíóú\s]+?)(?:[–-]|cero\s+cero\s+cero|,|\.|\s+ubicada|\s+sita)", edict_text, re.I)
+                if f_words:
+                    prov_candidate = f_words.group(1).strip().lower() if f_words.group(1) else "san jose"
+                    p_code = PROVINCE_PREFIXES.get(prov_candidate, "1")
+                    num_val = parse_spanish_words_to_number(f_words.group(2))
+                    if 1000 <= num_val <= 99999999:
+                        folio = f"{p_code}-{int(num_val)}-000"
+
+        if not folio:
+            return None  # Real estate foreclosure must have a Folio Real
 
         # 4. Province, Canton & District Detection
         prov_code_map = {
@@ -1100,7 +1122,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # Canton detection: direct regex first, then centroid key matching
         detected_canton = "Central"
-        canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s+)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+mide)", edict_text, re.I)
+        canton_match = re.search(r"cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?(?:\d+|[a-záéíóú]+)\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)", edict_text, re.I)
         if canton_match:
             detected_canton = canton_match.group(1).strip().title()[:30]
         else:
@@ -1111,7 +1133,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # District match
         detected_district = "Central"
-        dist_match = re.search(r"distrito\s+(?:n[úu]mero\s+\d+\s+|[0-9]{2}\s+)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+mide)", edict_text, re.I)
+        dist_match = re.search(r"distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?(?:\d+|[a-záéíóú]+)\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)", edict_text, re.I)
         if dist_match:
             detected_district = dist_match.group(1).strip()[:30]
 
@@ -1119,8 +1141,11 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         plano_match = re.search(r"(?:plano\s+(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s+|:)?|catastro\s+n[úu]mero\s+)([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
+        # Clean inline line breaks for seamless sentence parsing
+        clean_text = re.sub(r'(?<!\n)\n(?!\n)', ' ', edict_text)
+
         # 6. Currency & 3-Call Base Prices (Handles Digits and Spelled-Out Spanish Words)
-        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+?)(?:\.\s+[A-ZÁÉÍÓÚ]|\.\s*—|\.\s*$|\;\s*|\n)", edict_text, re.I)
+        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|siguiente\s+base\s*:|base\s*:)\s*([^\;\.]{1,250})(?:\.|\;|\n\n)", clean_text, re.I)
         if not base_match:
             base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+)", edict_text, re.I)
         base_sentence = base_match.group(0) if base_match else edict_text
@@ -1399,6 +1424,9 @@ def enrich_auction_data(auction: ForeclosureAuction) -> Dict[str, Any]:
         import unicodedata
         n = unicodedata.normalize("NFD", s.lower())
         return "".join(c for c in n if unicodedata.category(c) != "Mn").strip()
+
+    lat = getattr(auction, "latitude", None)
+    lng = getattr(auction, "longitude", None)
 
     if not lat or not lng:
         d_raw = (getattr(auction, "district", "") or "").strip()
