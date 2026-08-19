@@ -12,8 +12,8 @@ import {
   MapPin,
   SlidersHorizontal,
   RotateCcw,
+  Rows3,
   LayoutGrid,
-  Columns2,
   Map as MapIcon,
   DollarSign,
   TrendingUp,
@@ -38,7 +38,7 @@ import {
   Award,
 } from 'lucide-react';
 
-export type ViewMode = 'split' | 'grid' | 'map';
+export type ViewMode = 'rows' | 'grid';
 
 export interface FilterState {
   search: string;
@@ -360,20 +360,20 @@ export function AuctionFilterBar({
           <div className="hidden md:flex rounded-xl bg-slate-950 p-0.5 border border-slate-800 h-9 items-center">
             <button
               type="button"
-              onClick={() => onViewModeChange('split')}
-              className={`p-1.5 rounded-lg text-xs transition-all ${
-                viewMode === 'split'
+              onClick={() => onViewModeChange('rows')}
+              className={`p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${
+                viewMode === 'rows'
                   ? 'bg-slate-800 text-emerald-400 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
-              title={t.filters.splitView}
+              title={t.filters.rowsView || 'Row List View'}
             >
-              <Columns2 className="w-4 h-4" />
+              <Rows3 className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => onViewModeChange('grid')}
-              className={`p-1.5 rounded-lg text-xs transition-all ${
+              className={`p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${
                 viewMode === 'grid'
                   ? 'bg-slate-800 text-emerald-400 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -381,18 +381,6 @@ export function AuctionFilterBar({
               title={t.filters.gridView}
             >
               <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewModeChange('map')}
-              className={`p-1.5 rounded-lg text-xs transition-all ${
-                viewMode === 'map'
-                  ? 'bg-slate-800 text-emerald-400 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              title={t.filters.mapView}
-            >
-              <MapIcon className="w-4 h-4" />
             </button>
           </div>
         </div>

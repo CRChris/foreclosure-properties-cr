@@ -22,7 +22,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   // Load language preference from localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('remates_language') as Language | null;
+      const stored = (localStorage.getItem('rematrix_language') || localStorage.getItem('remates_language')) as Language | null;
       if (stored === 'es' || stored === 'en') {
         setLanguageState(stored);
       }
@@ -34,7 +34,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     try {
-      localStorage.setItem('remates_language', lang);
+      localStorage.setItem('rematrix_language', lang);
     } catch {
       // ignore
     }

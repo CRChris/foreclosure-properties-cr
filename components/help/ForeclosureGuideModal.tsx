@@ -681,12 +681,12 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
               <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-200 text-xs sm:text-sm">
                 <p className="font-bold text-white mb-1 flex items-center gap-2">
                   <Compass className="w-4 h-4 text-emerald-400" />
-                  {isEn ? 'RematesCR Investor Toolset' : 'Herramientas Profesionales de RematesCR'}
+                  {isEn ? 'REmatrixCR Investor Toolset' : 'Herramientas Profesionales de REmatrixCR'}
                 </p>
                 <p>
                   {isEn
-                    ? 'RematesCR provides institutional-grade intelligence on Costa Rican court property auctions with automated daily Gazette ingestion, PostGIS mapping, statutory yield calculators, and due diligence workflows.'
-                    : 'RematesCR procesa diariamente las publicaciones oficiales del Boletín Judicial para ofrecer análisis geoespacial, cálculo de costos de traspaso estatutarios y listas de debida diligencia.'}
+                    ? 'REmatrixCR provides institutional-grade intelligence on Costa Rican court property auctions with automated daily Gazette ingestion, PostGIS mapping, statutory yield calculators, and due diligence workflows.'
+                    : 'REmatrixCR procesa diariamente las publicaciones oficiales del Boletín Judicial para ofrecer análisis geoespacial, cálculo de costos de traspaso estatutarios y listas de debida diligencia.'}
                 </p>
               </div>
 
@@ -875,8 +875,8 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
                   </div>
                   <p className="text-[11px] text-slate-400 italic pt-1">
                     {isEn
-                      ? 'Tip: Every property dossier on RematesCR includes an interactive closing cost simulator calculating these exact statutory amounts in real time.'
-                      : 'Nota: Cada ficha de propiedad en RematesCR incluye una calculadora legal interactiva que desglosa automáticamente estos montos estatutarios en tiempo real.'}
+                      ? 'Tip: Every property dossier on REmatrixCR includes an interactive closing cost simulator calculating these exact statutory amounts in real time.'
+                      : 'Nota: Cada ficha de propiedad en REmatrixCR incluye una calculadora legal interactiva que desglosa automáticamente estos montos estatutarios en tiempo real.'}
                   </p>
                 </div>
               </div>

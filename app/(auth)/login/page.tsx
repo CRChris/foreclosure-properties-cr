@@ -77,7 +77,7 @@ export default function LoginPage() {
             <Scale className="w-6 h-6" />
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            Remates<span className="text-emerald-400">CR</span>
+            REmatrix<span className="text-emerald-400">CR</span>
           </h1>
           <p className="text-xs text-slate-400">
             Portal de Inteligencia Inmobiliaria Judicial y Remates en Costa Rica

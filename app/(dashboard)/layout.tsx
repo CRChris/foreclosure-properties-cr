@@ -28,7 +28,7 @@ export default function DashboardLayout({
                 <Scale className="w-5 h-5" />
               </div>
               <span className="text-lg font-bold tracking-tight text-white">
-                Remates<span className="text-emerald-400">CR</span>
+                REmatrix<span className="text-emerald-400">CR</span>
               </span>
             </Link>
 
@@ -89,7 +89,7 @@ export default function DashboardLayout({
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-6 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-          Remates Judiciales Costa Rica • {t.nav.brandSubtitle}
+          REmatrixCR • {t.nav.brandSubtitle}
         </div>
       </footer>
     </div>

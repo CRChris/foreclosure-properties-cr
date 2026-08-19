@@ -80,6 +80,7 @@ export interface Translations {
     resetFilters: string;
     activeFilters: string;
     showingResults: string;
+    rowsView: string;
     splitView: string;
     gridView: string;
     mapView: string;

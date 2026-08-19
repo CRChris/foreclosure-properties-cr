@@ -68,7 +68,7 @@ export default function HomePage() {
               </div>
               <div>
                 <span className="text-lg font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                  Remates<span className="text-emerald-400">CR</span>
+                  REmatrix<span className="text-emerald-400">CR</span>
                 </span>
               </div>
             </Link>
@@ -290,7 +290,7 @@ export default function HomePage() {
               CR
             </div>
             <span className="font-semibold text-slate-400">
-              Remates Judiciales Costa Rica
+              REmatrixCR
             </span>
           </div>
           <p>© {new Date().getFullYear()} {t.nav.brandSubtitle}.</p>

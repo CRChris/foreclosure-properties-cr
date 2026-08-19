@@ -166,7 +166,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
     const icsContent = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//RematesCR//Foreclosure Auction Schedule//ES',
+      'PRODID:-//REmatrixCR//Foreclosure Auction Schedule//ES',
       'CALSCALE:GREGORIAN',
       'BEGIN:VEVENT',
       `SUMMARY:Remate Judicial Folio ${auction.folio_real} - ${auction.canton}`,

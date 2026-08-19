@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { Auction } from '@/lib/types/auction';
+import { AuctionRowCard } from '@/components/cards/AuctionRowCard';
 import { AuctionCard } from '@/components/cards/AuctionCard';
 import { AuctionFilterBar, FilterState, ViewMode } from '@/components/filters/AuctionFilterBar';
-import { MapWrapper } from '@/components/map/MapWrapper';
 import { 
-  formatCurrency, 
   detectPropertyCharacteristics, 
   getLiveAuctionProgressionState,
   calculateOpportunityAlpha,
@@ -16,17 +15,10 @@ import { Button } from '@/components/ui/Button';
 import { fetchAuctions } from '@/lib/supabase/db';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import {
-  Search,
-  MapPin,
   TrendingUp,
   Scale,
   Sparkles,
-  Columns2,
-  LayoutGrid,
-  Map as MapIcon,
   RotateCcw,
-  Building,
-  Layers,
 } from 'lucide-react';
 
 const INITIAL_FILTERS: FilterState = {
@@ -51,9 +43,8 @@ export default function AuctionsPage() {
   const { t, language } = useLanguage();
   const [auctionsData, setAuctionsData] = useState<Auction[]>(MOCK_AUCTIONS);
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [viewMode, setViewMode] = useState<ViewMode>('rows');
   const [selectedAuctionId, setSelectedAuctionId] = useState<string | null>(null);
-  const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list');
 
   // Load live auctions from Supabase data layer on mount
   useEffect(() => {
@@ -61,7 +52,6 @@ export default function AuctionsPage() {
     fetchAuctions().then((data) => {
       if (isMounted && data && data.length > 0) {
         setAuctionsData(data);
-        // Do not auto-select first auction so map starts showing all of Costa Rica
       }
     });
 
@@ -69,9 +59,6 @@ export default function AuctionsPage() {
       isMounted = false;
     };
   }, []);
-
-  // Ref to card containers for automatic smooth scrolling
-  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Filter & sort auctions based on active filters
   const filteredAuctions = useMemo(() => {
@@ -244,29 +231,18 @@ export default function AuctionsPage() {
     };
   }, [filteredAuctions]);
 
-  // When selected auction changes on map, auto-scroll left card into view
-  const handleSelectAuction = (auction: Auction) => {
-    setSelectedAuctionId(auction.id);
-    const cardEl = cardRefs.current[auction.id];
-    if (cardEl && viewMode === 'split') {
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  };
-
   const handleResetFilters = () => {
     setFilters(INITIAL_FILTERS);
   };
 
-  const selectedAuction = filteredAuctions.find((a) => a.id === selectedAuctionId) || filteredAuctions[0] || null;
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header Banner & Live Investor KPIs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
             <Scale className="w-7 h-7 text-emerald-400" />
-            <span>{language === 'es' ? 'Remates Judiciales Costa Rica' : 'Costa Rica Judicial Foreclosures'}</span>
+            <span>{language === 'es' ? 'Catálogo de Remates Judiciales' : 'Judicial Foreclosure Catalog'}</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
             {t.nav.brandSubtitle}
@@ -275,22 +251,22 @@ export default function AuctionsPage() {
 
         {/* Quick KPI Badges */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 shadow-sm text-xs">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2 shadow-sm text-xs">
             <span className="text-slate-400">{t.kpi.activeForeclosures}: </span>
-            <strong className="text-emerald-400 font-mono">{kpiStats.total}</strong>
+            <strong className="text-emerald-400 font-mono font-bold text-sm ml-1">{kpiStats.total}</strong>
           </div>
           {kpiStats.avgMargin > 0 && (
-            <div className="bg-emerald-950/70 border border-emerald-800/40 rounded-xl px-3 py-1.5 shadow-sm text-xs flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="bg-emerald-950/70 border border-emerald-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
               <span className="text-slate-300">{t.kpi.avgDiscount}: </span>
-              <strong className="text-emerald-300 font-mono">+{kpiStats.avgMargin}%</strong>
+              <strong className="text-emerald-300 font-mono font-bold text-sm ml-1">+{kpiStats.avgMargin}%</strong>
             </div>
           )}
           {kpiStats.highestDiscount > 0 && (
-            <div className="hidden sm:flex bg-amber-950/70 border border-amber-800/40 rounded-xl px-3 py-1.5 shadow-sm text-xs items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <div className="hidden sm:flex bg-amber-950/70 border border-amber-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-400" />
               <span className="text-slate-300">{language === 'es' ? 'Máx. Descuento:' : 'Max Discount:'} </span>
-              <strong className="text-amber-300 font-mono">+{kpiStats.highestDiscount}%</strong>
+              <strong className="text-amber-300 font-mono font-bold text-sm ml-1">+{kpiStats.highestDiscount}%</strong>
             </div>
           )}
         </div>
@@ -306,149 +282,35 @@ export default function AuctionsPage() {
         totalResults={filteredAuctions.length}
       />
 
-      {/* Mobile/Tablet Tab Switcher (Visible only on small screens) */}
-      <div className="lg:hidden flex items-center rounded-xl bg-slate-900 p-1 border border-slate-800">
-        <button
-          type="button"
-          onClick={() => setMobileTab('list')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'list'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          {t.filters.listTab} ({filteredAuctions.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab('map')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'map'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          {t.filters.mapTab}
-        </button>
-      </div>
-
-      {/* Main Content Layout based on ViewMode */}
+      {/* Main Content: Row-based Foreclosure List (or optional Grid View) */}
       {filteredAuctions.length > 0 ? (
-        <>
-          {/* 1. SPLIT VIEW (Default: Scrollable Left Card Feed + Sticky Interactive Right Map) */}
-          {viewMode === 'split' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-              {/* Left Column: Scrollable List of Auction Cards */}
-              <div
-                className={`lg:col-span-5 space-y-4 lg:max-h-[calc(100vh-210px)] lg:overflow-y-auto lg:pr-2 ${
-                  mobileTab === 'map' ? 'hidden lg:block' : 'block'
-                }`}
-              >
-                {filteredAuctions.map((auction) => (
-                  <div
-                    key={auction.id}
-                    ref={(el) => {
-                      cardRefs.current[auction.id] = el;
-                    }}
-                  >
-                    <AuctionCard
-                      auction={auction}
-                      isSelected={selectedAuctionId === auction.id}
-                      onSelect={(a) => handleSelectAuction(a)}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {/* Right Column: Interactive Map */}
-              <div
-                className={`lg:col-span-7 sticky top-20 h-[520px] lg:h-[calc(100vh-210px)] min-h-[480px] rounded-2xl overflow-hidden shadow-2xl border border-slate-800 ${
-                  mobileTab === 'list' ? 'hidden lg:block' : 'block'
-                }`}
-              >
-                <MapWrapper
-                  auctions={filteredAuctions}
-                  selectedAuctionId={selectedAuctionId}
-                  onSelectAuction={handleSelectAuction}
-                  center={
-                    selectedAuction?.latitude && selectedAuction?.longitude
-                      ? [selectedAuction.latitude, selectedAuction.longitude]
-                      : [9.7489, -84.05]
-                  }
-                  zoom={selectedAuction ? 13 : 7.5}
-                  height="100%"
+        <div className="w-full">
+          {viewMode === 'rows' ? (
+            /* 1. ROW LIST VIEW (Default & Primary) */
+            <div className="space-y-3.5 sm:space-y-4">
+              {filteredAuctions.map((auction) => (
+                <AuctionRowCard
+                  key={auction.id}
+                  auction={auction}
+                  isSelected={selectedAuctionId === auction.id}
+                  onSelect={(a) => setSelectedAuctionId(a.id)}
                 />
-              </div>
+              ))}
             </div>
-          )}
-
-          {/* 2. GRID VIEW (Full-width 3-column card grid) */}
-          {viewMode === 'grid' && (
+          ) : (
+            /* 2. GRID VIEW (Optional Full-width 3-column card grid) */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredAuctions.map((auction) => (
                 <AuctionCard
                   key={auction.id}
                   auction={auction}
                   isSelected={selectedAuctionId === auction.id}
-                  onSelect={(a) => handleSelectAuction(a)}
+                  onSelect={(a) => setSelectedAuctionId(a.id)}
                 />
               ))}
             </div>
           )}
-
-          {/* 3. FULL MAP VIEW (Expanded map with floating property preview cards) */}
-          {viewMode === 'map' && (
-            <div className="relative h-[calc(100vh-230px)] min-h-[580px] rounded-2xl overflow-hidden shadow-2xl border border-slate-800">
-              <MapWrapper
-                auctions={filteredAuctions}
-                selectedAuctionId={selectedAuctionId}
-                onSelectAuction={handleSelectAuction}
-                center={
-                  selectedAuction?.latitude && selectedAuction?.longitude
-                    ? [selectedAuction.latitude, selectedAuction.longitude]
-                    : [9.7489, -84.05]
-                }
-                zoom={selectedAuction ? 13 : 7.5}
-                height="100%"
-              />
-
-              {/* Floating Bottom Preview Strip */}
-              <div className="absolute bottom-4 left-4 right-4 z-[1000] flex gap-3 overflow-x-auto pb-2 snap-x">
-                {filteredAuctions.map((auction) => {
-                  const isSelected = selectedAuctionId === auction.id;
-                  return (
-                    <div
-                      key={auction.id}
-                      onClick={() => handleSelectAuction(auction)}
-                      className={`snap-center shrink-0 w-72 sm:w-80 p-3 rounded-xl border backdrop-blur-md cursor-pointer transition-all ${
-                        isSelected
-                          ? 'bg-slate-950/95 border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl'
-                          : 'bg-slate-950/80 hover:bg-slate-900 border-slate-800 shadow-md'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-xs font-bold text-white">
-                        <span className="truncate">{auction.district}, {auction.canton}</span>
-                        {auction.estimated_margin_pct && (
-                          <span className="text-emerald-400 font-mono">
-                            +{auction.estimated_margin_pct}%
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-baseline justify-between mt-1 text-xs">
-                        <span className="font-extrabold text-white">
-                          {formatCurrency(auction.base_price_call_1, auction.currency)}
-                        </span>
-                        <span className="text-slate-400 text-[11px] font-mono">
-                          {auction.folio_real}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       ) : (
         /* Empty State */
         <div className="p-12 text-center bg-slate-900/50 border border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto my-12 shadow-xl backdrop-blur-md">
