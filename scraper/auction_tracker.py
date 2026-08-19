@@ -18,17 +18,15 @@ import urllib.error
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    load_dotenv(".env.local")
-except ImportError:
-    pass
+from scraper.main import load_env_files
+
+load_env_files()
 
 COSTA_RICA_TZ = ZoneInfo("America/Costa_Rica")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
 
 
 def sync_auction_progression_via_rpc():
