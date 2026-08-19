@@ -621,6 +621,32 @@ export const COSTA_RICA_TOWN_CENTROIDS: Record<string, [number, number]> = {
   'fortuna': [10.4678, -84.6427],
   'mata redonda': [9.9320, -84.1020],
   'coco': [10.5500, -85.6967],
+
+  // Specific Canton + District disambiguation mappings
+  'escazu san rafael': [9.9360, -84.1378],
+  'escazu san antonio': [9.9120, -84.1510],
+  'escazu central': [9.9248, -84.1432],
+  'santa ana pozos': [9.9442, -84.1882],
+  'santa ana piedades': [9.9328, -84.2185],
+  'belen la asuncion': [9.9744, -84.1685],
+  'belen san antonio': [9.9812, -84.1795],
+  'alajuela la guacima': [9.9722, -84.2889],
+  'san ramon alfaro': [10.1000, -84.4800],
+  'grecia san isidro': [10.1147, -84.2980],
+  'garabito tarcoles': [9.7640, -84.6280],
+  'garabito jaco': [9.6152, -84.6298],
+  'garabito herradura': [9.6450, -84.6380],
+  'carrillo playas del coco': [10.5500, -85.6967],
+  'santa cruz tamarindo': [10.2993, -85.8402],
+  'quepos manuel antonio': [9.3889, -84.1528],
+  'san carlos la fortuna': [10.4678, -84.6427],
+  'perez zeledon cajon': [9.2600, -83.5600],
+  'perez zeledon daniel flores': [9.3500, -83.6833],
+  'perez zeledon san isidro': [9.3739, -83.7058],
+  'tibas san juan': [9.9575, -84.0817],
+  'curridabat granadilla': [9.9285, -84.0241],
+  'mora colon': [9.9142, -84.2464],
+  'naranjo san juan': [10.1080, -84.3880],
 };
 
 function normalizeGeoKey(str?: string | null): string {
@@ -769,7 +795,14 @@ export function resolveTownCentroid(
 
   let baseCoord: [number, number] | null = null;
 
-  if (normDist && COSTA_RICA_TOWN_CENTROIDS[normDist]) {
+  const compoundCantDist = normCant && normDist ? `${normCant} ${normDist}` : '';
+  const compoundProvDist = normProv && normDist ? `${normProv} ${normDist}` : '';
+
+  if (compoundCantDist && COSTA_RICA_TOWN_CENTROIDS[compoundCantDist]) {
+    baseCoord = COSTA_RICA_TOWN_CENTROIDS[compoundCantDist];
+  } else if (compoundProvDist && COSTA_RICA_TOWN_CENTROIDS[compoundProvDist]) {
+    baseCoord = COSTA_RICA_TOWN_CENTROIDS[compoundProvDist];
+  } else if (normDist && COSTA_RICA_TOWN_CENTROIDS[normDist]) {
     baseCoord = COSTA_RICA_TOWN_CENTROIDS[normDist];
   } else if (normCant && COSTA_RICA_TOWN_CENTROIDS[normCant]) {
     baseCoord = COSTA_RICA_TOWN_CENTROIDS[normCant];
