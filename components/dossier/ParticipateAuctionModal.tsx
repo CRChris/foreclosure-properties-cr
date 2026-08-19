@@ -70,7 +70,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR88015201001026112902',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales II Circuito San José',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -89,7 +89,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR65015201001026071402',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Alajuela',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -103,7 +103,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR41015201001026082202',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Heredia',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -117,7 +117,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR77015201001026079902',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Cartago',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -137,7 +137,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR54015201001026100502',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Guanacaste',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -158,7 +158,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR12015201001026095002',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Puntarenas',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -172,7 +172,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
       ibanUSD: 'CR93015201001026105802',
       bcrServiceName: 'Poder Judicial - Depósitos Judiciales Limón',
       officialBcrPortalUrl: 'https://www.bancobcr.com',
-      officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+      officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
     };
   }
 
@@ -185,7 +185,7 @@ export function getJudicialBCRAccount(courtName?: string | null, province?: stri
     ibanUSD: 'CR22015201001026044702',
     bcrServiceName: 'Poder Judicial - Depósitos Judiciales I Circuito San José',
     officialBcrPortalUrl: 'https://www.bancobcr.com',
-    officialPoderJudicialUrl: 'https://pjenlinea.poder-judicial.go.cr',
+    officialPoderJudicialUrl: 'https://pj.poder-judicial.go.cr/',
   };
 }
 
