@@ -16,6 +16,7 @@ import {
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
+import { CadastralLocationBadge } from '@/components/ui/CadastralLocationBadge';
 import {
   Calendar,
   Bookmark,
@@ -112,6 +113,12 @@ export function AuctionRowCard({
           {/* Top category tags & badges */}
           <div className="flex flex-wrap items-center gap-1.5">
             <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+            <CadastralLocationBadge
+              locationType={auction.location_type}
+              hasPolygon={!!auction.parcel_polygon}
+              language={language}
+              size="xs"
+            />
 
             {isNewToday && (
               <span className="px-2 py-0.5 text-[10px] font-black rounded-md bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 flex items-center gap-1 shadow-sm uppercase tracking-wider">

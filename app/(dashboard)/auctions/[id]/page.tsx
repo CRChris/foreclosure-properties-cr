@@ -12,6 +12,7 @@ import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklis
 import { OpportunityMatrixCard } from '@/components/dossier/OpportunityMatrixCard';
 import { ParticipateAuctionModal } from '@/components/dossier/ParticipateAuctionModal';
 import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
+import { CadastralLocationBadge } from '@/components/ui/CadastralLocationBadge';
 import { MapWrapper } from '@/components/map/MapWrapper';
 import {
   formatCurrency,
@@ -48,6 +49,8 @@ import {
   Building,
   ExternalLink,
   Gavel,
+  Target,
+  Navigation,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -278,6 +281,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             )}
             <PropertyTypeBadge type={propertyType} language={language} size="lg" />
             <DealAlphaBadge auction={auction} language={language} size="md" />
+            <CadastralLocationBadge
+              locationType={auction.location_type}
+              hasPolygon={!!auction.parcel_polygon}
+              language={language}
+              size="md"
+            />
             <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
               Folio Real: {auction.folio_real}
             </span>
@@ -508,29 +517,92 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       {/* Due Diligence Legal Checklist */}
       <DueDiligenceChecklist auction={auction} />
 
-      {/* Geospatial Map Section with Prominent Centroid Warning */}
+      {/* Geospatial Map Section with Exact Cadastral / Approximate Status & GPS Navigation */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md dark:shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-              {t.dossier.geographicLocation}
-            </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                {t.dossier.geographicLocation}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {auction.district}, {auction.canton}, {auction.province}
+              </p>
+            </div>
           </div>
-          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-            {auction.latitude?.toFixed(4)}, {auction.longitude?.toFixed(4)}
-          </span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <CadastralLocationBadge
+              locationType={auction.location_type}
+              hasPolygon={!!auction.parcel_polygon}
+              language={language}
+              size="sm"
+            />
+            {auction.latitude && auction.longitude && (
+              <div className="flex items-center gap-1.5">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${auction.latitude},${auction.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-blue-600 dark:hover:text-blue-400"
+                  title="Open exact coordinates in Google Maps"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Google Maps</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </a>
+
+                <a
+                  href={`https://waze.com/ul?ll=${auction.latitude},${auction.longitude}&navigate=yes`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-sky-600 dark:hover:text-sky-400"
+                  title="Navigate with Waze"
+                >
+                  <Navigation className="w-3.5 h-3.5 text-sky-500" />
+                  <span>Waze</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </a>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Persistent Map Centroid Disclaimer */}
-        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
-          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <p>
-            {language === 'en'
-              ? '📍 Approximate location by district centroid. Judicial foreclosure notices do not contain precise GPS coordinates. Consult the official registered cadastral survey (Plano Catastrado) for exact boundaries.'
-              : '📍 Ubicación aproximada por centroide distrital. Los remates judiciales no incluyen coordenadas GPS exactas en el edicto. Verifique el plano catastrado oficial para linderos definitivos.'}
-          </p>
-        </div>
+        {/* Dynamic Cadastral Banner (Exact vs Approximate) */}
+        {auction.location_type === 'exact_cadastral' ? (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200 text-xs">
+            <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold">
+                {language === 'en'
+                  ? '🎯 Official Cadastral Survey Overlaid (SNIT National Cadastre)'
+                  : '🎯 Lote Catastrado Oficial Vinculado (Catastro Nacional SNIT)'}
+              </p>
+              <p className="text-emerald-800/90 dark:text-emerald-300/90 leading-tight">
+                {language === 'en'
+                  ? `Exact property lot boundary displayed for Plano Catastrado ${auction.plano_catastrado || 'registrado'}. Coordinates: [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`
+                  : `El polígono y las coordenadas GPS corresponden al plano catastrado oficial ${auction.plano_catastrado || 'registrado'}. Coordenadas: [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold">
+                {language === 'en' ? '📍 Approximate District Location' : '📍 Ubicación Distrital Aproximada'}
+              </p>
+              <p className="leading-tight">
+                {language === 'en'
+                  ? 'Judicial foreclosure edicts do not publish direct GPS coordinates. The marker represents the district/canton center. Consult the registered survey (Plano Catastrado) for physical boundaries.'
+                  : 'Los edictos de remate judicial no incluyen coordenadas GPS directas. El marcador representa el centroide distrital. Consulte el plano catastrado para linderos físicos exactos.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="h-80 w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
           <MapWrapper
@@ -541,7 +613,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                 ? [auction.latitude, auction.longitude]
                 : [9.7489, -83.7534]
             }
-            zoom={14}
+            zoom={auction.location_type === 'exact_cadastral' ? 16 : 14}
             height="100%"
           />
         </div>

@@ -62,8 +62,10 @@ CREATE TABLE IF NOT EXISTS public.auctions (
     legal_summary TEXT,                                -- AI-generated executive summary of the edict
     raw_edict_text TEXT NOT NULL,                      -- Full raw legal publication from Boletín Judicial
     
-    -- Geospatial Point (WGS 84 / EPSG:4326)
+    -- Geospatial Point & Cadastral Boundaries (WGS 84 / EPSG:4326)
     location GEOMETRY(Point, 4326),
+    location_type VARCHAR(32) DEFAULT 'approximate_town' CHECK (location_type IN ('exact_cadastral', 'approximate_town')),
+    parcel_polygon JSONB,
     
     -- Automated Lifecycle Stage & Call Progression (Costa Rica CPC)
     call_stage VARCHAR(32) DEFAULT 'call_1',           -- 'call_1', 'call_2', 'call_3', 'passed_call_3', 'suspended', 'awarded'
@@ -83,6 +85,9 @@ CREATE TABLE IF NOT EXISTS public.auctions (
 -- Spatial GIST index for lightning-fast bounding box map queries
 CREATE INDEX IF NOT EXISTS idx_auctions_location_gist 
     ON public.auctions USING GIST (location);
+
+CREATE INDEX IF NOT EXISTS idx_auctions_location_type 
+    ON public.auctions (location_type);
 
 -- B-Tree indexes for standard filter & sort dimensions
 CREATE INDEX IF NOT EXISTS idx_auctions_call_stage 
@@ -165,7 +170,9 @@ RETURNS TABLE (
     plaintiff TEXT,
     legal_summary TEXT,
     latitude DOUBLE PRECISION,
-    longitude DOUBLE PRECISION
+    longitude DOUBLE PRECISION,
+    location_type VARCHAR,
+    parcel_polygon JSONB
 ) 
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -194,7 +201,9 @@ BEGIN
         a.plaintiff,
         a.legal_summary,
         ST_Y(a.location::geometry) AS latitude,
-        ST_X(a.location::geometry) AS longitude
+        ST_X(a.location::geometry) AS longitude,
+        COALESCE(a.location_type, 'approximate_town') AS location_type,
+        a.parcel_polygon
     FROM public.auctions a
     WHERE a.location IS NOT NULL
       AND ST_Within(

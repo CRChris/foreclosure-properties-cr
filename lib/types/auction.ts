@@ -107,6 +107,8 @@ export interface TitleSecurityRating {
   keyFactors: string[];
 }
 
+export type LocationType = 'exact_cadastral' | 'approximate_town';
+
 export interface Auction {
   id: string;
   expediente_number: string;
@@ -166,9 +168,11 @@ export interface Auction {
   servidumbres_notes?: string | null;
   mortgage_priority?: MortgagePriority;
   
-  // Geospatial Coordinates (Point)
+  // Geospatial Coordinates & Cadastral Boundaries
   latitude: number | null;
   longitude: number | null;
+  location_type?: LocationType;
+  parcel_polygon?: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry | Record<string, any> | null;
   
   // Metadata & Media
   property_category?: PropertyCategory;
@@ -254,5 +258,7 @@ export interface MapAuctionMarker {
   area_m2: number;
   latitude: number;
   longitude: number;
+  location_type?: LocationType;
+  parcel_polygon?: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry | Record<string, any> | null;
   property_category?: PropertyCategory;
 }

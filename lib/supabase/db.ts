@@ -9,8 +9,10 @@ import {
   AuctionSaleStatus,
   AuctionLifecycleLog,
   IngestionLog,
+  LocationType,
 } from '@/lib/types/auction';
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
+import { geocodePropertyLocation } from '@/lib/services/snitGeocodeService';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -402,6 +404,10 @@ function mapRowToAuction(item: any): Auction {
     raw_edict_text: item.raw_edict_text || '',
     latitude: lat,
     longitude: lng,
+    location_type: (item.location_type as any) || (item.parcel_polygon ? 'exact_cadastral' : 'approximate_town'),
+    parcel_polygon: item.parcel_polygon 
+      ? (typeof item.parcel_polygon === 'string' ? JSON.parse(item.parcel_polygon) : item.parcel_polygon) 
+      : null,
     images: Array.isArray(item.images) && item.images.length > 0 ? item.images : uniqueGallery,
     created_at: item.created_at || new Date().toISOString(),
     updated_at: item.updated_at || new Date().toISOString(),
@@ -857,5 +863,122 @@ export async function fetchIngestionLogs(): Promise<IngestionLog[]> {
     },
   ];
 }
+
+/**
+ * Updates an existing auction's coordinates, cadastral location type, and parcel polygon.
+ */
+export async function updateAuctionLocation(
+  auctionId: string,
+  locationData: {
+    latitude: number;
+    longitude: number;
+    location_type: LocationType;
+    parcel_polygon?: any | null;
+  }
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) {
+    return false;
+  }
+
+  try {
+    const supabase = createClient();
+    const locationWkt = `SRID=4326;POINT(${locationData.longitude} ${locationData.latitude})`;
+
+    const { error } = await supabase
+      .from('auctions')
+      .update({
+        location: locationWkt,
+        location_type: locationData.location_type,
+        parcel_polygon: locationData.parcel_polygon || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', auctionId);
+
+    if (error) {
+      console.error(`Error updating location for auction ${auctionId}:`, error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`Exception updating location for auction ${auctionId}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Ingests a new auction property into Supabase with automatic SNIT cadastral geocoding hook.
+ * Calls snitGeocodeService to resolve exact cadastral coordinates/polygons,
+ * falling back to town/district centroids if unindexed.
+ */
+export async function ingestAuctionWithCadastralGeocoding(
+  auctionData: Partial<Auction> & {
+    expediente_number: string;
+    court_name: string;
+    folio_real: string;
+    province: CostaRicaProvince;
+    area_m2: number;
+    currency: Currency;
+    base_price_call_1: number;
+    auction_date_call_1: string;
+    plaintiff: string;
+    raw_edict_text: string;
+  }
+): Promise<Auction | null> {
+  // 1. Perform SNIT Cadastral Geocoding with fallback
+  const geocodeResult = await geocodePropertyLocation({
+    plano: auctionData.plano_catastrado,
+    province: auctionData.province,
+    canton: auctionData.canton,
+    district: auctionData.district,
+  });
+
+  const lat = geocodeResult.lat;
+  const lng = geocodeResult.lng;
+  const locationType = geocodeResult.location_type;
+  const parcelPolygon = geocodeResult.parcel_polygon;
+  const locationWkt = `SRID=4326;POINT(${lng} ${lat})`;
+
+  if (!isSupabaseConfigured()) {
+    console.warn('Supabase not configured, returning constructed auction entity');
+    return mapRowToAuction({
+      ...auctionData,
+      id: auctionData.id || `mock-${Date.now()}`,
+      latitude: lat,
+      longitude: lng,
+      location_type: locationType,
+      parcel_polygon: parcelPolygon,
+    });
+  }
+
+  try {
+    const supabase = createClient();
+    const payload = {
+      ...auctionData,
+      location: locationWkt,
+      location_type: locationType,
+      parcel_polygon: parcelPolygon || null,
+      created_at: auctionData.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from('auctions')
+      .upsert(payload, { onConflict: 'expediente_number' })
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      console.error('Error ingesting auction with cadastral geocoding:', error);
+      return null;
+    }
+
+    return mapRowToAuction(data);
+  } catch (err) {
+    console.error('Exception ingesting auction with cadastral geocoding:', err);
+    return null;
+  }
+}
+
 
 
