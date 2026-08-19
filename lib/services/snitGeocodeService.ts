@@ -702,16 +702,67 @@ export function extractLocationFromEdictText(
   return { province, canton, district };
 }
 
+export const HIGH_PRECISION_LANDMARKS: Array<{
+  pattern: RegExp;
+  name: string;
+  coords: [number, number];
+}> = [
+  { pattern: /(?:valle\s+del\s+sol|golf\s+santa\s+ana)/i, name: 'Valle del Sol, Santa Ana', coords: [9.9482, -84.2025] },
+  { pattern: /(?:los\s+laureles|laureles\s+escaz[uú])/i, name: 'Los Laureles, Escazú', coords: [9.9385, -84.1480] },
+  { pattern: /(?:hacienda\s+los\s+reyes|los\s+reyes\s+gu[aá]cima|golf\s+gu[aá]cima)/i, name: 'Los Reyes, La Guácima', coords: [9.9655, -84.2885] },
+  { pattern: /(?:monter[aá]n|granadilla\s+curridabat)/i, name: 'Monterán, Curridabat', coords: [9.9235, -84.0095] },
+  { pattern: /(?:rohrmoser|boulevard\s+rohrmoser|pavas\s+parque)/i, name: 'Rohrmoser Boulevard, Pavas', coords: [9.9445, -84.1165] },
+  { pattern: /(?:playa\s+langosta|langosta\s+tamarindo)/i, name: 'Playa Langosta, Tamarindo', coords: [10.2855, -85.8450] },
+  { pattern: /(?:las\s+palmas|palmas\s+coco|playas\s+del\s+coco)/i, name: 'Las Palmas, Playas del Coco', coords: [10.5565, -85.6980] },
+  { pattern: /(?:manuel\s+antonio|parque\s+nacional\s+manuel\s+antonio)/i, name: 'Manuel Antonio, Quepos', coords: [9.3920, -84.1505] },
+  { pattern: /(?:volc[aá]n\s+arenal|la\s+fortuna|arenal)/i, name: 'La Fortuna / Arenal', coords: [10.4720, -84.6480] },
+  { pattern: /(?:frente\s+al\s+mar\s+playa\s+jac[oó]|playa\s+jac[oó]|penthouse\s+jac[oó])/i, name: 'Playa Jacó Beachfront', coords: [9.6125, -84.6295] },
+  { pattern: /(?:cariari|asunci[oó]n\s+bel[eé]n)/i, name: 'Cariari / La Asunción Belén', coords: [9.9765, -84.1620] },
+  { pattern: /(?:sabana\s+oeste|mata\s+redonda)/i, name: 'Sabana Oeste, San José', coords: [9.9335, -84.1080] },
+  { pattern: /(?:quinta\s+campestre|san\s+isidro\s+de\s+grecia)/i, name: 'San Isidro de Grecia', coords: [10.1185, -84.2950] },
+  { pattern: /(?:piedades\s+santa\s+ana|piedades)/i, name: 'Piedades, Santa Ana', coords: [9.9330, -84.2180] },
+  { pattern: /(?:pozos\s+santa\s+ana|pozos)/i, name: 'Pozos, Santa Ana', coords: [9.9442, -84.1882] },
+  { pattern: /(?:t[aá]rcoles|garabito\s+tarcoles)/i, name: 'Tárcoles, Garabito', coords: [9.7650, -84.6310] },
+  { pattern: /(?:herradura|los\s+sue[nñ]os)/i, name: 'Herradura, Garabito', coords: [9.6480, -84.6420] },
+  { pattern: /(?:caj[oó]n\s+p[eé]rez\s+zeled[oó]n|caj[oó]n)/i, name: 'Cajón, Pérez Zeledón', coords: [9.2620, -83.5620] },
+  { pattern: /(?:san\s+juan\s+tib[aá]s|tib[aá]s)/i, name: 'San Juan, Tibás', coords: [9.9580, -84.0820] },
+  { pattern: /(?:ciudad\s+col[oó]n|mora\s+col[oó]n)/i, name: 'Ciudad Colón, Mora', coords: [9.9150, -84.2470] },
+  { pattern: /(?:alfaro\s+san\s+ram[oó]n|san\s+ram[oó]n)/i, name: 'Alfaro, San Ramón', coords: [10.1020, -84.4820] },
+];
+
 /**
- * Resolves approximate coordinates for Costa Rican province/canton/district.
- * Applies a deterministic micro-spread if seedId is provided to avoid stacked markers.
+ * Resolves high-accuracy coordinates for Costa Rican properties.
+ * Checks for specific residential developments, condominiums, and landmarks first,
+ * then resolves district/canton centroids with deterministic micro-jitter.
  */
 export function resolveTownCentroid(
   province?: string | null,
   canton?: string | null,
   district?: string | null,
-  seedId?: string | null
+  seedId?: string | null,
+  contextText?: string | null
 ): { lat: number; lng: number } {
+  // 1. High-precision landmark / gated community / beach check
+  if (contextText) {
+    for (const lm of HIGH_PRECISION_LANDMARKS) {
+      if (lm.pattern.test(contextText)) {
+        let [lLat, lLng] = lm.coords;
+        if (seedId) {
+          const hash = Math.abs(
+            seedId.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1), 0)
+          );
+          const angle = (hash % 360) * (Math.PI / 180);
+          const radiusMeters = 30 + (hash % 50); // Small 30m-80m radius for landmark
+          const deltaLat = (radiusMeters / 111111) * Math.cos(angle);
+          const deltaLng = (radiusMeters / (111111 * Math.cos(lLat * (Math.PI / 180)))) * Math.sin(angle);
+          lLat = Number((lLat + deltaLat).toFixed(6));
+          lLng = Number((lLng + deltaLng).toFixed(6));
+        }
+        return { lat: lLat, lng: lLng };
+      }
+    }
+  }
+
   const normDist = normalizeGeoKey(district);
   const normCant = normalizeGeoKey(canton);
   const normProv = normalizeGeoKey(province);
@@ -730,13 +781,13 @@ export function resolveTownCentroid(
 
   let [lat, lng] = baseCoord;
 
-  // Apply deterministic micro-jitter (100m to 250m) so multiple properties in the same town don't overlap into one dot
+  // Apply deterministic micro-jitter (60m to 160m) so multiple properties in the same town don't overlap
   if (seedId) {
     const hash = Math.abs(
       seedId.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1), 0)
     );
     const angle = (hash % 360) * (Math.PI / 180);
-    const radiusMeters = 100 + (hash % 150); // 100m to 250m radius
+    const radiusMeters = 60 + (hash % 100);
     const deltaLat = (radiusMeters / 111111) * Math.cos(angle);
     const deltaLng = (radiusMeters / (111111 * Math.cos(lat * (Math.PI / 180)))) * Math.sin(angle);
 

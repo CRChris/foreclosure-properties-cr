@@ -355,14 +355,16 @@ function mapRowToAuction(item: any): Auction {
   const effectiveProvince = (extractedLoc.province || item.province || 'San José') as CostaRicaProvince;
   const effectiveCanton = (extractedLoc.canton || item.canton || 'Central').trim();
   const effectiveDistrict = (extractedLoc.district || item.district || 'Central').trim();
+  const fullContextText = `${item.address_description || ''} ${item.raw_edict_text || ''} ${item.legal_summary || ''} ${item.naturaleza_raw || ''}`.toLowerCase();
 
-  // If not exact cadastral, resolve accurate district/canton coordinates with deterministic spread
+  // If not exact cadastral, resolve accurate district/canton coordinates with landmark matching
   if (!isExactCadastral) {
     const resolved = resolveTownCentroid(
       effectiveProvince,
       effectiveCanton,
       effectiveDistrict,
-      String(item.id || item.folio_real || item.expediente_number || '')
+      String(item.id || item.folio_real || item.expediente_number || ''),
+      fullContextText
     );
     lat = resolved.lat;
     lng = resolved.lng;
@@ -371,7 +373,8 @@ function mapRowToAuction(item: any): Auction {
       effectiveProvince,
       effectiveCanton,
       effectiveDistrict,
-      String(item.id || item.folio_real || item.expediente_number || '')
+      String(item.id || item.folio_real || item.expediente_number || ''),
+      fullContextText
     );
     lat = fallback.lat;
     lng = fallback.lng;
