@@ -672,16 +672,32 @@ export function extractLocationFromEdictText(
     || text.match(/Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
 
   if (mDistCant) {
-    district = mDistCant[1].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
-    canton = mDistCant[2].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+    district = mDistCant[1]
+      .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
+      .replace(/^[\s\-–—:;,\.]+/g, '')
+      .trim();
+    canton = mDistCant[2]
+      .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
+      .replace(/^[\s\-–—:;,\.]+/g, '')
+      .trim();
   } else {
     // Try inverted: Cantón: [Cantón], Distrito: [Distrito]
     const mCantDist = text.match(/Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
     if (mCantDist) {
-      canton = mCantDist[1].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
-      district = mCantDist[2].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+      canton = mCantDist[1]
+        .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
+        .replace(/^[\s\-–—:;,\.]+/g, '')
+        .trim();
+      district = mCantDist[2]
+        .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
+        .replace(/^[\s\-–—:;,\.]+/g, '')
+        .trim();
     }
   }
+
+  // Capitalize neatly
+  district = district.replace(/^[\s\-–—:;,\.]+/g, '').trim();
+  canton = canton.replace(/^[\s\-–—:;,\.]+/g, '').trim();
 
   return { province, canton, district };
 }
