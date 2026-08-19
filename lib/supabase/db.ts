@@ -12,7 +12,12 @@ import {
   LocationType,
 } from '@/lib/types/auction';
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
-import { geocodePropertyLocation, extractCentroidFromGeometry } from '@/lib/services/snitGeocodeService';
+import { 
+  geocodePropertyLocation, 
+  extractCentroidFromGeometry,
+  extractLocationFromEdictText,
+  resolveTownCentroid,
+} from '@/lib/services/snitGeocodeService';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -339,65 +344,37 @@ function mapRowToAuction(item: any): Auction {
 
   const isExactCadastral = item.location_type === 'exact_cadastral' || (parcelPolygonObj !== null);
 
-  const normalizedDistrict = normalizeGeoKey(item.district);
-  const normalizedCanton = normalizeGeoKey(item.canton);
-  const normalizedProv = normalizeGeoKey(item.province || 'san jose');
-  const fullText = `${item.canton || ''} ${item.district || ''} ${item.address_description || ''} ${item.legal_summary || ''}`.toLowerCase();
+  // Extract true property location from legal edict text
+  const extractedLoc = extractLocationFromEdictText(
+    item.raw_edict_text,
+    item.province,
+    item.canton,
+    item.district
+  );
 
-  // Safeguard: ONLY apply general town centroids if exact cadastral location is NOT present
+  const effectiveProvince = (extractedLoc.province || item.province || 'San José') as CostaRicaProvince;
+  const effectiveCanton = (extractedLoc.canton || item.canton || 'Central').trim();
+  const effectiveDistrict = (extractedLoc.district || item.district || 'Central').trim();
+
+  // If not exact cadastral, resolve accurate district/canton coordinates with deterministic spread
   if (!isExactCadastral) {
-    const isPerezZeledon = 
-      normalizedCanton.includes('perez zeledon') ||
-      normalizedDistrict.includes('perez zeledon') ||
-      normalizedDistrict === 'daniel flores' ||
-      normalizedDistrict === 'rivas' ||
-      fullText.includes('perez zeledon') ||
-      fullText.includes('pérez zeledón') ||
-      fullText.includes('san isidro de el general');
-
-    const isGarabitoOrJaco =
-      normalizedCanton.includes('garabito') ||
-      normalizedDistrict.includes('jaco') ||
-      normalizedDistrict.includes('jacó') ||
-      fullText.includes('garabito') ||
-      fullText.includes('jaco') ||
-      fullText.includes('jacó') ||
-      fullText.includes('herradura');
-
-    if (isPerezZeledon && !isGarabitoOrJaco) {
-      // If coordinates are missing or mistakenly placed at Jacó / West Coast Puntarenas, override to Pérez Zeledón
-      if (!lat || !lng || (lat > 9.55 && lat < 9.70 && lng < -84.50 && lng > -84.75)) {
-        lat = 9.3739;
-        lng = -83.7058;
-      }
-    } else if (isGarabitoOrJaco && !isPerezZeledon) {
-      if (!lat || !lng || (lat < 9.45 && lng > -83.85)) {
-        lat = 9.6152;
-        lng = -84.6298;
-      }
-    } else if (!lat || !lng) {
-      if (COSTA_RICA_CENTROIDS[normalizedDistrict]) {
-        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedDistrict];
-      } else if (COSTA_RICA_CENTROIDS[normalizedCanton]) {
-        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedCanton];
-      } else if (COSTA_RICA_CENTROIDS[normalizedProv]) {
-        [lat, lng] = COSTA_RICA_CENTROIDS[normalizedProv];
-      } else {
-        lat = 9.9281;
-        lng = -84.0907;
-      }
-    }
+    const resolved = resolveTownCentroid(
+      effectiveProvince,
+      effectiveCanton,
+      effectiveDistrict,
+      String(item.id || item.folio_real || item.expediente_number || '')
+    );
+    lat = resolved.lat;
+    lng = resolved.lng;
   } else if (!lat || !lng) {
-    if (COSTA_RICA_CENTROIDS[normalizedDistrict]) {
-      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedDistrict];
-    } else if (COSTA_RICA_CENTROIDS[normalizedCanton]) {
-      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedCanton];
-    } else if (COSTA_RICA_CENTROIDS[normalizedProv]) {
-      [lat, lng] = COSTA_RICA_CENTROIDS[normalizedProv];
-    } else {
-      lat = 9.9281;
-      lng = -84.0907;
-    }
+    const fallback = resolveTownCentroid(
+      effectiveProvince,
+      effectiveCanton,
+      effectiveDistrict,
+      String(item.id || item.folio_real || item.expediente_number || '')
+    );
+    lat = fallback.lat;
+    lng = fallback.lng;
   }
 
   // Derive smart property category from text if column not present in table
@@ -456,9 +433,9 @@ function mapRowToAuction(item: any): Auction {
     court_name: item.court_name,
     folio_real: item.folio_real,
     plano_catastrado: item.plano_catastrado || null,
-    province: item.province as CostaRicaProvince,
-    canton: item.canton || 'Central',
-    district: item.district || 'Central',
+    province: effectiveProvince,
+    canton: effectiveCanton,
+    district: effectiveDistrict,
     address_description: item.address_description || null,
     area_m2: Number(item.area_m2) || 100,
     currency: (item.currency || 'USD') as Currency,

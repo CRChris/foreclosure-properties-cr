@@ -605,6 +605,22 @@ export const COSTA_RICA_TOWN_CENTROIDS: Record<string, [number, number]> = {
   'puerto viejo': [9.6550, -82.7540],
   'matina': [10.0833, -83.3333],
   'guacimo': [10.2167, -83.6833],
+
+  // Extra High-Precision Districts & Neighborhoods
+  'piedades': [9.9328, -84.2185],
+  'pozos': [9.9442, -84.1882],
+  'pavas': [9.9419, -84.1284],
+  'san antonio': [9.9120, -84.1510],
+  'colon': [9.9142, -84.2464],
+  'ciudad colon': [9.9142, -84.2464],
+  'la asuncion': [9.9744, -84.1685],
+  'asuncion': [9.9744, -84.1685],
+  'san juan': [9.9575, -84.0817],
+  'alfaro': [10.1000, -84.4800],
+  'la fortuna': [10.4678, -84.6427],
+  'fortuna': [10.4678, -84.6427],
+  'mata redonda': [9.9320, -84.1020],
+  'coco': [10.5500, -85.6967],
 };
 
 function normalizeGeoKey(str?: string | null): string {
@@ -619,34 +635,100 @@ function normalizeGeoKey(str?: string | null): string {
 }
 
 /**
+ * Extracts true property geographic location from Boletín Judicial edict text
+ * (handles judicial notifications where the court/bank was in San José but the property is elsewhere).
+ */
+export function extractLocationFromEdictText(
+  text?: string | null,
+  fallbackProv?: string | null,
+  fallbackCanton?: string | null,
+  fallbackDist?: string | null
+): { province: string; canton: string; district: string } {
+  let province = (fallbackProv || 'San José').trim();
+  let canton = (fallbackCanton || 'Central').trim();
+  let district = (fallbackDist || 'Central').trim();
+
+  if (!text || typeof text !== 'string') {
+    return { province, canton, district };
+  }
+
+  // 1. Match Finca/Partido de la Provincia de [Provincia]
+  const mProv = text.match(/(?:Finca|Partido|propiedad|terreno)\s+de\s+la\s+Provincia\s+de\s+([A-Za-z\u00C0-\u00FF\s]+?)(?:,|\.|;|\s+matr[íi]cula|\s+folio)/i)
+    || text.match(/Partido\s+de\s+([A-Za-z\u00C0-\u00FF]+)/i);
+  if (mProv) {
+    const rawProv = mProv[1].trim();
+    const norm = normalizeGeoKey(rawProv);
+    if (norm.includes('alajuela')) province = 'Alajuela';
+    else if (norm.includes('cartago')) province = 'Cartago';
+    else if (norm.includes('heredia')) province = 'Heredia';
+    else if (norm.includes('guanacaste')) province = 'Guanacaste';
+    else if (norm.includes('puntarenas')) province = 'Puntarenas';
+    else if (norm.includes('limon')) province = 'Limón';
+    else if (norm.includes('san jose')) province = 'San José';
+  }
+
+  // 2. Match Distrito [Num/Nombre]: [Distrito], Cantón [Num/Nombre]: [Cantón]
+  const mDistCant = text.match(/situad[ao]\s+en\s+el\s+Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i)
+    || text.match(/Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
+
+  if (mDistCant) {
+    district = mDistCant[1].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+    canton = mDistCant[2].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+  } else {
+    // Try inverted: Cantón: [Cantón], Distrito: [Distrito]
+    const mCantDist = text.match(/Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
+    if (mCantDist) {
+      canton = mCantDist[1].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+      district = mCantDist[2].replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '').trim();
+    }
+  }
+
+  return { province, canton, district };
+}
+
+/**
  * Resolves approximate coordinates for Costa Rican province/canton/district.
+ * Applies a deterministic micro-spread if seedId is provided to avoid stacked markers.
  */
 export function resolveTownCentroid(
   province?: string | null,
   canton?: string | null,
-  district?: string | null
+  district?: string | null,
+  seedId?: string | null
 ): { lat: number; lng: number } {
   const normDist = normalizeGeoKey(district);
   const normCant = normalizeGeoKey(canton);
   const normProv = normalizeGeoKey(province);
 
+  let baseCoord: [number, number] | null = null;
+
   if (normDist && COSTA_RICA_TOWN_CENTROIDS[normDist]) {
-    const [lat, lng] = COSTA_RICA_TOWN_CENTROIDS[normDist];
-    return { lat, lng };
+    baseCoord = COSTA_RICA_TOWN_CENTROIDS[normDist];
+  } else if (normCant && COSTA_RICA_TOWN_CENTROIDS[normCant]) {
+    baseCoord = COSTA_RICA_TOWN_CENTROIDS[normCant];
+  } else if (normProv && COSTA_RICA_TOWN_CENTROIDS[normProv]) {
+    baseCoord = COSTA_RICA_TOWN_CENTROIDS[normProv];
+  } else {
+    baseCoord = [9.9281, -84.0907];
   }
 
-  if (normCant && COSTA_RICA_TOWN_CENTROIDS[normCant]) {
-    const [lat, lng] = COSTA_RICA_TOWN_CENTROIDS[normCant];
-    return { lat, lng };
+  let [lat, lng] = baseCoord;
+
+  // Apply deterministic micro-jitter (100m to 250m) so multiple properties in the same town don't overlap into one dot
+  if (seedId) {
+    const hash = Math.abs(
+      seedId.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1), 0)
+    );
+    const angle = (hash % 360) * (Math.PI / 180);
+    const radiusMeters = 100 + (hash % 150); // 100m to 250m radius
+    const deltaLat = (radiusMeters / 111111) * Math.cos(angle);
+    const deltaLng = (radiusMeters / (111111 * Math.cos(lat * (Math.PI / 180)))) * Math.sin(angle);
+
+    lat = Number((lat + deltaLat).toFixed(6));
+    lng = Number((lng + deltaLng).toFixed(6));
   }
 
-  if (normProv && COSTA_RICA_TOWN_CENTROIDS[normProv]) {
-    const [lat, lng] = COSTA_RICA_TOWN_CENTROIDS[normProv];
-    return { lat, lng };
-  }
-
-  // Default central San José
-  return { lat: 9.9281, lng: -84.0907 };
+  return { lat, lng };
 }
 
 export interface GeocodedLocation {
