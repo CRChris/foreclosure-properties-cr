@@ -145,10 +145,8 @@ export function PropertyMap({
 
   const selectedAuction = validAuctions.find((a) => a.id === selectedAuctionId) || null;
 
-  // Choose tile layer based on light/dark mode
-  const tileLayerUrl = isDark
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  // Use the original light Voyager tile layer for both light and dark mode
+  const tileLayerUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   const tileLayerAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
