@@ -128,8 +128,8 @@ export function IngestionLogModal({ isOpen, onClose }: IngestionLogModalProps) {
               </span>
               <p className="text-xs font-semibold text-slate-200">
                 {language === 'es'
-                  ? 'Lunes a Viernes • 8:15 AM (UTC-6)'
-                  : 'Monday – Friday • 8:15 AM (UTC-6)'}
+                  ? 'Lunes a Viernes • 8:20 AM (UTC-6)'
+                  : 'Monday – Friday • 8:20 AM (UTC-6)'}
               </p>
               <p className="text-[10.5px] text-slate-500">
                 {language === 'es'
