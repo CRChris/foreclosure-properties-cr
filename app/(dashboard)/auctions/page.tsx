@@ -98,25 +98,19 @@ export default function AuctionsPage() {
       }
 
       // 5. Price Range Filter (Comparing live active call base price)
-      const activePrice = liveState.currentBasePrice || auction.base_price_call_1;
-
-      if (filters.minPrice && activePrice < Number(filters.minPrice)) {
-        return false;
+      const currentPrice = liveState.currentBasePrice;
+      if (filters.minPrice !== '') {
+        const min = parseFloat(filters.minPrice);
+        if (!isNaN(min) && currentPrice < min) return false;
       }
-      if (filters.maxPrice && activePrice > Number(filters.maxPrice)) {
-        return false;
+      if (filters.maxPrice !== '') {
+        const max = parseFloat(filters.maxPrice);
+        if (!isNaN(max) && currentPrice > max) return false;
       }
 
-      // 6. Call Stage Filter (Comparing live progression stage)
-      if (filters.callStage !== 'all') {
-        if (liveState.callStage !== filters.callStage) {
-          return false;
-        }
-      } else {
-        // By default (when callStage is 'all'), strictly exclude properties that have elapsed all 3 calls
-        if (liveState.callStage === 'passed_call_3' || liveState.saleStatus === 'deserted') {
-          return false;
-        }
+      // 6. Call Stage Filter
+      if (filters.callStage !== 'all' && liveState.callStage !== filters.callStage) {
+        return false;
       }
 
       // 7. Construction Status Filter
@@ -127,7 +121,7 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 8. Road Frontage Filter
+      // 8. Public Road Access Filter
       if (filters.roadFrontage === 'public_road' && !chars.hasPublicRoad) {
         return false;
       }
@@ -135,12 +129,12 @@ export default function AuctionsPage() {
         return false;
       }
 
-      // 9. Mortgage Claim Seniority Filter
+      // 9. Mortgage Claim Seniority
       if (filters.mortgagePriority !== 'all' && chars.mortgagePriority !== filters.mortgagePriority) {
         return false;
       }
 
-      // 10. Opportunity Alpha Rating Filter
+      // 10. Deal Alpha Grade Filter
       if (filters.dealGrade !== 'all') {
         const alpha = calculateOpportunityAlpha(auction);
         if (filters.dealGrade === 'AAA' && alpha.grade !== 'AAA') {
@@ -240,33 +234,33 @@ export default function AuctionsPage() {
       {/* Header Banner & Live Investor KPIs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-            <Scale className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <Scale className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
             <span>{language === 'es' ? 'Catálogo de Remates Judiciales' : 'Judicial Foreclosure Catalog'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
             {t.nav.brandSubtitle}
           </p>
         </div>
 
         {/* Quick KPI Badges */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2 shadow-sm text-xs">
-            <span className="text-slate-400">{t.kpi.activeForeclosures}: </span>
-            <strong className="text-emerald-400 font-mono font-bold text-sm ml-1">{kpiStats.total}</strong>
+          <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-sm text-xs">
+            <span className="text-slate-500 dark:text-slate-400">{t.kpi.activeForeclosures}: </span>
+            <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm ml-1">{kpiStats.total}</strong>
           </div>
           {kpiStats.avgMargin > 0 && (
-            <div className="bg-emerald-950/70 border border-emerald-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-emerald-400" />
-              <span className="text-slate-300">{t.kpi.avgDiscount}: </span>
-              <strong className="text-emerald-300 font-mono font-bold text-sm ml-1">+{kpiStats.avgMargin}%</strong>
+            <div className="bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-emerald-900 dark:text-slate-300 font-medium">{t.kpi.avgDiscount}: </span>
+              <strong className="text-emerald-700 dark:text-emerald-300 font-mono font-bold text-sm ml-1">+{kpiStats.avgMargin}%</strong>
             </div>
           )}
           {kpiStats.highestDiscount > 0 && (
-            <div className="hidden sm:flex bg-amber-950/70 border border-amber-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-slate-300">{language === 'es' ? 'Máx. Descuento:' : 'Max Discount:'} </span>
-              <strong className="text-amber-300 font-mono font-bold text-sm ml-1">+{kpiStats.highestDiscount}%</strong>
+            <div className="hidden sm:flex bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800/40 rounded-xl px-3.5 py-2 shadow-sm text-xs items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-amber-900 dark:text-slate-300 font-medium">{language === 'es' ? 'Máx. Descuento:' : 'Max Discount:'} </span>
+              <strong className="text-amber-700 dark:text-amber-300 font-mono font-bold text-sm ml-1">+{kpiStats.highestDiscount}%</strong>
             </div>
           )}
         </div>
@@ -313,13 +307,13 @@ export default function AuctionsPage() {
         </div>
       ) : (
         /* Empty State */
-        <div className="p-12 text-center bg-slate-900/50 border border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto my-12 shadow-xl backdrop-blur-md">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-950/60 border border-emerald-800/60 flex items-center justify-center text-emerald-400 mx-auto">
+        <div className="p-12 text-center bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto my-12 shadow-xl backdrop-blur-md">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto">
             <Scale className="w-8 h-8" />
           </div>
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold text-white">{t.empty.waitingTitle}</h3>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{t.empty.waitingTitle}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
               {t.empty.waitingDesc}
             </p>
           </div>
@@ -329,8 +323,8 @@ export default function AuctionsPage() {
               {t.empty.resetFilters}
             </Button>
           ) : (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-[11px] text-slate-300 font-medium">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse" />
               <span>{t.empty.connectedStatus}</span>
             </div>
           )}

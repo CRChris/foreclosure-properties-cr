@@ -178,6 +178,8 @@ export interface Translations {
     notesPlaceholder: string;
     saveNotes: string;
     notesSaved: string;
+    noNotes: string;
+    savedSuccess: string;
     openDossier: string;
     emptyTitle: string;
     emptyDesc: string;

@@ -42,25 +42,25 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
     '1st_mortgage': {
       es: '1° Grado Hipotecario (Acreedor Preferente)',
       en: '1st Senior Mortgage (Priority Creditor)',
-      badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50',
+      badge: 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/50',
       icon: ShieldCheck,
     },
     '2nd_mortgage': {
       es: '2° Grado Hipotecario (Subordinada)',
       en: '2nd Subordinate Mortgage',
-      badge: 'bg-amber-950/80 text-amber-300 border-amber-500/50',
+      badge: 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-500/50',
       icon: ShieldAlert,
     },
     'embargo_judicial': {
       es: 'Ejecución por Embargo Judicial',
       en: 'Judicial Seizure / Court Attachment',
-      badge: 'bg-rose-950/80 text-rose-300 border-rose-500/50',
+      badge: 'bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-500/50',
       icon: AlertTriangle,
     },
     'unknown': {
       es: 'Por Verificar en Registro Nacional',
       en: 'Pending Verification in Registry',
-      badge: 'bg-slate-900 text-slate-300 border-slate-700',
+      badge: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
       icon: ShieldAlert,
     },
   };
@@ -111,20 +111,20 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
   );
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md dark:shadow-xl space-y-6">
       {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
             <FileText className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               {language === 'en'
                 ? 'Registered Legal Characteristics & Encumbrances'
                 : 'Características Registrales y Gravámenes'}
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               {language === 'en'
                 ? 'Extracted directly from the official court edict & National Registry'
                 : 'Datos extraídos del edicto judicial y del Registro Nacional de Costa Rica'}
@@ -142,9 +142,9 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
       {/* Key Status Highlights */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Mortgage Seniority */}
-        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
-          <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-            <PriorityIcon className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+          <span className="text-[10.5px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+            <PriorityIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             {language === 'en' ? 'Seniority / Claim' : 'Grado de Ejecución'}
           </span>
           <div className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${priorityConfig.badge}`}>
@@ -153,19 +153,19 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         </div>
 
         {/* Public Road Access */}
-        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
-          <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-            <Compass className="w-3.5 h-3.5 text-sky-400" />
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+          <span className="text-[10.5px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+            <Compass className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
             {language === 'en' ? 'Road Access' : 'Acceso a Calle'}
           </span>
           <div
             className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${
               hasPublicRoad
-                ? 'bg-sky-950/80 text-sky-300 border-sky-500/50'
-                : 'bg-slate-900 text-slate-300 border-slate-700'
+                ? 'bg-sky-50 text-sky-800 border-sky-300 dark:bg-sky-950/80 dark:text-sky-300 dark:border-sky-500/50'
+                : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700'
             }`}
           >
-            <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
             <span>
               {hasPublicRoad
                 ? language === 'en'
@@ -179,28 +179,28 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         </div>
 
         {/* Construction Status */}
-        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
-          <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-            <Building className="w-3.5 h-3.5 text-amber-400" />
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+          <span className="text-[10.5px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+            <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             {language === 'en' ? 'Construction' : 'Construcción'}
           </span>
           <div
             className={`px-2.5 py-1 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${
               hasConstruction
-                ? 'bg-amber-950/80 text-amber-300 border-amber-500/50'
-                : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-500/50'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/50'
             }`}
           >
             {hasConstruction ? (
               <>
-                <Building className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>
                   {language === 'en' ? 'With Structures' : 'Con Edificación'}
                 </span>
               </>
             ) : (
               <>
-                <TreePine className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <TreePine className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>
                   {language === 'en' ? 'Raw Land' : 'Sin Construir'}
                 </span>
@@ -210,24 +210,24 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
         </div>
 
         {/* Date Added */}
-        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
-          <span className="text-[10.5px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+          <span className="text-[10.5px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             {language === 'en' ? 'Date Added' : 'Fecha de Ingreso'}
           </span>
-          <div className="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900 text-slate-200 text-xs font-bold truncate">
+          <div className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-bold truncate">
             {formatDateAdded(auction.created_at, language)}
           </div>
         </div>
       </div>
 
       {/* Naturaleza del Inmueble */}
-      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-2">
-        <span className="text-xs font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-2">
+        <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
           <Layers className="w-4 h-4" />
           {language === 'en' ? 'Registered Real Estate Nature (Naturaleza Registral)' : 'Naturaleza del Inmueble'}
         </span>
-        <p className="text-xs sm:text-sm text-slate-200 leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800 font-mono">
+        <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed bg-white dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 font-mono">
           "{naturaleza}"
         </p>
       </div>
@@ -235,77 +235,77 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
       {/* 4-Quadrant Visual Compass Box of Linderos */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+          <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider flex items-center gap-1.5">
             <Compass className="w-4 h-4" />
             {language === 'en' ? 'Registered Boundaries (Linderos Registrales)' : 'Linderos Registrales'}
           </span>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
             {language === 'en' ? 'Official Cadastral Orientation' : 'Orientación Registral Oficial'}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* North */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-3 hover:border-slate-700 transition-colors">
-            <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 shrink-0">
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-start gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+            <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 shrink-0">
               <ArrowUp className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                 {language === 'en' ? 'North (Norte)' : 'Norte'}
               </span>
-              <p className="text-xs text-slate-200 font-medium line-clamp-2">{norte}</p>
+              <p className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-2">{norte}</p>
             </div>
           </div>
 
           {/* South */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-3 hover:border-slate-700 transition-colors">
-            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-start gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
               <ArrowDown className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
                 {language === 'en' ? 'South (Sur)' : 'Sur'}
               </span>
-              <p className="text-xs text-slate-200 font-medium line-clamp-2">{sur}</p>
+              <p className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-2">{sur}</p>
             </div>
           </div>
 
           {/* East */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-3 hover:border-slate-700 transition-colors">
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-start gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
               <ArrowRight className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
                 {language === 'en' ? 'East (Este)' : 'Este'}
               </span>
-              <p className="text-xs text-slate-200 font-medium line-clamp-2">{este}</p>
+              <p className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-2">{este}</p>
             </div>
           </div>
 
           {/* West */}
-          <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-3 hover:border-slate-700 transition-colors">
-            <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-start gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+            <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
                 {language === 'en' ? 'West (Oeste)' : 'Oeste'}
               </span>
-              <p className="text-xs text-slate-200 font-medium line-clamp-2">{oeste}</p>
+              <p className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-2">{oeste}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Servidumbres & Gravámenes */}
-      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1.5">
-        <span className="text-xs font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+        <span className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider flex items-center gap-1.5">
           <ShieldAlert className="w-4 h-4" />
           {language === 'en' ? 'Registered Easements & Annotations' : 'Servidumbres y Gravámenes Activos'}
         </span>
-        <p className="text-xs text-slate-300 leading-relaxed">
+        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
           {servidumbres}
         </p>
       </div>

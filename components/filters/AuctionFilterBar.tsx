@@ -186,7 +186,7 @@ export function AuctionFilterBar({
   };
 
   return (
-    <div className="space-y-3 bg-slate-900/95 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl backdrop-blur-md">
+    <div className="space-y-3 bg-white dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-md dark:shadow-xl backdrop-blur-md transition-colors">
       {/* 1. Primary Filter Bar Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-center">
         {/* Search Input (Expediente, Canton, District, Bank, Folio) */}
@@ -196,12 +196,12 @@ export function AuctionFilterBar({
             onChange={(e) => handleUpdate('search', e.target.value)}
             placeholder={t.filters.searchPlaceholder}
             icon={<Search className="w-4 h-4 text-slate-400" />}
-            className="w-full text-xs sm:text-sm h-11 bg-slate-950"
+            className="w-full text-xs sm:text-sm h-11 bg-slate-50 dark:bg-slate-950"
           />
           {filters.search && (
             <button
               onClick={() => handleUpdate('search', '')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white p-1"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -213,7 +213,7 @@ export function AuctionFilterBar({
           <Select
             value={filters.propertyType}
             onChange={(e) => handleUpdate('propertyType', e.target.value as any)}
-            className="w-full text-xs h-11 bg-slate-950 font-medium"
+            className="w-full text-xs h-11 bg-slate-50 dark:bg-slate-950 font-medium"
           >
             {PROPERTY_TYPES.map((pt) => (
               <option key={pt.value} value={pt.value}>
@@ -228,7 +228,7 @@ export function AuctionFilterBar({
           <Select
             value={filters.province}
             onChange={(e) => handleUpdate('province', e.target.value as any)}
-            className="w-full text-xs h-11 bg-slate-950 font-medium"
+            className="w-full text-xs h-11 bg-slate-50 dark:bg-slate-950 font-medium"
           >
             {PROVINCES.map((p) => (
               <option key={p} value={p}>
@@ -243,7 +243,7 @@ export function AuctionFilterBar({
           <Select
             value={filters.callStage}
             onChange={(e) => handleUpdate('callStage', e.target.value as any)}
-            className="w-full text-xs h-11 bg-slate-950 font-medium"
+            className="w-full text-xs h-11 bg-slate-50 dark:bg-slate-950 font-medium"
           >
             {CALL_STAGES.map((cs) => (
               <option key={cs.value} value={cs.value}>
@@ -258,7 +258,7 @@ export function AuctionFilterBar({
           <Select
             value={filters.sortBy}
             onChange={(e) => handleUpdate('sortBy', e.target.value as any)}
-            className="w-full text-xs h-11 bg-slate-950 font-medium text-emerald-400 border-emerald-500/30"
+            className="w-full text-xs h-11 bg-slate-50 dark:bg-slate-950 font-semibold text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -270,11 +270,11 @@ export function AuctionFilterBar({
       </div>
 
       {/* 2. Secondary Quick-Filter & Action Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80">
         {/* Quick Price Range Brackets */}
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-[11px] uppercase font-bold text-slate-400 mr-1 flex items-center gap-1">
-            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-[11px] uppercase font-bold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
+            <DollarSign className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>{t.filters.priceRange}:</span>
           </span>
           {PRICE_BRACKETS.map((pb) => {
@@ -287,7 +287,7 @@ export function AuctionFilterBar({
                 className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all border ${
                   isSelected
                     ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800'
+                    : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 {pb.label}
@@ -299,14 +299,14 @@ export function AuctionFilterBar({
         {/* Currency Switcher, Advanced Toggle & View Switcher */}
         <div className="flex items-center gap-2">
           {/* Currency Switcher */}
-          <div className="flex rounded-xl bg-slate-950 p-0.5 border border-slate-800 h-9 items-center">
+          <div className="flex rounded-xl bg-slate-100 dark:bg-slate-950 p-0.5 border border-slate-200 dark:border-slate-800 h-9 items-center">
             <button
               type="button"
               onClick={() => handleUpdate('currency', 'all')}
               className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
                 filters.currency === 'all'
                   ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               {language === 'es' ? 'Todas' : 'All'}
@@ -317,7 +317,7 @@ export function AuctionFilterBar({
               className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
                 filters.currency === 'USD'
                   ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               USD $
@@ -328,7 +328,7 @@ export function AuctionFilterBar({
               className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
                 filters.currency === 'CRC'
                   ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               CRC ₡
@@ -357,14 +357,14 @@ export function AuctionFilterBar({
           </Button>
 
           {/* View Mode Switcher (Desktop) */}
-          <div className="hidden md:flex rounded-xl bg-slate-950 p-0.5 border border-slate-800 h-9 items-center">
+          <div className="hidden md:flex rounded-xl bg-slate-100 dark:bg-slate-950 p-0.5 border border-slate-200 dark:border-slate-800 h-9 items-center">
             <button
               type="button"
               onClick={() => onViewModeChange('rows')}
               className={`p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${
                 viewMode === 'rows'
-                  ? 'bg-slate-800 text-emerald-400 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
               title={t.filters.rowsView || 'Row List View'}
             >
@@ -375,8 +375,8 @@ export function AuctionFilterBar({
               onClick={() => onViewModeChange('grid')}
               className={`p-1.5 rounded-lg text-xs transition-all flex items-center gap-1 ${
                 viewMode === 'grid'
-                  ? 'bg-slate-800 text-emerald-400 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
               title={t.filters.gridView}
             >
@@ -388,17 +388,17 @@ export function AuctionFilterBar({
 
       {/* 3. Collapsible Advanced Legal & Financial Filters Drawer */}
       {isAdvancedOpen && (
-        <div className="pt-4 mt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Opportunity Alpha Rating Filter */}
-          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>{t.filters.dealGrade}</span>
             </label>
             <Select
               value={filters.dealGrade}
               onChange={(e) => handleUpdate('dealGrade', e.target.value as any)}
-              className="w-full text-xs h-9 bg-slate-900"
+              className="w-full text-xs h-9 bg-white dark:bg-slate-900"
             >
               {DEAL_GRADES.map((dg) => (
                 <option key={dg.value} value={dg.value}>
@@ -409,15 +409,15 @@ export function AuctionFilterBar({
           </div>
 
           {/* Construction Status Filter */}
-          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <Building className="w-3.5 h-3.5 text-amber-400" />
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span>{t.filters.constructionStatus}</span>
             </label>
             <Select
               value={filters.constructionStatus}
               onChange={(e) => handleUpdate('constructionStatus', e.target.value as any)}
-              className="w-full text-xs h-9 bg-slate-900"
+              className="w-full text-xs h-9 bg-white dark:bg-slate-900"
             >
               <option value="all">{t.filters.allConstruction}</option>
               <option value="built">{t.filters.builtOnly}</option>
@@ -426,15 +426,15 @@ export function AuctionFilterBar({
           </div>
 
           {/* Road Access / Frontage Filter */}
-          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <Compass className="w-3.5 h-3.5 text-sky-400" />
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
               <span>{t.filters.roadFrontage}</span>
             </label>
             <Select
               value={filters.roadFrontage}
               onChange={(e) => handleUpdate('roadFrontage', e.target.value as any)}
-              className="w-full text-xs h-9 bg-slate-900"
+              className="w-full text-xs h-9 bg-white dark:bg-slate-900"
             >
               <option value="all">{t.filters.allAccess}</option>
               <option value="public_road">{t.filters.publicRoadOnly}</option>
@@ -443,15 +443,15 @@ export function AuctionFilterBar({
           </div>
 
           {/* Mortgage Claim Seniority */}
-          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
-            <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>{t.filters.mortgagePriority}</span>
             </label>
             <Select
               value={filters.mortgagePriority}
               onChange={(e) => handleUpdate('mortgagePriority', e.target.value as any)}
-              className="w-full text-xs h-9 bg-slate-900"
+              className="w-full text-xs h-9 bg-white dark:bg-slate-900"
             >
               <option value="all">{t.filters.allPriorities}</option>
               <option value="1st_mortgage">{t.filters.firstMortgageOnly}</option>
@@ -461,13 +461,13 @@ export function AuctionFilterBar({
           </div>
 
           {/* Discount Margin Slider */}
-          <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80">
+          <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800/80">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-bold text-slate-300 flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>{t.filters.minMargin}:</span>
               </span>
-              <span className="font-mono font-bold text-emerald-400">
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                 {filters.minMargin > 0 ? `≥ ${filters.minMargin}%` : t.filters.minMarginAny}
               </span>
             </div>
@@ -478,7 +478,7 @@ export function AuctionFilterBar({
               step={5}
               value={filters.minMargin}
               onChange={(e) => handleUpdate('minMargin', Number(e.target.value))}
-              className="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+              className="w-full accent-emerald-600 cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none"
             />
             <div className="flex justify-between text-[10px] text-slate-500 font-mono">
               <span>0%</span>
@@ -490,42 +490,42 @@ export function AuctionFilterBar({
       )}
 
       {/* 4. Active Filters Chips & Results Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 text-xs text-slate-500 dark:text-slate-400">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-extrabold text-white font-mono text-sm">{totalResults}</span>
-          <span className="text-slate-300 font-medium">{t.filters.showingResults}</span>
+          <span className="font-extrabold text-slate-900 dark:text-white font-mono text-sm">{totalResults}</span>
+          <span className="text-slate-700 dark:text-slate-300 font-medium">{t.filters.showingResults}</span>
 
           {/* Active Filter Chips */}
           {filters.propertyType !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{PROPERTY_TYPES.find((p) => p.value === filters.propertyType)?.label}</span>
-              <button onClick={() => handleUpdate('propertyType', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('propertyType', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.province !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{filters.province}</span>
-              <button onClick={() => handleUpdate('province', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('province', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.callStage !== 'all' && (() => {
-            let chipStyle = 'bg-slate-800 text-slate-200 border-slate-700';
-            if (filters.callStage === 'call_1') chipStyle = 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40';
-            if (filters.callStage === 'call_2') chipStyle = 'bg-yellow-950/80 text-yellow-300 border-yellow-500/40';
-            if (filters.callStage === 'call_3') chipStyle = 'bg-orange-950/80 text-orange-300 border-orange-500/40';
+            let chipStyle = 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700';
+            if (filters.callStage === 'call_1') chipStyle = 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40';
+            if (filters.callStage === 'call_2') chipStyle = 'bg-yellow-50 text-yellow-800 border-yellow-300 dark:bg-yellow-950/80 dark:text-yellow-300 dark:border-yellow-500/40';
+            if (filters.callStage === 'call_3') chipStyle = 'bg-orange-50 text-orange-800 border-orange-300 dark:bg-orange-950/80 dark:text-orange-300 dark:border-orange-500/40';
             return (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-bold ${chipStyle}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
-                  filters.callStage === 'call_1' ? 'bg-emerald-400' : filters.callStage === 'call_2' ? 'bg-yellow-400' : filters.callStage === 'call_3' ? 'bg-orange-400' : 'bg-slate-400'
+                  filters.callStage === 'call_1' ? 'bg-emerald-500' : filters.callStage === 'call_2' ? 'bg-yellow-500' : filters.callStage === 'call_3' ? 'bg-orange-500' : 'bg-slate-400'
                 }`} />
                 <span>{CALL_STAGES.find((c) => c.value === filters.callStage)?.label}</span>
-                <button onClick={() => handleUpdate('callStage', 'all')} className="hover:text-white ml-0.5">
+                <button onClick={() => handleUpdate('callStage', 'all')} className="hover:text-slate-900 dark:hover:text-white ml-0.5">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -533,55 +533,55 @@ export function AuctionFilterBar({
           })()}
 
           {filters.dealGrade !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[11px]">
-              <Sparkles className="w-3 h-3 text-emerald-400" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-500/40 text-[11px]">
+              <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
               <span>{DEAL_GRADES.find((dg) => dg.value === filters.dealGrade)?.label}</span>
-              <button onClick={() => handleUpdate('dealGrade', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('dealGrade', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.priceBracket !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{PRICE_BRACKETS.find((pb) => pb.value === filters.priceBracket)?.label}</span>
-              <button onClick={() => handlePriceBracket('all')} className="hover:text-white">
+              <button onClick={() => handlePriceBracket('all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.constructionStatus !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{filters.constructionStatus === 'built' ? t.filters.builtOnly : t.filters.landOnly}</span>
-              <button onClick={() => handleUpdate('constructionStatus', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('constructionStatus', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.roadFrontage !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{filters.roadFrontage === 'public_road' ? t.filters.publicRoadOnly : t.filters.privateAccessOnly}</span>
-              <button onClick={() => handleUpdate('roadFrontage', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('roadFrontage', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.mortgagePriority !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px]">
               <span>{filters.mortgagePriority === '1st_mortgage' ? '1° Hipoteca' : filters.mortgagePriority === '2nd_mortgage' ? '2° Hipoteca' : 'Embargo'}</span>
-              <button onClick={() => handleUpdate('mortgagePriority', 'all')} className="hover:text-white">
+              <button onClick={() => handleUpdate('mortgagePriority', 'all')} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
           )}
 
           {filters.minMargin > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 border border-emerald-600/40 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-600/40 text-[11px]">
               <span>≥ {filters.minMargin}% {t.card.estimatedMargin}</span>
-              <button onClick={() => handleUpdate('minMargin', 0)} className="hover:text-white">
+              <button onClick={() => handleUpdate('minMargin', 0)} className="hover:text-slate-900 dark:hover:text-white">
                 <X className="w-3 h-3" />
               </button>
             </span>
@@ -592,7 +592,7 @@ export function AuctionFilterBar({
           <button
             type="button"
             onClick={onResetFilters}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-950/40 border border-emerald-500/30 px-3 py-1 rounded-xl shadow-sm"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 transition-colors bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 px-3 py-1 rounded-xl shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>{t.filters.resetFilters}</span>

@@ -307,17 +307,27 @@ export function formatDateAdded(dateString?: string | null, lang: string = 'es')
 }
 
 /**
- * Check if a property was added today (or within the last 24 hours)
+ * Check if a property was added today (strictly matching the calendar date the property was added in Costa Rica time UTC-6).
+ * "New Today" only remains tagged for the day that the property was added.
  */
-export function isPropertyNewToday(createdAt?: string | null): boolean {
+export function isPropertyNewToday(createdAt?: string | null, customNow?: Date): boolean {
   if (!createdAt) return false;
   try {
     const created = new Date(createdAt);
     if (isNaN(created.getTime())) return false;
     
-    const now = new Date();
-    const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
-    return diffHours >= 0 && diffHours <= 24;
+    // Format both dates in Costa Rica timezone (America/Costa_Rica, UTC-6) as YYYY-MM-DD
+    const crFormatter = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'America/Costa_Rica',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    const createdDayCR = crFormatter.format(created);
+    const nowDayCR = crFormatter.format(customNow || new Date());
+    
+    return createdDayCR === nowDayCR;
   } catch {
     return false;
   }

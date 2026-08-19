@@ -103,13 +103,13 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-slate-400">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium">
-          {language === 'es'
-            ? 'Cargando expediente judicial...'
-            : 'Loading judicial foreclosure docket...'}
-        </p>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+            {language === 'es' ? 'Cargando expediente judicial...' : 'Loading foreclosure dossier...'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -119,27 +119,27 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   }
 
   const handleToggleSave = () => {
-    const nextSaved = !isSaved;
-    setIsSaved(nextSaved);
+    const next = !isSaved;
+    setIsSaved(next);
     try {
-      localStorage.setItem(`saved_auction_${auction.id}`, String(nextSaved));
+      localStorage.setItem(`saved_auction_${auction.id}`, String(next));
     } catch {
       // ignore
     }
   };
 
   const handleCopyRawEdict = () => {
-    if (!auction.raw_edict_text) return;
-    navigator.clipboard.writeText(auction.raw_edict_text);
-    setCopiedEdict(true);
-    setTimeout(() => setCopiedEdict(false), 2500);
+    if (auction.raw_edict_text) {
+      navigator.clipboard.writeText(auction.raw_edict_text);
+      setCopiedEdict(true);
+      setTimeout(() => setCopiedEdict(false), 2500);
+    }
   };
 
   const handlePrint = () => {
     window.print();
   };
 
-  // Google Calendar URL & .ics Generator
   const generateGoogleCalendarUrl = () => {
     const targetDate = new Date(auction.auction_date_call_1);
     const startDateISO = targetDate.toISOString().replace(/-|:|\.\d\d\d/g, '');
@@ -195,10 +195,10 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
       {/* Top Breadcrumb & Action Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/80 pb-4">
         <Link
           href="/auctions"
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors"
+          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{t.dossier.backToCatalog}</span>
@@ -210,7 +210,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <button
             type="button"
             onClick={() => setIsParticipateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black transition-all shadow-md shadow-emerald-950/60 ring-1 ring-emerald-400/40 hover:scale-[1.02]"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-black transition-all shadow-md shadow-emerald-600/20 dark:shadow-emerald-950/60 ring-1 ring-emerald-400/40 hover:scale-[1.02]"
           >
             <Gavel className="w-3.5 h-3.5" />
             <span>{language === 'es' ? 'Participar en este Remate' : 'Participate in this Auction'}</span>
@@ -223,7 +223,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
               isSaved
                 ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md'
-                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                : 'bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 shadow-sm'
             }`}
           >
             <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
@@ -235,9 +235,9 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             href={generateGoogleCalendarUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold transition-all hover:text-emerald-400"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all hover:text-emerald-600 dark:hover:text-emerald-400 shadow-sm"
           >
-            <CalendarPlus className="w-3.5 h-3.5 text-emerald-400" />
+            <CalendarPlus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Google Calendar</span>
           </a>
 
@@ -245,7 +245,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <button
             type="button"
             onClick={handleDownloadICS}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm"
             title="Download iCal (.ics) for Apple Calendar / Outlook"
           >
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -256,7 +256,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <button
             type="button"
             onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-bold transition-all hover:text-white"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all hover:text-slate-900 dark:hover:text-white shadow-sm"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>{t.dossier.exportPDF}</span>
@@ -264,31 +264,31 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         </div>
       </div>
 
-      {/* Executive Judicial Dossier Hero Banner (Zero External Photo Dependency) */}
-      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950 border border-slate-800 p-6 sm:p-10 shadow-2xl space-y-6">
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]" />
+      {/* Executive Judicial Dossier Hero Banner */}
+      <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 border border-slate-200 dark:border-slate-800 p-6 sm:p-10 shadow-xl dark:shadow-2xl space-y-6">
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000000_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             {isNewToday && (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/60 ring-1 ring-white/40 tracking-wide uppercase">
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-950/30 ring-1 ring-white/40 tracking-wide uppercase">
                 <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
                 {t.card.newToday || (language === 'es' ? '¡NUEVO HOY!' : 'NEW TODAY')}
               </span>
             )}
             <PropertyTypeBadge type={propertyType} language={language} size="lg" />
             <DealAlphaBadge auction={auction} language={language} size="md" />
-            <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 text-xs font-mono font-bold">
+            <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
               Folio Real: {auction.folio_real}
             </span>
-            <span className="px-3 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 text-xs font-mono">
+            <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-mono">
               Exp: {auction.expediente_number}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
             {marginPct > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs sm:text-sm shadow-xl">
+              <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs sm:text-sm shadow-md">
                 <TrendingUp className="w-4 h-4" />
                 +{marginPct}% {t.card.estimatedMargin}
               </span>
@@ -297,7 +297,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             <button
               type="button"
               onClick={() => setIsParticipateModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs sm:text-sm shadow-xl shadow-emerald-950/60 transition-all hover:scale-[1.02] ring-1 ring-emerald-400/40"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 dark:shadow-emerald-950/60 transition-all hover:scale-[1.02] ring-1 ring-emerald-400/40"
             >
               <Gavel className="w-4 h-4" />
               <span>{language === 'es' ? 'Participar en este Remate' : 'Participate in this Auction'}</span>
@@ -306,38 +306,38 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         </div>
 
         <div className="relative z-10 space-y-3">
-          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
             {getLocalizedPropertyTitle(auction, language)}
           </h1>
 
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-300 pt-1">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-600 dark:text-slate-300 pt-1">
             <span className="flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+              <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
                 {auction.district}, {auction.canton}, {auction.province}
               </span>
             </span>
             <span className="flex items-center gap-1.5">
-              <Maximize2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <Maximize2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>{formatArea(auction.area_m2)}</span>
             </span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+              <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
-                <strong className="text-slate-400 font-semibold">{t.dossier.dateAdded}:</strong>{' '}
-                <span className="text-emerald-300 font-medium">{formatDateAdded(auction.created_at, language)}</span>
+                <strong className="text-slate-500 dark:text-slate-400 font-semibold">{t.dossier.dateAdded}:</strong>{' '}
+                <span className="text-emerald-700 dark:text-emerald-300 font-semibold">{formatDateAdded(auction.created_at, language)}</span>
               </span>
             </span>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${auction.court_name}, Costa Rica`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 hover:text-emerald-400 text-slate-300 transition-colors group underline decoration-slate-700 hover:decoration-emerald-400 underline-offset-2"
+              className="inline-flex items-center gap-1.5 hover:text-emerald-600 dark:hover:text-emerald-400 text-slate-600 dark:text-slate-300 transition-colors group underline decoration-slate-300 dark:decoration-slate-700 hover:decoration-emerald-500 underline-offset-2"
               title={language === 'es' ? 'Ver juzgado en Google Maps (abre en nueva pestaña)' : 'Find auction court on Google Maps (opens in new tab)'}
             >
-              <Scale className="w-4 h-4 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+              <Scale className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
               <span>{auction.court_name}</span>
-              <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-emerald-400 ml-0.5" />
+              <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 ml-0.5" />
             </a>
           </div>
         </div>
@@ -362,25 +362,25 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       />
 
       {/* Tabbed Legal Text / Executive Summary Dossier */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md dark:shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">
+            <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               {t.dossier.courtNotice}
             </h2>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Tab switchers */}
-            <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 border border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setActiveEdictTab('summary')}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   activeEdictTab === 'summary'
                     ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 {t.dossier.executiveSummaryTab}
@@ -391,7 +391,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   activeEdictTab === 'raw'
                     ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 {t.dossier.rawEdictTab}
@@ -403,12 +403,12 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               <button
                 type="button"
                 onClick={handleCopyRawEdict}
-                className="inline-flex items-center gap-1 text-xs font-bold text-slate-300 hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800"
+                className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800"
               >
                 {copiedEdict ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-emerald-400">{t.dossier.copied}</span>
+                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-emerald-600 dark:text-emerald-400">{t.dossier.copied}</span>
                   </>
                 ) : (
                   <>
@@ -425,7 +425,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         {activeEdictTab === 'summary' && (
           <div className="space-y-6 animate-in fade-in duration-150">
             {/* Legal Summary Prose */}
-            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800/80 text-sm text-slate-300 leading-relaxed space-y-2">
+            <div className="p-4 bg-slate-50 dark:bg-slate-950/80 rounded-2xl border border-slate-200 dark:border-slate-800/80 text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-2">
               <p>
                 {language === 'en'
                   ? `Judicial foreclosure proceedings before ${auction.court_name} under case docket ${auction.expediente_number}, filed by plaintiff ${auction.plaintiff}${
@@ -440,47 +440,47 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
             {/* Cadastral Specs Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold block">
                   {t.dossier.folioReal}
                 </span>
-                <span className="text-sm font-extrabold text-white font-mono mt-1 block">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white font-mono mt-1 block">
                   {auction.folio_real}
                 </span>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold block">
                   {t.dossier.planoCatastrado}
                 </span>
-                <span className="text-sm font-extrabold text-white font-mono mt-1 block">
+                <span className="text-sm font-extrabold text-slate-900 dark:text-white font-mono mt-1 block">
                   {auction.plano_catastrado || 'En trámite'}
                 </span>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold block">
                   {t.dossier.plaintiff}
                 </span>
-                <span className="text-xs font-bold text-slate-200 mt-1 block truncate">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 block truncate">
                   {auction.plaintiff}
                 </span>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold block">
                   {t.dossier.surfaceArea}
                 </span>
-                <span className="text-sm font-extrabold text-emerald-400 font-mono mt-1 block">
+                <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mt-1 block">
                   {formatArea(auction.area_m2)}
                 </span>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <span className="text-[11px] text-slate-400 uppercase font-bold block">
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-bold block">
                   {t.dossier.dateAdded}
                 </span>
-                <span className="text-xs font-bold text-slate-200 mt-1 block">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 block">
                   {formatDateAdded(auction.created_at, language)}
                 </span>
               </div>
@@ -490,7 +490,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
         {/* Tab 2: Raw Edict Text */}
         {activeEdictTab === 'raw' && (
-          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 max-h-96 overflow-y-auto font-mono text-xs text-slate-300 leading-relaxed whitespace-pre-wrap selection:bg-emerald-500/40">
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 max-h-96 overflow-y-auto font-mono text-xs text-slate-800 dark:text-slate-300 leading-relaxed whitespace-pre-wrap selection:bg-emerald-500/40">
             {auction.raw_edict_text || 'Texto del edicto judicial no disponible.'}
           </div>
         )}
@@ -509,22 +509,22 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       <DueDiligenceChecklist auction={auction} />
 
       {/* Geospatial Map Section with Prominent Centroid Warning */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md dark:shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white tracking-tight">
+            <MapPin className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
               {t.dossier.geographicLocation}
             </h2>
           </div>
-          <span className="text-xs font-mono text-slate-400">
+          <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
             {auction.latitude?.toFixed(4)}, {auction.longitude?.toFixed(4)}
           </span>
         </div>
 
         {/* Persistent Map Centroid Disclaimer */}
-        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200/90 text-xs">
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <p>
             {language === 'en'
               ? '📍 Approximate location by district centroid. Judicial foreclosure notices do not contain precise GPS coordinates. Consult the official registered cadastral survey (Plano Catastrado) for exact boundaries.'
@@ -532,7 +532,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           </p>
         </div>
 
-        <div className="h-80 w-full rounded-2xl overflow-hidden border border-slate-800">
+        <div className="h-80 w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
           <MapWrapper
             auctions={[auction]}
             selectedAuctionId={auction.id}

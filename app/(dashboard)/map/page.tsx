@@ -80,11 +80,11 @@ export default function MapExplorerPage() {
       {/* Top Map Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
-            <Compass className="w-6 h-6 text-emerald-400" />
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <Compass className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             <span>{language === 'es' ? 'Explorador Geoespacial de Remates' : 'Geospatial Foreclosure Explorer'}</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
             {language === 'es'
               ? 'Georreferenciación de subastas judiciales en Costa Rica con coordenadas PostGIS.'
               : 'PostGIS geospatial mapping of Costa Rican court foreclosures and property auctions.'}
@@ -99,8 +99,8 @@ export default function MapExplorerPage() {
       </div>
 
       {/* Geocoding Centroid Disclaimer Banner */}
-      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200/90 text-xs">
-        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
+        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
         <p>
           {language === 'en'
             ? '📍 Approximate location based on district/canton centroids. Judicial foreclosure notices do not include precise GPS coordinates in edicts. Verify registered survey (Plano Catastrado) for exact boundaries.'
@@ -111,9 +111,9 @@ export default function MapExplorerPage() {
       {/* Main Map Layout: 2 Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-250px)] min-h-[580px]">
         {/* Left Column: Properties Sidebar */}
-        <div className="lg:col-span-4 flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+        <div className="lg:col-span-4 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md">
           {/* Search bar inside sidebar */}
-          <div className="p-3 border-b border-slate-800 space-y-2 bg-slate-950/60">
+          <div className="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2 bg-slate-50 dark:bg-slate-950/60">
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -138,7 +138,7 @@ export default function MapExplorerPage() {
           </div>
 
           {/* Properties Scroll List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800 p-2 space-y-2">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2 space-y-2">
             {filteredAuctions.length > 0 ? (
               filteredAuctions.map((auction) => {
                 const isSelected = selectedAuction?.id === auction.id;
@@ -152,11 +152,11 @@ export default function MapExplorerPage() {
                     className={`p-3 rounded-xl cursor-pointer transition-all border-2 ${
                       isSelected
                         ? stageConfig.selectedBorderClass
-                        : `bg-slate-950/60 ${stageConfig.borderClass} ${stageConfig.hoverBorderClass}`
+                        : `bg-slate-50 hover:bg-slate-100 dark:bg-slate-950/60 ${stageConfig.borderClass} ${stageConfig.hoverBorderClass}`
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-white truncate">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                         {auction.district ? `${auction.district}, ` : ''}{auction.canton}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
@@ -169,22 +169,22 @@ export default function MapExplorerPage() {
                     </div>
 
                     <div className="flex items-baseline justify-between mt-2">
-                      <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                      <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
                         {formatCurrency(liveState.currentBasePrice, auction.currency)}
                       </span>
                       {auction.estimated_margin_pct && (
-                        <span className="text-[11px] font-semibold text-emerald-300">
+                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
                           +{auction.estimated_margin_pct}% {t.card.estimatedMargin}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800/60">
                       <span className="flex items-center gap-1">
-                        <Maximize2 className="w-3 h-3 text-slate-500" />
+                        <Maximize2 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                         {formatArea(auction.area_m2)}
                       </span>
-                      <span className="font-mono text-slate-400 text-[10.5px]">
+                      <span className="font-mono text-slate-500 dark:text-slate-400 text-[10.5px]">
                         Folio: {auction.folio_real}
                       </span>
                     </div>
@@ -193,8 +193,8 @@ export default function MapExplorerPage() {
               })
             ) : (
               <div className="p-8 text-center space-y-2 text-slate-400">
-                <Scale className="w-6 h-6 mx-auto text-slate-500" />
-                <p className="text-xs font-semibold text-white">{t.empty.waitingTitle}</p>
+                <Scale className="w-6 h-6 mx-auto text-slate-400 dark:text-slate-500" />
+                <p className="text-xs font-semibold text-slate-900 dark:text-white">{t.empty.waitingTitle}</p>
                 <p className="text-[11px] text-slate-500">
                   {t.empty.waitingDesc}
                 </p>
@@ -204,7 +204,7 @@ export default function MapExplorerPage() {
         </div>
 
         {/* Right Column: Full-Height Interactive Map */}
-        <div className="lg:col-span-8 relative rounded-2xl overflow-hidden border border-slate-800 shadow-xl">
+        <div className="lg:col-span-8 relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xl">
           <MapWrapper
             auctions={filteredAuctions}
             selectedAuctionId={selectedAuction?.id}
@@ -219,7 +219,7 @@ export default function MapExplorerPage() {
             const selectedLive = getLiveAuctionProgressionState(selectedAuction);
             const selectedStage = getCallStageConfig(selectedLive);
             return (
-              <div className={`absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 bg-slate-950/95 border-2 ${selectedStage.borderClass} rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2`}>
+              <div className={`absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-84 bg-white/95 dark:bg-slate-950/95 border-2 ${selectedStage.borderClass} rounded-xl p-3.5 shadow-2xl backdrop-blur-md z-[1000] space-y-2`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1.5 pb-0.5">
@@ -227,24 +227,24 @@ export default function MapExplorerPage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${selectedStage.dotClass}`} />
                         <span>{language === 'es' ? selectedStage.shortLabelEs : selectedStage.shortLabelEn}</span>
                       </span>
-                      <p className="text-[10px] uppercase font-bold text-slate-400">
+                      <p className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">
                         {selectedAuction.canton}, {selectedAuction.province}
                       </p>
                     </div>
-                    <p className="text-xs font-bold text-white line-clamp-1">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
                       {getLocalizedPropertyTitle(selectedAuction, language)}
                     </p>
                   </div>
-                  <span className="font-mono text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">
+                  <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300">
                     {selectedAuction.currency}
                   </span>
                 </div>
 
                 <div className="flex items-baseline justify-between pt-1">
-                  <span className="text-base font-extrabold text-emerald-400 font-mono">
+                  <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
                     {formatCurrency(selectedLive.currentBasePrice, selectedAuction.currency)}
                   </span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {formatArea(selectedAuction.area_m2)}
                   </span>
                 </div>

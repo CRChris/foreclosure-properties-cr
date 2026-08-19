@@ -181,32 +181,32 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
   const progressPct = Math.round((completedCount / CHECKLIST_ITEMS.length) * 100);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md dark:shadow-xl space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               {t.dossier.dueDiligenceChecklist}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {t.dossier.dueDiligenceDesc}
             </p>
           </div>
         </div>
 
         {/* Progress Bar & Counter */}
-        <div className="bg-slate-950 px-4 py-2 rounded-2xl border border-slate-800 space-y-1 min-w-[180px]">
+        <div className="bg-slate-50 dark:bg-slate-950 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1 min-w-[180px]">
           <div className="flex justify-between items-center text-xs font-bold">
-            <span className="text-slate-400">{t.dossier.checklistProgress}:</span>
-            <span className="text-emerald-400 font-mono">
+            <span className="text-slate-500 dark:text-slate-400">{t.dossier.checklistProgress}:</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-mono">
               {completedCount} / {CHECKLIST_ITEMS.length} ({progressPct}%)
             </span>
           </div>
-          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
             <div
               className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300 rounded-full"
               style={{ width: `${progressPct}%` }}
@@ -226,33 +226,33 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
               onClick={() => toggleItem(item.id)}
               className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 cursor-pointer ${
                 isDone
-                  ? 'bg-emerald-950/20 border-emerald-500/50 shadow-md shadow-emerald-950/20'
-                  : 'bg-slate-950/70 border-slate-800 hover:border-slate-700 hover:bg-slate-950'
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-500/50 shadow-sm'
+                  : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-950/70 border-slate-200 dark:border-slate-800 dark:hover:border-slate-700 dark:hover:bg-slate-950'
               }`}
             >
               <div className="flex items-start gap-3.5">
                 {/* Checkbox Icon */}
                 <div className="mt-0.5 shrink-0">
                   {isDone ? (
-                    <CheckSquare className="w-5 h-5 text-emerald-400" />
+                    <CheckSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   ) : (
-                    <Square className="w-5 h-5 text-slate-500 hover:text-slate-300 transition-colors" />
+                    <Square className="w-5 h-5 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors" />
                   )}
                 </div>
 
                 {/* Content */}
                 <div className="space-y-1.5 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
                       {item.category}
                     </span>
                     <span
                       className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
                         item.criticality === 'CRÍTICO' || item.criticality === 'CRITICAL'
-                          ? 'bg-rose-950/80 text-rose-300 border-rose-800/80'
+                          ? 'bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800/80'
                           : item.criticality === 'ALTO' || item.criticality === 'HIGH'
-                          ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
-                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                          ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80'
+                          : 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
                       }`}
                     >
                       {item.criticality}
@@ -261,23 +261,23 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
 
                   <h3
                     className={`text-sm font-bold tracking-tight transition-colors ${
-                      isDone ? 'text-emerald-200 line-through' : 'text-white'
+                      isDone ? 'text-emerald-800 dark:text-emerald-200 line-through' : 'text-slate-900 dark:text-white'
                     }`}
                   >
                     {item.title}
                   </h3>
 
-                  <p className="text-xs text-slate-300 leading-relaxed">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                     {item.description}
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 text-[11px]">
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800/80 text-slate-400">
-                      <strong className="text-slate-300 block">{language === 'es' ? 'Fundamento Jurídico:' : 'Legal Basis:'}</strong>
+                    <div className="bg-white dark:bg-slate-900/90 p-2 rounded-xl border border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400">
+                      <strong className="text-slate-900 dark:text-slate-300 block">{language === 'es' ? 'Fundamento Jurídico:' : 'Legal Basis:'}</strong>
                       <span>{item.legalBasis}</span>
                     </div>
-                    <div className="bg-slate-900/90 p-2 rounded-xl border border-slate-800/80 text-slate-400">
-                      <strong className="text-slate-300 block">{language === 'es' ? 'Acción Recomendada:' : 'Recommended Action:'}</strong>
+                    <div className="bg-white dark:bg-slate-900/90 p-2 rounded-xl border border-slate-200 dark:border-slate-800/80 text-slate-600 dark:text-slate-400">
+                      <strong className="text-slate-900 dark:text-slate-300 block">{language === 'es' ? 'Acción Recomendada:' : 'Recommended Action:'}</strong>
                       <span>{item.actionGuidance}</span>
                     </div>
                   </div>

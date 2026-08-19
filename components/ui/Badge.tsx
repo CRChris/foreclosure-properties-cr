@@ -16,12 +16,12 @@ export function Badge({
   const baseStyles = 'inline-flex items-center font-medium tracking-wide rounded-md border';
   
   const variants = {
-    default: 'bg-slate-800/80 text-slate-300 border-slate-700/80',
-    success: 'bg-emerald-950/60 text-emerald-300 border-emerald-700/40',
-    warning: 'bg-amber-950/60 text-amber-300 border-amber-700/40',
-    danger: 'bg-rose-950/60 text-rose-300 border-rose-700/40',
-    info: 'bg-cyan-950/60 text-cyan-300 border-cyan-700/40',
-    purple: 'bg-indigo-950/60 text-indigo-300 border-indigo-700/40',
+    default: 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700/80',
+    success: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/40',
+    warning: 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/40',
+    danger: 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-700/40',
+    info: 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700/40',
+    purple: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700/40',
   };
 
   const sizes = {
