@@ -309,11 +309,15 @@ SPANISH_MONTHS: Dict[str, int] = {
 }
 
 SPANISH_WORD_NUMBERS: Dict[str, int] = {
-    "un": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
+    "cero": 0, "un": 1, "uno": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9,
     "diez": 10, "once": 11, "doce": 12, "trece": 13, "catorce": 14, "quince": 15, "dieciséis": 16, "dieciseis": 16,
-    "diecisiete": 17, "dieciocho": 18, "diecinueve": 19, "veinte": 20, "veintiuno": 21, "veintidós": 22, "veintidos": 22,
-    "veintitrés": 23, "veintitres": 23, "veinticuatro": 24, "veinticinco": 25, "veintiséis": 26, "veintiseis": 26,
-    "veintisiete": 27, "veintiocho": 28, "veintinueve": 29, "treinta": 30, "treinta y uno": 31
+    "diecisiete": 17, "dieciocho": 18, "diecinueve": 19, "veinte": 20, "veintiún": 21, "veintiun": 21, "veintiuno": 21, "veintiuna": 21,
+    "veintidós": 22, "veintidos": 22, "veintitrés": 23, "veintitres": 23, "veinticuatro": 24, "veinticinco": 25,
+    "veintiséis": 26, "veintiseis": 26, "veintisiete": 27, "veintiocho": 28, "veintinueve": 29,
+    "treinta": 30, "cuarenta": 40, "cincuenta": 50, "sesenta": 60, "setenta": 70, "ochenta": 80, "noventa": 90,
+    "cien": 100, "ciento": 100, "doscientos": 200, "doscientas": 200, "trescientos": 300, "trescientas": 300,
+    "cuatrocientos": 400, "cuatrocientas": 400, "quinientos": 500, "quinientas": 500, "seiscientos": 600, "seiscientas": 600,
+    "setecientos": 700, "setecientas": 700, "ochocientos": 800, "ochocientas": 800, "novecientos": 900, "novecientas": 900,
 }
 
 def create_ssl_context():
@@ -429,51 +433,155 @@ def slice_remates_section(full_text: str) -> str:
                 return text_to_search[start_idx:]
     return full_text
 
-def split_into_expediente_blocks(text: str) -> List[str]:
+def normalize_text(text: str) -> str:
+    """Removes accents and normalizes lowercase string for resilient keyword matching."""
+    if not text:
+        return ""
+    import unicodedata
+    n = unicodedata.normalize("NFD", text.lower())
+    return "".join(c for c in n if unicodedata.category(c) != "Mn").strip()
+
+def is_real_estate_foreclosure_edict(text: str) -> bool:
     """
-    Step 3: Splits judicial publication text by case identifier blocks:
-    - Variations of 'EXP:', 'EXPEDIENTE:', 'NÚMERO DE EXPEDIENTE:', 'NO. DE EXP:'
-    - Standard Costa Rican judicial docket formats: XX-XXXXXX-XXXX-XX or XX-XXXXX-XXXX-XX
-    - Court headings: 'JUZGADO...', 'Al ser las...', 'En la puerta...', 'Por disposición...'
+    Step 2: Real Estate Foreclosure Inclusion & Exclusion Pipeline:
+    
+    1. Inclusion: Must contain 'remate' (or 'subasta', 'postor', etc.) AND match ANY real estate keyword:
+       - Identifiers: 'finca', 'folio real', 'matrícula', 'plano:', 'plano catastrado', 'partido de'
+       - Asset types: 'terreno', 'lote', 'casa', 'casa de habitación', 'vivienda', 'construir', 'filial', 
+         'finca filial', 'condominio', 'apartamento', 'local comercial', 'locales', 'edificio', 'bodega', 
+         'agricultura', 'pasto', 'solar', 'predio', 'parcela', 'inmueble', 'quinta'
+       - Boundaries/Measurements: 'mide:', 'mide', 'metros cuadrados', 'colinda:', 'colinda', 'linderos', 'cabida', 'superficie'
+       - Process: 'ejecución hipotecaria', 'proceso hipotecario', 'ejecución fiduciaria', 'hipotecario'
+       
+    2. Exclusion: Excludes movable asset/vehicle notices containing:
+       - 'vehículo', 'automóvil', 'motocicleta', 'chasis', 'cilindrada', 'placa:', 'carrocería', 'marca:', 'estilo:'
+       - (UNLESS accompanied by a registered real estate finca/matrícula/folio real).
+       - Excludes administrative notices ('monedas de colección', 'billetes', 'fe de erratas', 'nombramiento de curador').
     """
-    pattern = re.compile(
-        r'(?=(?:(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*[0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+|'
-        r'\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b|'
-        r'(?:JUZGADO|TRIBUNAL)\s+[\w\s,]+?(?:DE\s+COBRO|CIVIL|AGRARIO|CONCURSAL)|'
-        r'En\s+(?:la\s+puerta|el\s+despacho|este\s+despacho)|'
-        r'Al\s+ser\s+las\s+\d+|A\s+las\s+\d+\s+horas|'
-        r'AVISO\s+DE\s+REMATE|SUB_ASTA|REMATE\s+JUDICIAL)\b)',
+    if not text or len(text.strip()) < 80:
+        return False
+
+    norm = normalize_text(text)
+
+    # 1. Must contain an authentic auction trigger keyword
+    has_auction_kw = any(k in norm for k in [
+        "remate", "rematara", "rematare", "subasta", "subastara", "subastare",
+        "postor", "postura", "mejor postor", "al mejor postor", "adjudicarse el bien"
+    ])
+    if not has_auction_kw:
+        return False
+
+    # 2. Real estate inclusion keywords (matches ANY)
+    re_identifiers = [
+        "finca", "folio real", "matricula", "plano:", "plano ", "plano catastrado", 
+        "partido de", "registro publico", "registro general"
+    ]
+    re_assets = [
+        "terreno", "lote", "casa", "casa de habitacion", "vivienda", "construir", 
+        "filial", "finca filial", "condominio", "apartamento", "local comercial", 
+        "locales", "edificio", "bodega", "agricultura", "agricola", "pasto", 
+        "solar", "predio", "parcela", "inmueble", "quinta", "finca inscrita"
+    ]
+    re_measurements = [
+        "mide:", "mide ", "metros cuadrados", "colinda:", "colinda ", "linderos", 
+        "superficie", "cabida", "m2", "m²", "hectareas", "ha."
+    ]
+    re_process = [
+        "ejecucion hipotecaria", "proceso hipotecario", "hipotecario", 
+        "ejecucion fiduciaria", "fideicomiso de garantia", "cobro judicial"
+    ]
+
+    has_re_kw = (
+        any(k in norm for k in re_identifiers) or
+        any(k in norm for k in re_assets) or
+        any(k in norm for k in re_measurements) or
+        any(k in norm for k in re_process)
+    )
+    if not has_re_kw:
+        return False
+
+    # 3. Vehicle / Movable asset exclusion (unless accompanied by real estate property ID)
+    vehicle_kws = [
+        "vehiculo", "automovil", "motocicleta", "chasis", "cilindrada", 
+        "placa:", "carroceria", "marca:", "estilo:", "camion", "cabina", "remolque"
+    ]
+    has_vehicle = any(k in norm for k in vehicle_kws)
+    if has_vehicle:
+        # Check if block ALSO explicitly contains real estate property registration markers
+        has_real_estate_id = (
+            any(k in norm for k in ["finca", "folio real", "matricula"]) and 
+            any(k in norm for k in ["terreno", "casa", "lote", "condominio", "filial", "mide", "metros cuadrados", "plano"])
+        )
+        if not has_real_estate_id:
+            return False
+
+    # 4. Administrative / Non-real-estate exclusions
+    admin_exclusions = [
+        "fe de erratas", "monedas de coleccion", "billetes", 
+        "edictos matrimoniales", "nombramiento de curador", "acuerdo n°", "acuerdo no"
+    ]
+    if any(k in norm for k in admin_exclusions):
+        return False
+
+    return True
+
+# Backward compatibility alias
+def is_foreclosure_edict_text(text: str) -> bool:
+    return is_real_estate_foreclosure_edict(text)
+
+def segment_document_blocks(text: str) -> List[str]:
+    r"""
+    Step 1: Splits Boletín Judicial / Nexus PJ publication text into discrete notice blocks.
+    Uses multi-tiered segmentation:
+    - Publication boundary markers (e.g. 'Referencia N°:', 'publicación número:', 'N° de publicación:')
+    - Closing boundary tags (e.g. '—1 vez.—( IN... )')
+    - Case docket identifiers (e.g. 'EXP:\s*\d{2}-\d{4,8}-\d{3,4}-[A-Z0-9]+')
+    - Court headers (e.g. 'JUZGADO...', 'TRIBUNAL...', 'AVISO DE REMATE')
+    """
+    if not text:
+        return []
+
+    # 1. Primary boundary: Publication reference markers
+    pub_pattern = re.compile(
+        r"(?=(?:Referencia\s+N[º°o]?\s*:|publicaci[óo]n\s+n[úu]mero\s*:|N[º°o]\s+de\s+publicaci[óo]n\s*:|publicaci[óo]n\s+N[º°o]?\s*:))",
         re.IGNORECASE
     )
-    raw_blocks = pattern.split(text)
-    cleaned_blocks: List[str] = []
-    for b in raw_blocks:
-        b_str = b.strip()
-        if len(b_str) >= 100 and is_foreclosure_edict_text(b_str):
-            cleaned_blocks.append(b_str)
-    return cleaned_blocks
+    pub_parts = pub_pattern.split(text)
+    if len(pub_parts) > 1:
+        valid_pub_blocks = [p.strip() for p in pub_parts if len(p.strip()) >= 80]
+        if len(valid_pub_blocks) > 1:
+            return valid_pub_blocks
 
-def is_foreclosure_edict_text(text: str) -> bool:
-    """
-    Validates whether an edict text contains authentic real estate foreclosure auction markers.
-    Strictly filters out vehicle auctions, coins/banknotes lots, and government fe de erratas notices.
-    """
-    if len(text) < 100:
-        return False
-    t_lower = text.lower()
+    # 2. Secondary boundary: Imprenta Nacional closure markers "\d+ vez.—( IN... )"
+    close_pattern = re.compile(
+        r"(?<=\b(?:1|2|3)\s+vez\.—\s*\(\s*IN[0-9]+\s*\)\s*\.?)\s*\n+",
+        re.IGNORECASE
+    )
+    close_parts = close_pattern.split(text)
+    if len(close_parts) > 1:
+        valid_close_blocks = [p.strip() for p in close_parts if len(p.strip()) >= 80]
+        if len(valid_close_blocks) > 1:
+            return valid_close_blocks
 
-    # Reject non-real-estate auctions
-    if re.search(r'\b(vehículo|automóvil|placa\s+[A-Z0-9]+|marca:\s*|motocicleta|camión|chasis|estilo:\s*|carrocería)\b', t_lower):
-        return False
-    if re.search(r'\b(monedas\s+de\s+colección|billetes|muebles\s+y\s+enseres)\b', t_lower):
-        return False
-    if re.search(r'\b(fe\s+de\s+erratas|nombramiento|acuerdo\s+n[º°])\b', t_lower):
-        return False
+    # 3. Tertiary boundary: Court headers and docket identifiers at line starts
+    line_start_pattern = re.compile(
+        r"(?=(?:\n\s*(?:JUZGADO|TRIBUNAL)\s+[\w\s,.-]+?(?:DE\s+COBRO|CIVIL|AGRARIO|CONCURSAL|MENOR\s+CUANT[IÍ]A|PRIMERA\s+INSTANCIA)|"
+        r"\n\s*(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*[0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+|"
+        r"\n\s*\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Za-z0-9]*\b|"
+        r"\n\s*(?:AVISO\s+DE\s+REMATE|EDICTO\s+DE\s+REMATE|PRIMER\s+REMATE|REMATE\s+JUDICIAL)\b))",
+        re.IGNORECASE
+    )
+    line_parts = line_start_pattern.split(text)
+    valid_line_blocks = [p.strip() for p in line_parts if len(p.strip()) >= 80]
+    if len(valid_line_blocks) > 1:
+        return valid_line_blocks
 
-    has_auction_kw = any(w in t_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor", "al mejor postor"])
-    has_property_kw = any(w in t_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide", "lote", "propiedad", "naturaleza", "filial", "condominio"])
-    has_judicial_kw = any(w in t_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de", "dólares", "colones", "horas", "precio"])
-    return has_auction_kw and has_property_kw and has_judicial_kw
+    return [text.strip()]
+
+def split_into_expediente_blocks(text: str) -> List[str]:
+    """Segment document text into discrete blocks and filter for real estate foreclosures."""
+    blocks = segment_document_blocks(text)
+    return [b for b in blocks if is_real_estate_foreclosure_edict(b)]
 
 def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -> str:
     """
@@ -794,6 +902,60 @@ EDICT TEXT:
 {edict_text}
 """
 
+def parse_spanish_words_to_number(text: str) -> float:
+    """
+    Parses Spanish spelled-out written numbers into float.
+    Handles:
+      'SIETE MILLONES DE COLONES' -> 7000000.0
+      'DOSCIENTOS VEINTE MIL DÓLARES' -> 220000.0
+      'DIEZ MILLONES QUINIENTOS MIL COLONES' -> 10500000.0
+      'DIECISIETE MILLONES NOVECIENTOS VEINTICINCO MIL SETECIENTOS SESENTA Y SEIS COLONES CON DIECISÉIS CÉNTIMOS' -> 17925766.16
+    """
+    if not text:
+        return 0.0
+    norm = normalize_text(text)
+    
+    # Extract cents / céntimos
+    cents = 0.0
+    cents_match = re.search(r"con\s+([a-z\s]+?)\s+(?:centimos|centavos)", norm)
+    if cents_match:
+        c_words = [w for w in re.split(r"[\s,-]+", cents_match.group(1)) if w and w not in ("de", "y")]
+        c_val = 0.0
+        for w in c_words:
+            if w in SPANISH_WORD_NUMBERS:
+                c_val += SPANISH_WORD_NUMBERS[w]
+        cents = c_val / 100.0
+        norm = norm[:cents_match.start()].strip()
+
+    words = [
+        w for w in re.split(r"[\s,-]+", norm) 
+        if w and w not in ("de", "con", "y", "del", "colones", "dolares", "moneda", "nacional", "exactos", "netos", "americanos", "base", "la", "una", "por")
+    ]
+    
+    total = 0.0
+    current = 0.0
+    
+    for w in words:
+        if w in SPANISH_WORD_NUMBERS:
+            current += SPANISH_WORD_NUMBERS[w]
+        elif w == "mil":
+            if current == 0:
+                current = 1
+            current *= 1000
+        elif w in ("millon", "millones"):
+            if current == 0:
+                current = 1
+            total += current * 1000000
+            current = 0
+        elif w in ("billon", "billones"):
+            if current == 0:
+                current = 1
+            total += current * 1000000000000
+            current = 0
+            
+    total += current + cents
+    return total
+
 def parse_cr_price_string(p_str: str) -> Optional[float]:
     """
     Parses Costa Rican and international currency strings into float.
@@ -846,24 +1008,20 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
     Step 3: Resilient multi-court regex fallback parser.
     Robustly extracts structured property foreclosure data from varied Juzgados de Cobro / Civiles / Agrarios formats.
     Ensures missing non-critical fields (e.g., plano, defendant, exact district) do not drop the block.
-    Strictly filters out non-real-estate auctions (vehicles, coins, administrative notices).
+    Strictly filters out non-real-estate auctions using the inclusion & exclusion pipeline.
     """
     try:
         text_lower = edict_text.lower()
 
-        # Reject non-real-estate auctions
-        if re.search(r'\b(vehículo|automóvil|placa\s+[A-Z0-9]+|marca:\s*|motocicleta|camión|chasis|estilo:\s*|carrocería)\b', text_lower):
-            return None
-        if re.search(r'\b(monedas\s+de\s+colección|billetes|muebles\s+y\s+enseres)\b', text_lower):
-            return None
-        if re.search(r'\b(fe\s+de\s+erratas|nombramiento|acuerdo\s+n[º°])\b', text_lower):
+        # Enforce real estate inclusion & exclusion pipeline
+        if not is_real_estate_foreclosure_edict(edict_text):
             return None
 
         # 1. Expediente Docket Number (Fuzzy multi-pattern)
         exp_patterns = [
-            r"(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+|\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}\b|[A-Z]{2,4}-[0-9]{3,6}-[0-9]{2,4})",
-            r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Z0-9]*)\b",
-            r"(?:expediente\s+n[úu]mero\s+|expediente\s+n[º°]\s*)([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+)",
+            r"(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+|\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}\b|[A-Z]{2,4}-[0-9]{3,6}-[0-9]{2,4})",
+            r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Za-z0-9]*)\b",
+            r"(?:expediente\s+n[úu]mero\s+|expediente\s+n[º°]\s*)([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Za-z0-9]+)",
         ]
         expediente = None
         for p in exp_patterns:
@@ -878,7 +1036,15 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
             if gen_match:
                 expediente = gen_match.group(1).strip()
             else:
-                return None  # Real estate foreclosure must have a docket number
+                # Look for publication reference e.g. Referencia N°: 2026-001 or IN2026...
+                ref_m = re.search(r"(?:Referencia\s+N[º°o]?\s*:|publicaci[óo]n\s+n[úu]mero\s*:)\s*([A-Za-z0-9-]+)", edict_text, re.I)
+                in_m = re.search(r"\(\s*(IN[0-9]{8,14})\s*\)", edict_text)
+                if ref_m:
+                    expediente = f"REF-{ref_m.group(1).strip()}"
+                elif in_m:
+                    expediente = f"ED-{in_m.group(1).strip()}"
+                else:
+                    return None  # Foreclosure must have an identifier
 
         # 2. Court / Juzgado Name
         court_match = re.search(r"((?:Juzgado|Tribunal)\s+[\w\s,.-]+?)(?:\.|$|\n|;|–|-|con\s+la\s+base|en\s+la\s+puerta|hace\s+saber)", edict_text, re.I)
@@ -953,8 +1119,10 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         plano_match = re.search(r"(?:plano\s+(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s+|:)?|catastro\s+n[úu]mero\s+)([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        # 6. Currency & 3-Call Base Prices (Exact Base Context)
-        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\.\;\n]+)", edict_text, re.I)
+        # 6. Currency & 3-Call Base Prices (Handles Digits and Spelled-Out Spanish Words)
+        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+?)(?:\.\s+[A-ZÁÉÍÓÚ]|\.\s*—|\.\s*$|\;\s*|\n)", edict_text, re.I)
+        if not base_match:
+            base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\;\n]+)", edict_text, re.I)
         base_sentence = base_match.group(0) if base_match else edict_text
         b_low = base_sentence.lower()
 
@@ -985,6 +1153,12 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                     elif currency == "CRC" and 500000 <= val <= 20000000000:
                         prices.append(val)
 
+        # Spelled-out Spanish words fallback (e.g. "SIETE MILLONES DE COLONES")
+        if not prices:
+            word_val = parse_spanish_words_to_number(base_sentence)
+            if (currency == "USD" and 3000 <= word_val <= 50000000) or (currency == "CRC" and 500000 <= word_val <= 20000000000):
+                prices.append(word_val)
+
         if not prices:
             # Fallback broader price search in whole text
             all_numbers = re.findall(r'([0-9]{1,3}(?:[\.,][0-9]{3})+(?:[\.,][0-9]{2})?)', edict_text)
@@ -1005,7 +1179,7 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         nat_match = re.search(r"(?:naturaleza\s*[:\s]*|la\s+cual\s+es\s+|terreno\s+de\s+)([^\.\n;]+)", edict_text, re.I)
         naturaleza = nat_match.group(1).strip() if nat_match else f"Inmueble en {detected_canton}, {detected_prov}"
 
-        # 8. Area in m2
+        # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
         area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:m2|metros|mts|hect[áa]reas|ha)", edict_text, re.I)
         area = 250.0
         if area_match:
@@ -1018,6 +1192,15 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                     area = area_val
             except Exception:
                 area = 250.0
+        else:
+            word_area_match = re.search(r"(?:mide|cabida|medida|superficie|área)\s*(?:de)?\s*([a-záéíóú\s]+?)\s*(?:metros\s+cuadrados|m2|m²|hect[áa]reas|ha)", edict_text, re.I)
+            if word_area_match:
+                w_val = parse_spanish_words_to_number(word_area_match.group(1))
+                if 10 <= w_val <= 100000000:
+                    if "hect" in word_area_match.group(0).lower() or "ha" in word_area_match.group(0).lower():
+                        area = w_val * 10000.0
+                    else:
+                        area = w_val
 
         # 9. Plaintiff & Defendant
         plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+(?:de\s+)?[\w\s]+\s+de|actor\s*:?|ejecutante\s*:?)\s+([\w\s,.-]+?)\s+(?:contra|demandad)", edict_text, re.I)
@@ -1608,7 +1791,9 @@ def check_yield_and_alert(
 def main():
     start_time = time.time()
     parser = argparse.ArgumentParser(description="Nexus PJ / Boletín Judicial Foreclosure Ingestion Engine")
-    parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF file to parse")
+    parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF or TXT file to parse")
+    parser.add_argument("--url", type=str, help="URL of a Boletín Judicial publication or Nexus PJ document to parse")
+    parser.add_argument("--text", type=str, help="Raw text string containing judicial notices to parse")
     parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
     parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
     parser.add_argument("--test-discord", action="store_true", help="Send a test notification to configured Discord Webhook")
@@ -1645,20 +1830,25 @@ def main():
     raw_edicts: List[str] = []
 
     try:
-        if args.file:
+        if args.text:
+            logger.info("Parsing raw text input provided via CLI...")
+            raw_edicts = split_into_expediente_blocks(args.text)
+        elif args.file:
             if not os.path.exists(args.file):
                 logger.error(f"Specified file does not exist: {args.file}")
                 sys.exit(1)
-            logger.info(f"Reading local PDF file: {args.file}")
-            from pypdf import PdfReader
-            reader = PdfReader(args.file)
-            full_text = ""
-            for page in reader.pages:
-                full_text += (page.extract_text() or "") + "\n"
-            
+            logger.info(f"Reading local file: {args.file}")
+            if args.file.lower().endswith(".pdf"):
+                from pypdf import PdfReader
+                reader = PdfReader(args.file)
+                full_text = ""
+                for page in reader.pages:
+                    full_text += (page.extract_text() or "") + "\n"
+            else:
+                with open(args.file, "r", encoding="utf-8", errors="ignore") as f:
+                    full_text = f.read()
+
             remates_text = slice_remates_section(full_text)
-            
-            # Full-text fallback check
             dockets_full = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", full_text, re.I)
             dockets_sliced = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", remates_text, re.I)
             if len(dockets_full) > len(dockets_sliced) and len(dockets_sliced) < (len(dockets_full) * 0.8):
@@ -1666,6 +1856,25 @@ def main():
                 remates_text = full_text
 
             raw_edicts = split_into_expediente_blocks(remates_text)
+        elif args.url:
+            logger.info(f"Fetching document from URL: {args.url}")
+            ctx = create_ssl_context()
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+            }
+            req = urllib.request.Request(args.url, headers=headers)
+            with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+                is_valid, data_bytes, err = validate_and_read_response(resp, args.url, min_bytes=50)
+                if is_valid:
+                    if args.url.lower().endswith(".pdf") or (resp.headers.get("Content-Type", "").lower().startswith("application/pdf")):
+                        from pypdf import PdfReader
+                        import io
+                        reader = PdfReader(io.BytesIO(data_bytes))
+                        full_text = "".join((p.extract_text() or "") + "\n" for p in reader.pages)
+                    else:
+                        full_text = data_bytes.decode("utf-8", errors="ignore")
+                    raw_edicts = split_into_expediente_blocks(full_text)
         else:
             target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
             raw_edicts = fetch_daily_bulletin(target_date)
