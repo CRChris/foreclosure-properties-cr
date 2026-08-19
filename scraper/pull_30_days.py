@@ -26,20 +26,16 @@ from typing import List, Dict, Any, Set, Tuple
 from zoneinfo import ZoneInfo
 from pypdf import PdfReader
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    load_dotenv(".env.local")
-except ImportError:
-    pass
-
 from scraper.main import (
+    load_env_files,
     create_ssl_context,
     CR_CANTON_CENTROIDS,
     PROVINCE_CENTROIDS,
     PROVINCE_PREFIXES,
     ForeclosureAuction,
     extract_single_edict_regex_fallback,
+    extract_auctions_with_gemini,
+    find_all_unique_folios_in_text,
     enrich_auction_data,
     upsert_to_supabase,
     fetch_from_nexuspj_api,
@@ -47,12 +43,17 @@ from scraper.main import (
     slice_remates_section,
     split_into_expediente_blocks,
     check_yield_and_alert,
+    send_discord_notification,
+    compute_reconciliation_metrics,
 )
 from scraper.auction_tracker import sync_auction_progression_via_rpc
+
+load_env_files()
 
 COSTA_RICA_TZ = ZoneInfo("America/Costa_Rica")
 
 logging.basicConfig(
+
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s"
 )
@@ -532,6 +533,15 @@ def pull_30_days_data():
 
     if not unique_new_auctions:
         logger.info("All scanned foreclosures are already up-to-date in Supabase. Zero duplicates needed.")
+        send_discord_notification(
+            status="no_new",
+            title="30-Day Foreclosure Scan Complete",
+            description="All scanned foreclosures across the past 30 days are already up-to-date in Supabase. 0 new inserts needed.",
+            run_date_str=now_date_str,
+            total_edicts=len(all_extracted),
+            added=0,
+            skipped=len(all_extracted)
+        )
         return
 
     # 5. Enrich records with PostGIS and market valuations
@@ -540,15 +550,29 @@ def pull_30_days_data():
 
     # 6. Insert new records to Supabase PostGIS
     logger.info(f"💾 Upserting {len(enriched_records)} unique records to Supabase PostGIS...")
-    inserted_count = upsert_to_supabase(enriched_records)
+    inserted_count, skipped_count, new_expedientes = upsert_to_supabase(enriched_records)
     logger.info(f"✓ Successfully inserted {inserted_count} new unique foreclosures into Supabase!")
 
     # 7. Trigger Master Lifecycle Progression RPC
     logger.info("⚡ Synchronizing lifecycle statuses via RPC...")
     progression_result = sync_auction_progression_via_rpc()
     logger.info(f"✓ Lifecycle Progression: {progression_result}")
+
+    # 8. Send Discord Notification
+    send_discord_notification(
+        status="success" if inserted_count > 0 else "no_new",
+        title="30-Day Foreclosure Ingestion Complete",
+        description=f"Full 30-day scan of **Nexus PJ & Boletín Judicial** finished successfully.",
+        run_date_str=now_date_str,
+        total_edicts=len(unique_new_auctions),
+        added=inserted_count,
+        skipped=skipped_count,
+        expedientes=new_expedientes
+    )
+
     logger.info("🎉 30-Day Nexus PJ / Boletín Judicial Ingestion Finished Successfully!")
 
 
 if __name__ == "__main__":
     pull_30_days_data()
+

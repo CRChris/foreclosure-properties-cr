@@ -16,9 +16,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Set, Tuple, Any, Optional
 from pypdf import PdfReader
 from zoneinfo import ZoneInfo
-from dotenv import load_dotenv
-
 from scraper.main import (
+    load_env_files,
     create_ssl_context,
     CR_CANTON_CENTROIDS,
     PROVINCE_CENTROIDS,
@@ -33,18 +32,20 @@ from scraper.main import (
     slice_remates_section,
     split_into_expediente_blocks,
     check_yield_and_alert,
+    send_discord_notification,
+    find_all_unique_folios_in_text,
 )
 from scraper.pull_30_days import fetch_existing_expedientes_and_folios
 from scraper.auction_tracker import sync_auction_progression_via_rpc
 
-load_dotenv(".env.local")
-load_dotenv()
+load_env_files()
 
 COSTA_RICA_TZ = ZoneInfo("America/Costa_Rica")
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s]: %(message)s")
+
 logger = logging.getLogger("historical.ingestion")
 
 
@@ -250,13 +251,16 @@ def scan_and_ingest_history(business_days: int = 10):
         extra_context="10-business-day ingestion run"
     )
 
+    inserted_count = 0
+    new_expedientes = []
+
     # 5. Enrich & Upsert to Supabase
     if unique_new:
         logger.info(f"🗺️  Enriching {len(unique_new)} unique properties with PostGIS coordinates and valuations...")
         enriched = [enrich_auction_data(a) for a in unique_new]
 
         logger.info(f"💾 Upserting {len(enriched)} unique records to Supabase PostGIS...")
-        inserted_count = upsert_to_supabase(enriched)
+        inserted_count, skipped_count, new_expedientes = upsert_to_supabase(enriched)
         logger.info(f"✓ Successfully inserted {inserted_count} new unique foreclosures into Supabase!")
     else:
         logger.info("✓ All properties in these 10 business days are already up to date in Supabase.")
@@ -270,8 +274,21 @@ def scan_and_ingest_history(business_days: int = 10):
     progression_result = sync_auction_progression_via_rpc()
     logger.info(f"✓ Lifecycle Progression: {progression_result}")
 
+    # 8. Send Discord Notification
+    send_discord_notification(
+        status="success" if inserted_count > 0 else "no_new",
+        title="10-Day Historical Ingestion & Deduplication Complete",
+        description="10-business-day historical scan of **Nexus PJ & Boletín Judicial** and catalog deduplication finished.",
+        run_date_str=now_cr.strftime("%Y-%m-%d"),
+        total_edicts=len(unique_new),
+        added=inserted_count,
+        skipped=len(all_extracted) - inserted_count,
+        expedientes=new_expedientes
+    )
+
     logger.info("\n🎉 10-Business-Day Historical Ingestion & Deduplication Finished Successfully!")
 
 
 if __name__ == "__main__":
     scan_and_ingest_history(business_days=10)
+

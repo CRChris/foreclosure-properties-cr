@@ -40,12 +40,29 @@ except ImportError:
     requests = None
     BeautifulSoup = None
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    load_dotenv(".env.local")
-except ImportError:
-    pass
+def load_env_files():
+    """Zero-dependency .env and .env.local reader ensuring credentials load in any Python environment."""
+    search_dirs = [os.getcwd(), os.path.dirname(os.path.abspath(__file__)), os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
+    for d in search_dirs:
+        for fname in [".env", ".env.local"]:
+            p = os.path.join(d, fname)
+            if os.path.isfile(p):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#") or "=" not in line:
+                                continue
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip().strip("'").strip('"')
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+                except Exception:
+                    pass
+
+load_env_files()
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -533,7 +550,7 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     """
     Pulls structured foreclosure notices directly from the official Nexus PJ search API
     (nexuspj.poder-judicial.go.cr/api/search), filtering specifically for Boletín Judicial
-    court foreclosures (Remates Judiciales).
+    court foreclosures (Remates Judiciales) with dynamic multi-page result pagination.
     """
     import urllib.request
     try:
@@ -543,12 +560,13 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
 
     ctx = create_ssl_context()
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/122.0.0.0",
         "Accept": "application/json, text/plain, */*",
         "Content-Type": "application/json",
     }
     
     edicts: List[str] = []
+    seen_doc_ids: Set[str] = set()
     
     search_queries = [
         '"al mejor postor remataré"',
@@ -563,71 +581,83 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     logger.info(f"Connecting to official Nexus PJ API endpoint: {NEXUS_PJ_SEARCH_API}")
     
     for query_str in search_queries:
-        payload = {
-            "q": query_str,
-            "size": 30,
-            "page": 1,
-            "facets": "",
-            "exp": "",
-            "isFav": False,
-            "isCart": False,
-        }
-        try:
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(NEXUS_PJ_SEARCH_API, data=req_data, headers=headers, method="POST")
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-                is_valid, data_bytes, err = validate_and_read_response(resp, NEXUS_PJ_SEARCH_API, min_bytes=100, is_json=True)
-                if not is_valid:
-                    continue
+        page = 1
+        max_pages = 5  # Fetch up to 150 results per query string
+        while page <= max_pages:
+            payload = {
+                "q": query_str,
+                "size": 30,
+                "page": page,
+                "facets": "",
+                "exp": "",
+                "isFav": False,
+                "isCart": False,
+            }
+            try:
+                req_data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(NEXUS_PJ_SEARCH_API, data=req_data, headers=headers, method="POST")
+                with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                    is_valid, data_bytes, err = validate_and_read_response(resp, NEXUS_PJ_SEARCH_API, min_bytes=100, is_json=True)
+                    if not is_valid:
+                        break
 
-                res_json = json.loads(data_bytes.decode("utf-8", errors="ignore"))
-                hits = res_json.get("hits", [])
-                total = res_json.get("total", 0)
-                logger.info(f"Nexus PJ search for {query_str[:30]!r} returned {len(hits)} hits (total: {total}).")
-                
-                for hit in hits:
-                    doc_id = hit.get("idDocument") or hit.get("id")
-                    if not doc_id:
-                        continue
+                    res_json = json.loads(data_bytes.decode("utf-8", errors="ignore"))
+                    hits = res_json.get("hits", [])
+                    total = res_json.get("total", 0)
+                    logger.info(f"Nexus PJ query {query_str[:30]!r} (page {page}) returned {len(hits)} hits (total: {total}).")
                     
-                    try:
-                        doc_payload = json.dumps({"id": doc_id, "idDocument": doc_id}).encode("utf-8")
-                        doc_req = urllib.request.Request(NEXUS_PJ_DOC_API, data=doc_payload, headers=headers, method="POST")
-                        with urllib.request.urlopen(doc_req, context=ctx, timeout=10) as doc_resp:
-                            doc_valid, doc_bytes, _ = validate_and_read_response(doc_resp, f"{NEXUS_PJ_DOC_API}?id={doc_id}", min_bytes=100, is_json=True)
-                            if doc_valid:
-                                doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
-                                hit_obj = doc_body.get("hits", {}) if isinstance(doc_body.get("hits"), dict) else {}
-                                html = hit_obj.get("html", "")
-                                if html and BeautifulSoup:
-                                    soup = BeautifulSoup(html, "html.parser")
-                                    hit_text = soup.get_text("\n", strip=True)
-                                elif html:
-                                    hit_text = re.sub(r"<[^>]+>", "\n", html)
-                                else:
-                                    hit_text = hit_obj.get("texto") or hit_obj.get("contenido") or ""
-                                    
-                                if hit_text and len(hit_text) >= 100:
-                                    # Split by expediente blocks
-                                    blocks = split_into_expediente_blocks(hit_text)
-                                    if blocks:
-                                        edicts.extend(blocks)
-                                    else:
-                                        edicts.append(hit_text.strip())
-                    except Exception as doc_err:
-                        logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
+                    if not hits:
+                        break
                         
-        except Exception as e:
-            logger.debug(f"Nexus PJ query attempt skipped: {e}")
+                    for hit in hits:
+                        doc_id = hit.get("idDocument") or hit.get("id")
+                        if not doc_id or doc_id in seen_doc_ids:
+                            continue
+                        seen_doc_ids.add(doc_id)
+                        
+                        try:
+                            doc_payload = json.dumps({"id": doc_id, "idDocument": doc_id}).encode("utf-8")
+                            doc_req = urllib.request.Request(NEXUS_PJ_DOC_API, data=doc_payload, headers=headers, method="POST")
+                            with urllib.request.urlopen(doc_req, context=ctx, timeout=10) as doc_resp:
+                                doc_valid, doc_bytes, _ = validate_and_read_response(doc_resp, f"{NEXUS_PJ_DOC_API}?id={doc_id}", min_bytes=100, is_json=True)
+                                if doc_valid:
+                                    doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
+                                    hit_obj = doc_body.get("hits", {}) if isinstance(doc_body.get("hits"), dict) else {}
+                                    html = hit_obj.get("html", "")
+                                    if html and BeautifulSoup:
+                                        soup = BeautifulSoup(html, "html.parser")
+                                        hit_text = soup.get_text("\n", strip=True)
+                                    elif html:
+                                        hit_text = re.sub(r"<[^>]+>", "\n", html)
+                                    else:
+                                        hit_text = hit_obj.get("texto") or hit_obj.get("contenido") or ""
+                                        
+                                    if hit_text and len(hit_text) >= 100:
+                                        # Split by expediente blocks
+                                        blocks = split_into_expediente_blocks(hit_text)
+                                        if blocks:
+                                            edicts.extend(blocks)
+                                        else:
+                                            edicts.append(hit_text.strip())
+                        except Exception as doc_err:
+                            logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
+                            
+                    # Stop if we reached end of pages or retrieved total available hits
+                    if len(hits) < 30 or (page * 30) >= total:
+                        break
+                    page += 1
+            except Exception as e:
+                logger.debug(f"Nexus PJ query attempt skipped: {e}")
+                break
             
-    logger.info(f"Extracted {len(edicts)} foreclosure edict blocks directly from Nexus PJ API feed.")
+    logger.info(f"Extracted {len(edicts)} foreclosure edict blocks directly from Nexus PJ API feed (from {len(seen_doc_ids)} unique documents).")
     return edicts
 
 def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     """
     Discovers, downloads, and chunks official Costa Rican judicial foreclosure publications.
     Strictly queries the official daily Nexus PJ / Boletín Judicial feed (nexuspj.poder-judicial.go.cr
-    and boletinjudicial.poder-judicial.go.cr), completely excluding general government gazette feeds.
+    and boletinjudicial.poder-judicial.go.cr) with resilient full-text reconciliation fallback.
     """
     date = target_date or datetime.now()
     headers = {
@@ -637,7 +667,7 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
     
     edicts: List[str] = []
     
-    # 1. Primary Strategy: Fetch directly from Nexus PJ REST API
+    # 1. Primary Strategy: Fetch directly from Nexus PJ REST API with dynamic pagination
     try:
         nexus_edicts = fetch_from_nexuspj_api(date)
         if nexus_edicts:
@@ -712,6 +742,14 @@ def fetch_daily_bulletin(target_date: Optional[datetime] = None) -> List[str]:
                     
                 # Target the Remates section and split into case blocks
                 remates_section = slice_remates_section(full_text)
+                
+                # Resilient Fallback: If sliced section captures < 80% of docket markers in full text, use full text
+                dockets_full = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", full_text, re.I)
+                dockets_sliced = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", remates_section, re.I)
+                if len(dockets_full) > len(dockets_sliced) and len(dockets_sliced) < (len(dockets_full) * 0.8):
+                    logger.warning(f"Remates slicing missed {len(dockets_full) - len(dockets_sliced)} dockets. Activating full-text parsing fallback.")
+                    remates_section = full_text
+
                 blocks = split_into_expediente_blocks(remates_section)
                 logger.info(f"Parsed {len(blocks)} expediente blocks from {pdf_url}.")
                 for block in blocks:
@@ -1080,11 +1118,30 @@ def extract_single_edict_gemini(edict_text: str, api_key: Optional[str] = None) 
 
     return extract_single_edict_regex_fallback(edict_text)
 
+def find_all_unique_folios_in_text(text: str) -> List[str]:
+    """Finds all unique Folio Real / Matrícula identifiers in a legal edict block."""
+    folio_patterns = [
+        r"\b([1-7]-[0-9]{5,7}-[0-9]{3})\b",
+        r"(?:matr[íi]cula\s+(?:de\s+folio\s+real\s+)?(?:n[úu]mero\s+)?|finca\s+(?:filial\s+(?:\d+\s+)?)?(?:n[úu]mero\s+|matr[íi]cula\s+)?|folio\s+real\s*(?:matr[íi]cula\s+)?(?:n[úu]mero\s+|:)?\s*)([0-9]-[0-9]+-[0-9]+|[0-9]{5,8}-[0-9]{3}|[0-9]{5,8})",
+    ]
+    seen: List[str] = []
+    for fp in folio_patterns:
+        for m in re.finditer(fp, text, re.IGNORECASE):
+            val = m.group(1).strip()
+            if val not in seen:
+                seen.append(val)
+    return seen
+
 def extract_auctions_with_gemini(edict_chunks: List[str], api_key: Optional[str] = None) -> List[ForeclosureAuction]:
     """
-    Iterates over a list of edict text chunks and performs structured extraction with fallback math.
+    Iterates over a list of edict text chunks and performs structured extraction.
+    Splits multi-folio notices into distinct auction records so no bundled property is lost.
     """
     results: List[ForeclosureAuction] = []
+    prov_code_map = {
+        "1": "San José", "2": "Alajuela", "3": "Cartago", "4": "Heredia",
+        "5": "Guanacaste", "6": "Puntarenas", "7": "Limón"
+    }
     
     for idx, chunk in enumerate(edict_chunks):
         logger.info(f"Extracting edict chunk {idx + 1}/{len(edict_chunks)}...")
@@ -1096,7 +1153,50 @@ def extract_auctions_with_gemini(edict_chunks: List[str], api_key: Optional[str]
             if extracted.base_price_call_1 and not extracted.base_price_call_3:
                 extracted.base_price_call_3 = round(extracted.base_price_call_1 * 0.25, 2)
                 
-            results.append(extracted)
+            # Check for multiple distinct folios mentioned in the same edict notice
+            all_folios = find_all_unique_folios_in_text(chunk)
+            
+            # Standardize discovered folios
+            standardized_folios = []
+            for f in all_folios:
+                if "-" not in f:
+                    p_code = PROVINCE_PREFIXES.get((extracted.province or "San José").lower(), "1")
+                    f = f"{p_code}-{f}-000"
+                elif f.count("-") == 1:
+                    f = f"{f}-000"
+                if f not in standardized_folios:
+                    standardized_folios.append(f)
+                    
+            if len(standardized_folios) > 1:
+                logger.info(f"✨ Multi-property notice detected! Found {len(standardized_folios)} distinct folios for case {extracted.expediente_number}: {standardized_folios}")
+                for f_idx, fol in enumerate(standardized_folios):
+                    prov = prov_code_map.get(fol[0], extracted.province) if "-" in fol else extracted.province
+                    prop_item = ForeclosureAuction(
+                        expediente_number=f"{extracted.expediente_number}-L{f_idx+1}" if f_idx > 0 else extracted.expediente_number,
+                        court_name=extracted.court_name,
+                        folio_real=fol,
+                        plano_catastrado=extracted.plano_catastrado,
+                        province=prov,
+                        canton=extracted.canton,
+                        district=extracted.district,
+                        address_description=f"{extracted.address_description or ''} (Lote #{f_idx+1})".strip(),
+                        area_m2=extracted.area_m2,
+                        currency=extracted.currency,
+                        base_price_call_1=extracted.base_price_call_1,
+                        auction_date_call_1=extracted.auction_date_call_1,
+                        base_price_call_2=extracted.base_price_call_2,
+                        auction_date_call_2=extracted.auction_date_call_2,
+                        base_price_call_3=extracted.base_price_call_3,
+                        auction_date_call_3=extracted.auction_date_call_3,
+                        plaintiff=extracted.plaintiff,
+                        defendant=extracted.defendant,
+                        legal_summary=f"Remate judicial (Lote #{f_idx+1}) en {extracted.canton}, {prov}. Matrícula {fol}. Expediente {extracted.expediente_number}.",
+                        property_category=extracted.property_category,
+                        raw_edict_text=extracted.raw_edict_text,
+                    )
+                    results.append(prop_item)
+            else:
+                results.append(extracted)
         else:
             logger.warning(f"Chunk {idx + 1} extraction yielded no structured result.")
             
@@ -1299,8 +1399,153 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
         return 0, len(records), []
 
 # ==============================================================================
-# 7. MONITORING & LOW-YIELD ALERTING (Step 4)
+# 7. RECONCILIATION AUDIT & DISCORD NOTIFICATION ENGINE
 # ==============================================================================
+def compute_reconciliation_metrics(raw_edicts: List[str], extracted_auctions: List[ForeclosureAuction]) -> Dict[str, Any]:
+    """
+    Step 4: Quality & Coverage Reconciliation Engine.
+    Computes statistical coverage matching raw docket numbers and Folio Real markers
+    in publication texts against successfully extracted structured properties.
+    """
+    raw_dockets: Set[str] = set()
+    raw_folios: Set[str] = set()
+
+    for text in raw_edicts:
+        dockets = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Z0-9]*\b", text, re.IGNORECASE)
+        for d in dockets:
+            raw_dockets.add(d.strip().upper())
+        folios = find_all_unique_folios_in_text(text)
+        for f in folios:
+            raw_folios.add(f.strip().upper())
+
+    extracted_dockets = {a.expediente_number.split("-L")[0].strip().upper() for a in extracted_auctions if a.expediente_number}
+    extracted_folios = {a.folio_real.strip().upper() for a in extracted_auctions if a.folio_real}
+
+    total_raw_targets = max(len(raw_dockets), len(raw_edicts), 1)
+    extracted_count = len(extracted_auctions)
+    coverage_pct = round(min((extracted_count / total_raw_targets) * 100.0, 100.0), 1)
+
+    return {
+        "raw_dockets_count": len(raw_dockets),
+        "raw_folios_count": len(raw_folios),
+        "extracted_properties_count": extracted_count,
+        "extracted_dockets_count": len(extracted_dockets),
+        "coverage_percentage": coverage_pct,
+        "missing_dockets": list(raw_dockets - extracted_dockets)[:10],
+    }
+
+
+def send_discord_notification(
+    status: str,  # 'success', 'warning', 'error', 'test', 'no_new'
+    title: str,
+    description: str,
+    run_date_str: str,
+    total_edicts: int = 0,
+    added: int = 0,
+    skipped: int = 0,
+    reconciliation: Optional[Dict[str, Any]] = None,
+    expedientes: Optional[List[str]] = None,
+    duration_seconds: float = 0.0,
+    error_message: Optional[str] = None
+) -> bool:
+    """
+    Dispatches rich, real-time Discord Webhook embeds for daily scraper runs, low-yield alerts, or test pings.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("ALERT_WEBHOOK_URL")
+    if not webhook_url:
+        logger.debug("DISCORD_WEBHOOK_URL not configured. Skipping Discord notification.")
+        return False
+
+    try:
+        import urllib.request
+        ctx = create_ssl_context()
+        
+        colors = {
+            "success": 0x10B981,  # Emerald Green
+            "warning": 0xF59E0B,  # Amber
+            "error": 0xEF4444,    # Crimson Red
+            "test": 0x3B82F6,     # Sky Blue
+            "no_new": 0x64748B,   # Slate Grey
+        }
+        color = colors.get(status, 0x10B981)
+
+        status_badges = {
+            "success": "🟢 Completado con Éxito",
+            "warning": "🟡 Alerta de Rendimiento",
+            "error": "🔴 Error en Ingestión",
+            "test": "🔵 Verificación de Conexión Discord",
+            "no_new": "⚪ Base de Datos al Día (0 Nuevos)",
+        }
+        badge = status_badges.get(status, "🟢 Completado")
+
+        fields = [
+            {"name": "📅 Fecha (Costa Rica)", "value": f"`{run_date_str}`", "inline": True},
+            {"name": "📊 Estado", "value": f"**{badge}**", "inline": True},
+            {"name": "⏱️ Tiempo de Ejecución", "value": f"`{duration_seconds:.2f}s`", "inline": True},
+            {"name": "📑 Edictos Analizados", "value": f"`{total_edicts}`", "inline": True},
+            {"name": "✨ Nuevas Propiedades", "value": f"**`+{added}`**", "inline": True},
+            {"name": "⏩ Existentes Omitidos", "value": f"`{skipped}`", "inline": True},
+        ]
+
+        if reconciliation:
+            cov = reconciliation.get("coverage_percentage", 100.0)
+            raw_d = reconciliation.get("raw_dockets_count", total_edicts)
+            fields.append({
+                "name": "🎯 Tasa de Cobertura (Reconciliación)",
+                "value": f"**{cov}%** ({reconciliation.get('extracted_properties_count', 0)} extraídos / {raw_d} detectados)",
+                "inline": False
+            })
+
+        if expedientes and len(expedientes) > 0:
+            exp_display = ", ".join([f"`{e}`" for e in expedientes[:8]])
+            if len(expedientes) > 8:
+                exp_display += f" *(+{len(expedientes) - 8} adicionales)*"
+            fields.append({
+                "name": "📋 Nuevos Expedientes Registrados",
+                "value": exp_display,
+                "inline": False
+            })
+
+        if error_message:
+            fields.append({
+                "name": "⚠️ Detalle / Diagnóstico",
+                "value": f"```{error_message[:400]}```",
+                "inline": False
+            })
+
+        embed = {
+            "title": f"🏛️ {title}",
+            "description": description,
+            "color": color,
+            "fields": fields,
+            "footer": {
+                "text": "Poder Judicial de Costa Rica • Nexus PJ • Boletín Judicial",
+                "icon_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Flag_of_Costa_Rica.svg/320px-Flag_of_Costa_Rica.svg.png"
+            },
+            "timestamp": datetime.now().astimezone().isoformat()
+        }
+
+        payload = {
+            "username": "CR Foreclosures Monitor",
+            "avatar_url": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=128&auto=format&fit=crop&q=80",
+            "embeds": [embed]
+        }
+
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "CR-Foreclosure-Monitor/2.0"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+            if resp.status in (200, 204):
+                logger.info("✓ Rich Discord notification embed successfully dispatched.")
+                return True
+    except Exception as ex:
+        logger.warning(f"Could not send Discord webhook notification: {ex}")
+        return False
+
+
 def check_yield_and_alert(
     total_parsed: int,
     run_date_str: str,
@@ -1336,46 +1581,8 @@ def check_yield_and_alert(
         logger.warning(f"Context: {extra_context}")
     logger.warning("=" * 70)
 
-    # Check for Webhook URL in environment
-    webhook_url = os.getenv("ALERT_WEBHOOK_URL") or os.getenv("DISCORD_WEBHOOK_URL") or os.getenv("SLACK_WEBHOOK_URL")
-    if webhook_url:
-        try:
-            import urllib.request
-            ctx = create_ssl_context()
-            is_discord = "discord.com" in webhook_url or "discordapp.com" in webhook_url
-            if is_discord:
-                payload = {
-                    "content": (
-                        f"🚨 **[Foreclosure Ingestion Alert] Low-Yield Warning**\n"
-                        f"• **Date:** `{run_date_str}`\n"
-                        f"• **Extracted Properties:** `{total_parsed}` (Minimum Expected: `{threshold}`)\n"
-                        f"• **Status:** Possible layout change, upstream challenge page, or empty feed.\n"
-                        f"• **Diagnostic File:** Check `scraper/debug_raw_response.log` for details."
-                    )
-                }
-            else:
-                payload = {
-                    "text": (
-                        f"🚨 [Foreclosure Ingestion Alert] Low-Yield Detected for {run_date_str}: "
-                        f"Only {total_parsed} properties extracted (expected >= {threshold}). "
-                        f"Please inspect scraper/debug_raw_response.log or portal status."
-                    )
-                }
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                webhook_url,
-                data=req_data,
-                headers={"Content-Type": "application/json", "User-Agent": "CR-Foreclosure-Alerts/1.0"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
-                if resp.status in (200, 204):
-                    logger.info("✓ Low-yield alert webhook successfully dispatched.")
-                    alert_info["webhook_dispatched"] = True
-        except Exception as wh_err:
-            logger.warning(f"Failed to dispatch alert webhook: {wh_err}")
-
     return alert_info
+
 
 # ==============================================================================
 # 8. MAIN CLI ORCHESTRATION PIPELINE
@@ -1386,7 +1593,29 @@ def main():
     parser.add_argument("--file", type=str, help="Path to local Boletín Judicial PDF file to parse")
     parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
     parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
+    parser.add_argument("--test-discord", action="store_true", help="Send a test notification to configured Discord Webhook")
     args = parser.parse_args()
+
+    # Quick Discord Webhook Test
+    if args.test_discord:
+        logger.info("📡 Testing Discord Webhook notification...")
+        success = send_discord_notification(
+            status="test",
+            title="Prueba de Notificación Discord (CR Foreclosures)",
+            description="El canal de alertas de remates judiciales y monitoreo de scraping está conectado correctamente con **Nexus PJ & Boletín Judicial**.",
+            run_date_str=datetime.now().strftime("%Y-%m-%d"),
+            total_edicts=24,
+            added=6,
+            skipped=18,
+            reconciliation={"coverage_percentage": 100.0, "raw_dockets_count": 24, "extracted_properties_count": 24},
+            expedientes=["24-000123-1158-CJ", "24-001892-0994-CJ", "23-008912-1200-CJ"],
+            duration_seconds=4.25
+        )
+        if success:
+            logger.info("✅ Discord Webhook test notification sent successfully! Check your Discord channel.")
+        else:
+            logger.error("❌ Failed to send Discord Webhook test notification. Please verify DISCORD_WEBHOOK_URL in .env.local.")
+        return
 
     target_date_str = args.date or datetime.now().strftime("%Y-%m-%d")
 
@@ -1410,6 +1639,14 @@ def main():
                 full_text += (page.extract_text() or "") + "\n"
             
             remates_text = slice_remates_section(full_text)
+            
+            # Full-text fallback check
+            dockets_full = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", full_text, re.I)
+            dockets_sliced = re.findall(r"\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*\b", remates_text, re.I)
+            if len(dockets_full) > len(dockets_sliced) and len(dockets_sliced) < (len(dockets_full) * 0.8):
+                logger.warning(f"Remates slicing missed {len(dockets_full) - len(dockets_sliced)} dockets. Using full text.")
+                remates_text = full_text
+
             raw_edicts = split_into_expediente_blocks(remates_text)
         else:
             target_date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else datetime.now()
@@ -1418,8 +1655,19 @@ def main():
         if not raw_edicts:
             logger.info("No judicial foreclosure edicts found for the given target. Ingestion cycle complete.")
             duration = time.time() - start_time
-            # Low-yield alerting check on 0 edicts
             check_yield_and_alert(total_parsed=0, run_date_str=target_date_str, threshold=3)
+            
+            send_discord_notification(
+                status="no_new",
+                title="Monitoreo de Ingestión Diaria (0 Nuevos)",
+                description="La ejecución finalizó sin nuevos edictos judiciales detectados en la fecha consultada.",
+                run_date_str=target_date_str,
+                total_edicts=0,
+                added=0,
+                skipped=0,
+                duration_seconds=duration
+            )
+
             if not args.dry_run:
                 record_ingestion_log(
                     status="warning" if target_date_str == datetime.now().strftime("%Y-%m-%d") else "no_new_properties",
@@ -1432,11 +1680,18 @@ def main():
                 )
             return
 
-        logger.info(f"Processing {len(raw_edicts)} extracted edicts...")
+        logger.info(f"Processing {len(raw_edicts)} extracted candidate edicts...")
         extracted_auctions = extract_auctions_with_gemini(raw_edicts)
-        logger.info(f"Successfully extracted {len(extracted_auctions)} valid structured auctions.")
+        logger.info(f"Successfully extracted {len(extracted_auctions)} structured properties.")
 
-        # Step 4: Low-Yield Monitoring & Alerting Check
+        # Compute Quality Reconciliation Coverage Metrics
+        reconciliation = compute_reconciliation_metrics(raw_edicts, extracted_auctions)
+        logger.info(
+            f"🎯 Reconciliation Audit: {reconciliation['coverage_percentage']}% coverage "
+            f"({len(extracted_auctions)} properties extracted from {reconciliation['raw_dockets_count']} detected dockets)."
+        )
+
+        # Low-Yield Monitoring & Alerting Check
         yield_audit = check_yield_and_alert(
             total_parsed=len(extracted_auctions),
             run_date_str=target_date_str,
@@ -1446,6 +1701,19 @@ def main():
         if not extracted_auctions:
             logger.info("No structured records were generated from the edicts. Ingestion finished.")
             duration = time.time() - start_time
+            
+            send_discord_notification(
+                status="warning",
+                title="Alerta de Bajo Rendimiento en Ingestión",
+                description=f"Se detectaron {len(raw_edicts)} bloques de texto pero se extrajeron 0 propiedades válidas.",
+                run_date_str=target_date_str,
+                total_edicts=len(raw_edicts),
+                added=0,
+                skipped=0,
+                duration_seconds=duration,
+                error_message="0 propiedades estructuradas generadas."
+            )
+
             if not args.dry_run:
                 record_ingestion_log(
                     status="warning",
@@ -1488,6 +1756,7 @@ def main():
             status_str = "warning"
             error_msg = f"Low-yield warning: only {len(extracted_auctions)} properties parsed (expected >= 3)."
 
+        # Record ingestion log in Supabase
         record_ingestion_log(
             status=status_str,
             total_edicts=len(raw_edicts),
@@ -1499,10 +1768,39 @@ def main():
             run_date=target_date_str
         )
 
+        # Send Real-Time Discord Webhook Notification
+        discord_status = "warning" if yield_audit["is_low_yield"] else ("success" if inserted_count > 0 else "no_new")
+        send_discord_notification(
+            status=discord_status,
+            title="Reporte de Ingestión de Remates Judiciales",
+            description=f"Escaneo automático de **Nexus PJ & Boletín Judicial** completado con éxito.",
+            run_date_str=target_date_str,
+            total_edicts=len(raw_edicts),
+            added=inserted_count,
+            skipped=skipped_count,
+            reconciliation=reconciliation,
+            expedientes=new_expedientes,
+            duration_seconds=duration,
+            error_message=error_msg
+        )
+
         logger.info("Foreclosure ingestion pipeline finished successfully.")
     except Exception as exc:
         duration = time.time() - start_time
         logger.error(f"Ingestion pipeline failed with exception: {exc}")
+        
+        send_discord_notification(
+            status="error",
+            title="Error en Ingestión de Remates Judiciales",
+            description="La ejecución del scraper falló con una excepción no controlada.",
+            run_date_str=target_date_str,
+            total_edicts=len(raw_edicts),
+            added=0,
+            skipped=0,
+            duration_seconds=duration,
+            error_message=str(exc)
+        )
+
         if not args.dry_run:
             record_ingestion_log(
                 status="error",
@@ -1517,5 +1815,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

@@ -14,6 +14,9 @@ from scraper.main import (
     ForeclosureAuction,
     extract_single_edict_gemini,
     extract_single_edict_regex_fallback,
+    extract_auctions_with_gemini,
+    find_all_unique_folios_in_text,
+    compute_reconciliation_metrics,
     enrich_auction_data,
     CR_CANTON_CENTROIDS,
     PROVINCE_CENTROIDS,
@@ -25,8 +28,10 @@ from scraper.main import (
     slice_remates_section,
     split_into_expediente_blocks,
     check_yield_and_alert,
+    send_discord_notification,
     DEBUG_LOG_PATH,
 )
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s")
 logger = logging.getLogger("scraper.test")
@@ -240,8 +245,46 @@ def test_source_url_verification():
     assert is_foreclosure_edict_text(SAMPLE_EDICT_USD_CONDO), "Edict filter must accept valid court foreclosure notices"
     assert is_foreclosure_edict_text(SAMPLE_EDICT_CRC_LAND), "Edict filter must accept valid agricultural court foreclosure notices"
     
-    logger.info("✓ Source URL verification passed: Strictly targeting Nexus PJ & Boletín Judicial.")
-    logger.info("✓ General government gazette feeds (La Gaceta) strictly excluded.")
+def test_multi_folio_splitting():
+    logger.info("\n--- Testing Multi-Folio Real Notice Splitting ---")
+    multi_folio_edict = """
+    JUZGADO PRIMERO DE COBRO DE SAN JOSÉ. A las diez horas del diez de octubre de dos mil veintiséis, 
+    con la base de cien mil dólares (USD 100,000.00), remataré al mejor postor los siguientes inmuebles: 
+    1) Finca inscrita en el Registro Público, Partido de San José, Folio Real matrícula número 1-123456-000. 
+    2) Finca inscrita en el Partido de San José matrícula número 1-654321-000. 
+    Situadas en San Pedro, Cantón Montes de Oca, San José. 
+    Segundo remate: 75% de la base. Tercer remate: 25% de la base. 
+    Proceso de BANCO NACIONAL DE COSTA RICA contra INVERSIONES URBANAS S.A. 
+    Expediente: 24-004567-1158-CJ.
+    """
+    discovered_folios = find_all_unique_folios_in_text(multi_folio_edict)
+    assert len(discovered_folios) >= 2, f"Must detect at least 2 distinct folios (got {discovered_folios})"
+    assert "1-123456-000" in discovered_folios
+    assert "1-654321-000" in discovered_folios
+    
+    extracted_items = extract_auctions_with_gemini([multi_folio_edict])
+    assert len(extracted_items) == 2, f"Multi-folio notice must yield 2 distinct auction records (got {len(extracted_items)})"
+    folios_in_results = {a.folio_real for a in extracted_items}
+    assert "1-123456-000" in folios_in_results
+    assert "1-654321-000" in folios_in_results
+    logger.info(f"✓ Successfully split bundled notice into {len(extracted_items)} distinct property records: {folios_in_results}")
+
+
+def test_reconciliation_audit():
+    logger.info("\n--- Testing Reconciliation Coverage Audit ---")
+    raw_chunks = [
+        SAMPLE_EDICT_USD_CONDO,
+        SAMPLE_EDICT_CRC_LAND,
+        SAMPLE_EDICT_CARTAGO_NO_PLANO
+    ]
+    extracted_auctions = extract_auctions_with_gemini(raw_chunks)
+    reconciliation = compute_reconciliation_metrics(raw_chunks, extracted_auctions)
+    
+    assert reconciliation["coverage_percentage"] == 100.0, f"Coverage percentage should be 100% (got {reconciliation['coverage_percentage']}%)"
+    assert reconciliation["raw_dockets_count"] == 3
+    assert reconciliation["extracted_properties_count"] == 3
+    logger.info(f"✓ Reconciliation Audit verified: {reconciliation['coverage_percentage']}% coverage across {reconciliation['raw_dockets_count']} dockets.")
+
 
 
 def run_tests():
@@ -263,6 +306,12 @@ def run_tests():
 
     # 5. Step 4: Monitoring & Low-Yield Alerting Tests
     test_monitoring_and_low_yield_alerting()
+
+    # 6. Multi-Folio Real Notice Splitting Tests
+    test_multi_folio_splitting()
+
+    # 7. Reconciliation Coverage Audit Tests
+    test_reconciliation_audit()
 
     test_cases = [
         ("USD Condo (Garabito)", SAMPLE_EDICT_USD_CONDO),
