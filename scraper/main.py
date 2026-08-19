@@ -1277,24 +1277,30 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
 
         # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
         # Check compound hectare phrase first (e.g. "una hectárea con tres mil metros")
-        ha_match = re.search(r"(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)", edict_text, re.I)
+        # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
+        normalized_full = re.sub(r'\s+', ' ', edict_text)
+        ha_match = re.search(r"(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)", normalized_full, re.I)
         area = 250.0
         if ha_match:
-            ha_count = 1 if "una" in ha_match.group(0).lower() else 1
+            ha_count = 1 if "una" in ha_match.group(0).lower() else (float(re.search(r'\d+', ha_match.group(0)).group(0)) if re.search(r'\d+', ha_match.group(0)) else 1)
             extra_m = parse_spanish_words_to_number(ha_match.group(1))
             area = (ha_count * 10000.0) + extra_m
         else:
-            normalized_full = re.sub(r'\s+', ' ', edict_text)
-            mide_m = re.search(r'(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^.]+?)(?=\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z]|$)|plano\s*:|\.|$)', normalized_full, re.I)
+            mide_m = re.search(r'(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^\n;]+?)(?=(?:\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z])|plano\s*:|\n|$))', normalized_full, re.I)
             mide_clause = mide_m.group(1).strip() if mide_m else normalized_full
             
-            digit_area = re.search(r"([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts|hect[áa]reas|ha)", mide_clause, re.I)
-            if digit_area:
-                val_str = digit_area.group(1).strip()
-                parsed_val = parse_cr_price_string(val_str) or 250.0
-                if "hect" in digit_area.group(0).lower() or "ha" in digit_area.group(0).lower():
-                    area = parsed_val * 10000.0
-                else:
+            # Standalone hectares
+            ha_standalone = re.search(r'([0-9]+(?:[\.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)', mide_clause, re.I)
+            if ha_standalone:
+                raw_val = ha_standalone.group(1).strip()
+                num = parse_cr_price_string(raw_val) if re.search(r'\d', raw_val) else parse_spanish_words_to_number(raw_val)
+                if num and num > 0:
+                    area = num * 10000.0
+            else:
+                digit_area = re.search(r"([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts)", mide_clause, re.I)
+                if digit_area:
+                    val_str = digit_area.group(1).strip()
+                    parsed_val = parse_cr_price_string(val_str) or 250.0
                     # Check decimeters (support words with trailing comma or digits)
                     dec_m = re.search(r"con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)", mide_clause, re.I)
                     if dec_m:
@@ -1302,10 +1308,10 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                         area = parsed_val + (dec_val * 0.01)
                     else:
                         area = parsed_val
-            else:
-                word_val = parse_spanish_words_to_number(mide_clause)
-                if 5.0 <= word_val <= 100000000.0:
-                    area = word_val
+                else:
+                    word_val = parse_spanish_words_to_number(mide_clause)
+                    if 5.0 <= word_val <= 100000000.0:
+                        area = word_val
 
         # 9. Plaintiff & Defendant
         plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+(?:de\s+)?[\w\s]+\s+de|actor\s*:?|ejecutante\s*:?)\s+([\w\s,.-]+?)\s+(?:contra|demandad)", edict_text, re.I)

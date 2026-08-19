@@ -82,10 +82,10 @@ def update_auction_in_supabase(auction_id: str, payload: Dict[str, Any]) -> bool
         logger.error(f"Error updating auction {auction_id}: {e}")
         return False
 
-def reparse_record(record: Dict[str, Any], use_gemini: bool = True) -> Tuple[bool, Dict[str, Any]]:
+def reparse_record(record: Dict[str, Any], use_gemini: bool = True) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]:
     raw_text = record.get("raw_edict_text") or record.get("address_description") or ""
     if not raw_text or len(raw_text.strip()) < 30:
-        return False, {}
+        return False, {}, {}
 
     parsed = None
     if use_gemini and os.getenv("GEMINI_API_KEY"):
@@ -95,7 +95,7 @@ def reparse_record(record: Dict[str, Any], use_gemini: bool = True) -> Tuple[boo
         parsed = extract_single_edict_regex_fallback(raw_text)
 
     if not parsed:
-        return False, {}
+        return False, {}, {}
 
     old_area = float(record.get("area_m2") or 0)
     new_area = float(parsed.area_m2 or old_area)
@@ -118,11 +118,9 @@ def reparse_record(record: Dict[str, Any], use_gemini: bool = True) -> Tuple[boo
 
     update_payload = {
         "area_m2": new_area,
-        "has_construction": new_constructed,
-        "property_type": new_prop_type,
-        "naturaleza_raw": new_nat,
-        "property_category": parsed.property_category,
     }
+    if parsed.plano_catastrado and not record.get("plano_catastrado"):
+        update_payload["plano_catastrado"] = parsed.plano_catastrado
 
     diff_summary = {
         "id": record.get("id"),
