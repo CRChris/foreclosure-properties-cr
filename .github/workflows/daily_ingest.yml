@@ -2,8 +2,8 @@ name: Daily Nexus PJ & Boletín Judicial Foreclosure Ingestion Pipeline
 
 on:
   schedule:
-    # 14:15 UTC = 8:15 AM Costa Rica Time (UTC-6), Monday - Friday
-    - cron: '15 14 * * 1-5'
+    # 14:20 UTC = 8:20 AM Costa Rica Time (UTC-6), Monday - Friday
+    - cron: '20 14 * * 1-5'
   workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
 
 jobs:
@@ -36,9 +36,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL || secrets.ALERT_WEBHOOK_URL }}
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           python scraper/main.py
+
 
       - name: Run Standalone Auction Call Progression Tracker (PostgreSQL RPC)
         env:
