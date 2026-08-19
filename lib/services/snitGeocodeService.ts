@@ -18,13 +18,24 @@ export interface NormalizedPlano {
   raw: string;
 }
 
+export interface NormalizedFolioReal {
+  provincia: string; // '1' through '7'
+  provinciaNombre: string; // e.g. 'San José', 'Puntarenas'
+  finca: string; // e.g. '123456' (leading zeros stripped)
+  duplicado?: string; // e.g. '000' or '0'
+  horizontal?: string; // e.g. '000' or '001'
+  raw: string;
+}
+
 export interface SnitGeocodeSuccessResult {
   success: true;
   lat: number;
   lng: number;
   polygonGeoJSON: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry;
   isExact: true;
-  normalizedPlano: NormalizedPlano;
+  normalizedPlano?: NormalizedPlano | null;
+  normalizedFolio?: NormalizedFolioReal | null;
+  resolutionSource?: 'plano' | 'folio_real';
   properties?: Record<string, unknown>;
 }
 
@@ -33,9 +44,16 @@ export interface SnitGeocodeFailureResult {
   isExact: false;
   error?: string;
   normalizedPlano?: NormalizedPlano | null;
+  normalizedFolio?: NormalizedFolioReal | null;
 }
 
 export type SnitGeocodeResult = SnitGeocodeSuccessResult | SnitGeocodeFailureResult;
+
+export interface SnitGeocodeOptions {
+  timeoutMs?: number;
+  fetchFn?: typeof fetch;
+  fallbackProvince?: string | null;
+}
 
 // Province lookup dictionary for Costa Rica
 const PROVINCE_MAP: Record<string, { code: string; name: string }> = {
@@ -193,6 +211,84 @@ export function normalizePlano(rawPlano?: string | null): NormalizedPlano | null
 }
 
 /**
+ * Normalizes a Costa Rican Folio Real / Finca identifier.
+ * Examples:
+ * - "6-123456-000" -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
+ * - "6-123456"     -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
+ * - "P-123456-000" -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
+ * - "123456-000"   -> extracts finca "123456", uses fallback province if available
+ * - "502241-000-000" -> extracts finca "502241", uses fallback province if available
+ */
+export function parseFolioReal(
+  rawFolio?: string | null,
+  fallbackProvince?: string | null
+): NormalizedFolioReal | null {
+  if (!rawFolio || typeof rawFolio !== 'string') {
+    return null;
+  }
+
+  const cleaned = rawFolio
+    .trim()
+    .toUpperCase()
+    .replace(/^(?:FOLIO\s*REAL|FINCA|MATR[IÍ]CULA)[:\s]*/i, '')
+    .trim();
+
+  if (!cleaned) {
+    return null;
+  }
+
+  // Resolve fallback province info
+  let defaultProvCode = '1';
+  let defaultProvName = 'San José';
+  if (fallbackProvince) {
+    const normP = normalizeGeoKey(fallbackProvince).toUpperCase();
+    for (const [key, val] of Object.entries(PROVINCE_MAP)) {
+      if (key === normP || val.name.toUpperCase() === normP || val.code === normP) {
+        defaultProvCode = val.code;
+        defaultProvName = val.name;
+        break;
+      }
+    }
+  }
+
+  // Format 1: [Provincia]-[Finca]-[Duplicado]-[Horizontal]
+  // e.g. "6-123456-000", "P-123456-000", "SJ-12345-000", "1-392841-000", "3-345-000"
+  const mHyphen = cleaned.match(/^([0-9A-Z]{1,3})[-/](\d+)(?:[-/]([0-9A-Z]+))?(?:[-/]([0-9A-Z]+))?$/);
+  if (mHyphen) {
+    const provKey = mHyphen[1];
+    const provMatch = PROVINCE_MAP[provKey];
+    if (provMatch) {
+      const fincaNum = mHyphen[2].replace(/^0+/, '');
+      return {
+        provincia: provMatch.code,
+        provinciaNombre: provMatch.name,
+        finca: fincaNum || mHyphen[2],
+        duplicado: mHyphen[3] || '000',
+        horizontal: mHyphen[4] || '000',
+        raw: rawFolio,
+      };
+    }
+  }
+
+  // Format 2: [Finca]-[Duplicado]-[Horizontal] without explicit province prefix
+  // e.g. "502241-000-000", "692660-000-000", "261945-000", "212023"
+  const mDigits = cleaned.match(/^(\d+)(?:[-/]([0-9A-Z]+))?(?:[-/]([0-9A-Z]+))?$/);
+  if (mDigits) {
+    const fincaNum = mDigits[1].replace(/^0+/, '');
+    return {
+      provincia: defaultProvCode,
+      provinciaNombre: defaultProvName,
+      finca: fincaNum || mDigits[1],
+      duplicado: mDigits[2] || '000',
+      horizontal: mDigits[3] || '000',
+      raw: rawFolio,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Transforms a single [x, y] coordinate pair from CRTM05 (EPSG:5367) to WGS84 (EPSG:4326) [lng, lat].
  * If coordinates are already in WGS84 degrees range, returns them as-is.
  */
@@ -319,11 +415,6 @@ export function extractCentroidFromGeometry(geometry: any): { lat: number; lng: 
   }
 
   return null;
-}
-
-export interface SnitGeocodeOptions {
-  timeoutMs?: number;
-  fetchFn?: typeof fetch;
 }
 
 /**
@@ -470,8 +561,160 @@ export async function lookupCadastralPlano(
   };
 }
 
-// Alias for convenience / backward-compatibility with requirements
+/**
+ * Queries SNIT services (SIRI Finca API and OGC GeoServer WFS endpoints)
+ * to locate the exact cadastral polygon and GPS coordinates for a given Folio Real / Finca number.
+ */
+export async function lookupByFolioReal(
+  rawFolio: string,
+  options?: SnitGeocodeOptions
+): Promise<SnitGeocodeResult> {
+  const normalized = parseFolioReal(rawFolio, options?.fallbackProvince);
+  if (!normalized) {
+    return {
+      success: false,
+      isExact: false,
+      error: `Invalid or unparseable folio real format: "${rawFolio}"`,
+      normalizedFolio: null,
+    };
+  }
+
+  const { provincia, finca, duplicado } = normalized;
+  const timeoutMs = options?.timeoutMs ?? 10000;
+  const customFetch = options?.fetchFn ?? fetch;
+
+  // 1. Query official SNIT SIRI service by finca number
+  const siriUrls = [
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${finca}&provincia=${provincia}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${encodeURIComponent(`${provincia}-${finca}`)}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${encodeURIComponent(`${provincia}-${finca}-${duplicado || '000'}`)}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${finca}`,
+  ];
+
+  for (const siriUrl of siriUrls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await customFetch(siriUrl, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
+
+      if (res.ok) {
+        const siriData = await res.json();
+        if (siriData && siriData.result && siriData.data) {
+          const features = [
+            ...(siriData.data.zona_1?.features || []),
+            ...(siriData.data.zona_2?.features || []),
+          ];
+
+          if (features.length > 0) {
+            const reprojectedFeatures = features.map((feature: any) => ({
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: reprojectCoordinates(feature.geometry?.coordinates),
+              },
+            }));
+
+            const primaryFeature = reprojectedFeatures[0];
+            const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
+
+            if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+              return {
+                success: true,
+                lat: centroid.lat,
+                lng: centroid.lng,
+                polygonGeoJSON: {
+                  type: 'FeatureCollection',
+                  features: reprojectedFeatures,
+                },
+                isExact: true,
+                normalizedFolio: normalized,
+                resolutionSource: 'folio_real',
+                properties: primaryFeature.properties,
+              };
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Query SNIT GeoServer WFS with finca and provincia CQL filter
+  const wfsEndpoints = [
+    'https://geos.snitcr.go.cr/geoserver/wfs',
+    'https://siri.snitcr.go.cr/Geoservicios/wfs',
+  ];
+
+  const typeNames = ['registro_inmobiliario:catastro', 'catastro', 'predio', 'limite_predial'];
+
+  for (const baseUrl of wfsEndpoints) {
+    for (const typeName of typeNames) {
+      try {
+        const url = new URL(baseUrl);
+        url.searchParams.set('service', 'WFS');
+        url.searchParams.set('version', '2.0.0');
+        url.searchParams.set('request', 'GetFeature');
+        url.searchParams.set('typeName', typeName);
+        url.searchParams.set('outputFormat', 'application/json');
+        url.searchParams.set('cql_filter', `finca='${finca}' AND provincia='${provincia}'`);
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await customFetch(url.toString(), {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timer));
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.type === 'FeatureCollection' && Array.isArray(data.features) && data.features.length > 0) {
+            const reprojectedFeatures = data.features.map((feature: any) => ({
+              ...feature,
+              geometry: {
+                ...feature.geometry,
+                coordinates: reprojectCoordinates(feature.geometry?.coordinates),
+              },
+            }));
+
+            const primaryFeature = reprojectedFeatures[0];
+            const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
+
+            if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+              return {
+                success: true,
+                lat: centroid.lat,
+                lng: centroid.lng,
+                polygonGeoJSON: {
+                  type: 'FeatureCollection',
+                  features: reprojectedFeatures,
+                },
+                isExact: true,
+                normalizedFolio: normalized,
+                resolutionSource: 'folio_real',
+                properties: primaryFeature.properties,
+              };
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  return {
+    success: false,
+    isExact: false,
+    error: `No cadastral records found in SNIT for finca ${finca} in province ${provincia}`,
+    normalizedFolio: normalized,
+  };
+}
+
+// Aliases for convenience and requirement compliance
 export const lookupPlanoLocation = lookupCadastralPlano;
+export const lookupPlanoGeometry = lookupCadastralPlano;
 
 /**
  * Fallback Costa Rica Town/District Centroids lookup dictionary ($0 offline geocoding)
@@ -831,6 +1074,128 @@ export function resolveTownCentroid(
   return { lat, lng };
 }
 
+export interface PropertyGeocodeInput {
+  id?: string | null;
+  plano?: string | null;
+  plano_catastrado?: string | null;
+  folioReal?: string | null;
+  folio_real?: string | null;
+  finca?: string | null;
+  province?: string | null;
+  canton?: string | null;
+  district?: string | null;
+  raw_edict_text?: string | null;
+  address_description?: string | null;
+  legal_summary?: string | null;
+  naturaleza_raw?: string | null;
+}
+
+export interface ResolvedPropertyLocation {
+  lat: number;
+  lng: number;
+  location_type: 'exact_cadastral' | 'approximate_town';
+  resolutionSource: 'plano' | 'folio_real' | 'town_fallback';
+  polygonGeoJSON: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry | null;
+  isExact: boolean;
+  error?: string;
+  normalizedPlano?: NormalizedPlano | null;
+  normalizedFolio?: NormalizedFolioReal | null;
+  province?: string;
+  canton?: string;
+  district?: string;
+}
+
+/**
+ * Master Geolocation Orchestrator:
+ * Executes the full Costa Rican geolocation hierarchy:
+ * 1. If property.plano is present -> lookupCadastralPlano(property.plano).
+ * 2. If plano fails or is missing AND property.folioReal / finca is present -> lookupByFolioReal(property.folioReal).
+ * 3. If both fail -> fallback to high-precision landmark / neighborhood / district center.
+ */
+export async function resolvePropertyLocation(
+  property: PropertyGeocodeInput,
+  options?: SnitGeocodeOptions
+): Promise<ResolvedPropertyLocation> {
+  const rawPlano = property.plano || property.plano_catastrado;
+  const rawFolio = property.folioReal || property.folio_real || property.finca;
+
+  // Extract true property administrative division from legal edict text
+  const extracted = extractLocationFromEdictText(
+    property.raw_edict_text,
+    property.province,
+    property.canton,
+    property.district
+  );
+
+  const effectiveProvince = extracted.province || property.province || 'San José';
+  const effectiveCanton = extracted.canton || property.canton || 'Central';
+  const effectiveDistrict = extracted.district || property.district || 'Central';
+
+  // 1. Try plano cadastral lookup first
+  if (rawPlano && rawPlano.trim()) {
+    const planoResult = await lookupCadastralPlano(rawPlano.trim(), options);
+    if (planoResult.success && planoResult.isExact) {
+      return {
+        lat: planoResult.lat,
+        lng: planoResult.lng,
+        location_type: 'exact_cadastral',
+        resolutionSource: 'plano',
+        polygonGeoJSON: planoResult.polygonGeoJSON,
+        isExact: true,
+        normalizedPlano: planoResult.normalizedPlano,
+        province: effectiveProvince,
+        canton: effectiveCanton,
+        district: effectiveDistrict,
+      };
+    }
+  }
+
+  // 2. If plano fails or is missing, try Folio Real / Finca lookup
+  if (rawFolio && rawFolio.trim()) {
+    const folioResult = await lookupByFolioReal(rawFolio.trim(), {
+      ...options,
+      fallbackProvince: effectiveProvince,
+    });
+    if (folioResult.success && folioResult.isExact) {
+      return {
+        lat: folioResult.lat,
+        lng: folioResult.lng,
+        location_type: 'exact_cadastral',
+        resolutionSource: 'folio_real',
+        polygonGeoJSON: folioResult.polygonGeoJSON,
+        isExact: true,
+        normalizedFolio: folioResult.normalizedFolio,
+        province: effectiveProvince,
+        canton: effectiveCanton,
+        district: effectiveDistrict,
+      };
+    }
+  }
+
+  // 3. Fallback: High-precision landmark / neighborhood / district center
+  const fullContext = `${property.address_description || ''} ${property.raw_edict_text || ''} ${property.legal_summary || ''} ${property.naturaleza_raw || ''}`.toLowerCase();
+
+  const fallback = resolveTownCentroid(
+    effectiveProvince,
+    effectiveCanton,
+    effectiveDistrict,
+    String(property.id || rawFolio || rawPlano || ''),
+    fullContext
+  );
+
+  return {
+    lat: fallback.lat,
+    lng: fallback.lng,
+    location_type: 'approximate_town',
+    resolutionSource: 'town_fallback',
+    polygonGeoJSON: null,
+    isExact: false,
+    province: effectiveProvince,
+    canton: effectiveCanton,
+    district: effectiveDistrict,
+  };
+}
+
 export interface GeocodedLocation {
   lat: number;
   lng: number;
@@ -841,41 +1206,16 @@ export interface GeocodedLocation {
 }
 
 /**
- * Comprehensive geocoding helper for properties:
- * 1. Checks if plano/plano_catastrado is available.
- * 2. Attempts SNIT WFS exact cadastral lookup.
- * 3. Falls back gracefully to town/district centroid if lookup fails or plano is missing.
+ * Comprehensive geocoding helper for properties (backward-compatible alias)
  */
-export async function geocodePropertyLocation(property: {
-  plano?: string | null;
-  plano_catastrado?: string | null;
-  province?: string | null;
-  canton?: string | null;
-  district?: string | null;
-}): Promise<GeocodedLocation> {
-  const plano = property.plano || property.plano_catastrado;
-
-  if (plano && plano.trim()) {
-    const cadastralResult = await lookupCadastralPlano(plano.trim());
-    if (cadastralResult.success && cadastralResult.isExact) {
-      return {
-        lat: cadastralResult.lat,
-        lng: cadastralResult.lng,
-        location_type: 'exact_cadastral',
-        parcel_polygon: cadastralResult.polygonGeoJSON,
-        isExact: true,
-      };
-    }
-  }
-
-  // Fallback to approximate town / district centroid
-  const fallback = resolveTownCentroid(property.province, property.canton, property.district);
+export async function geocodePropertyLocation(property: PropertyGeocodeInput): Promise<GeocodedLocation> {
+  const res = await resolvePropertyLocation(property);
   return {
-    lat: fallback.lat,
-    lng: fallback.lng,
-    location_type: 'approximate_town',
-    parcel_polygon: null,
-    isExact: false,
+    lat: res.lat,
+    lng: res.lng,
+    location_type: res.location_type,
+    parcel_polygon: res.polygonGeoJSON,
+    isExact: res.isExact,
   };
 }
 

@@ -14,6 +14,8 @@ import {
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
 import { 
   geocodePropertyLocation, 
+  resolvePropertyLocation,
+  parseFolioReal,
   extractCentroidFromGeometry,
   extractLocationFromEdictText,
   resolveTownCentroid,
@@ -1040,18 +1042,23 @@ export async function ingestAuctionWithCadastralGeocoding(
     raw_edict_text: string;
   }
 ): Promise<Auction | null> {
-  // 1. Perform SNIT Cadastral Geocoding with fallback
-  const geocodeResult = await geocodePropertyLocation({
+  // 1. Perform Master Geolocation (Plano -> Folio Real -> Landmark/District)
+  const geocodeResult = await resolvePropertyLocation({
+    id: auctionData.id,
     plano: auctionData.plano_catastrado,
+    folioReal: auctionData.folio_real,
     province: auctionData.province,
     canton: auctionData.canton,
     district: auctionData.district,
+    raw_edict_text: auctionData.raw_edict_text,
+    address_description: auctionData.address_description,
+    legal_summary: auctionData.legal_summary,
   });
 
   const lat = geocodeResult.lat;
   const lng = geocodeResult.lng;
   const locationType = geocodeResult.location_type;
-  const parcelPolygon = geocodeResult.parcel_polygon;
+  const parcelPolygon = geocodeResult.polygonGeoJSON;
   const locationWkt = `SRID=4326;POINT(${lng} ${lat})`;
 
   if (!isSupabaseConfigured()) {
