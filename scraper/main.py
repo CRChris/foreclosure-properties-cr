@@ -380,27 +380,36 @@ def _log_debug_snippet(source_url: str, status: int, content_type: str, data: by
 def slice_remates_section(full_text: str) -> str:
     """
     Step 3: Targets the main judicial auction section (e.g., 'REMATES PODER JUDICIAL (2 VECES)' / 'REMATES').
+    Avoids matching Table of Contents / Index entries with dot leaders ('..... 123').
     Falls back to full text if no explicit section boundary is present.
     """
+    clean_lines = []
+    for line in full_text.splitlines():
+        if re.search(r'\.{3,}|\b\d{2,4}\s*$', line) and "remates" in line.lower() and len(line) < 80:
+            continue
+        clean_lines.append(line)
+    text_to_search = "\n".join(clean_lines)
+
     section_patterns = [
-        r'(?:REMATES\s+PODER\s+JUDICIAL(?:\s*\(\s*2\s*VECES\s*\))?|REMATES\s+JUDICIALES|SECCI[ÓO]N\s+(?:DE\s+)?REMATES|\bAVISOS\s+DE\s+REMATE\b|\bREMATES\b)',
+        r'(?:REMATES\s+PODER\s+JUDICIAL(?:\s*\(\s*2\s*VECES\s*\))?|REMATES\s+JUDICIALES|SECCI[ÓO]N\s+(?:DE\s+)?REMATES|\n\s*REMATES\s*\n|\bREMATES\b)',
     ]
     for p in section_patterns:
-        m = re.search(p, full_text, re.IGNORECASE)
+        m = re.search(p, text_to_search, re.IGNORECASE)
         if m:
             start_idx = m.start()
             # Boundary stopping if another non-remate major chapter begins
             end_match = re.search(
-                r'\n\s*(?:EDICTOS\s+MATRIMONIALES|MARCAS\s+DE\s+FÁBRICA|CITACIONES|T[IÍ]TULOS\s+SUPLETORIOS|ADMINISTRACI[ÓO]N\s+P[ÚU]BLICA)\b',
-                full_text[start_idx:],
+                r'\n\s*(?:EDICTOS\s+MATRIMONIALES|MARCAS\s+DE\s+FÁBRICA|CITACIONES\s*\n|T[IÍ]TULOS\s+SUPLETORIOS|ADMINISTRACI[ÓO]N\s+P[ÚU]BLICA\s*\n|INSTITUCIONES\s+DESCENTRALIZADAS\s*\n)\b',
+                text_to_search[start_idx:],
                 re.IGNORECASE
             )
             if end_match:
                 section_len = end_match.start()
                 logger.info(f"Targeted isolated 'Remates' section ({section_len:,} chars).")
-                return full_text[start_idx:start_idx + section_len]
-            logger.info(f"Targeted 'Remates' section from character index {start_idx:,}.")
-            return full_text[start_idx:]
+                return text_to_search[start_idx:start_idx + section_len]
+            else:
+                logger.info(f"Targeted 'Remates' section from character index {start_idx:,}.")
+                return text_to_search[start_idx:]
     return full_text
 
 def split_into_expediente_blocks(text: str) -> List[str]:
@@ -517,6 +526,11 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     court foreclosures (Remates Judiciales).
     """
     import urllib.request
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        BeautifulSoup = None
+
     ctx = create_ssl_context()
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -526,70 +540,75 @@ def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     
     edicts: List[str] = []
     
-    # Query for Boletín Judicial foreclosure notices
-    search_payloads = [
-        {
-            "q": "tipoInformacion:(Boletín AND Judicial) AND (remate OR remates OR subasta OR \"primer remate\")",
-            "size": 50,
-            "page": 1,
-            "sort": {"field": "fechaResolucion", "order": "desc"}
-        },
-        {
-            "q": "tipoInformacion:(Boletín AND Judicial) AND (finca OR matrícula OR hipotecario)",
-            "size": 50,
-            "page": 1,
-            "sort": {"field": "fechaResolucion", "order": "desc"}
-        }
+    search_queries = [
+        '"al mejor postor remataré"',
+        '"en el mejor postor remataré"',
+        '"remataré lo siguiente"',
+        '"con la base de" AND (finca OR matrícula OR "folio real")',
+        '"primer remate" AND (finca OR matrícula OR "folio real")',
+        '"aviso de remate" AND (finca OR terreno OR casa)',
+        '"edicto de remate" AND (finca OR colones OR dólares)',
     ]
     
     logger.info(f"Connecting to official Nexus PJ API endpoint: {NEXUS_PJ_SEARCH_API}")
     
-    for payload in search_payloads:
+    for query_str in search_queries:
+        payload = {
+            "q": query_str,
+            "size": 30,
+            "page": 1,
+            "facets": "",
+            "exp": "",
+            "isFav": False,
+            "isCart": False,
+        }
         try:
             req_data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(NEXUS_PJ_SEARCH_API, data=req_data, headers=headers, method="POST")
             with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-                is_valid, data_bytes, err = validate_and_read_response(resp, NEXUS_PJ_SEARCH_API, min_bytes=200, is_json=True)
+                is_valid, data_bytes, err = validate_and_read_response(resp, NEXUS_PJ_SEARCH_API, min_bytes=100, is_json=True)
                 if not is_valid:
                     continue
 
                 res_json = json.loads(data_bytes.decode("utf-8", errors="ignore"))
                 hits = res_json.get("hits", [])
                 total = res_json.get("total", 0)
-                logger.info(f"Nexus PJ search returned {len(hits)} hits (total available: {total}).")
+                logger.info(f"Nexus PJ search for {query_str[:30]!r} returned {len(hits)} hits (total: {total}).")
                 
                 for hit in hits:
-                    hit_text = ""
-                    # Collect all available text fields from Nexus PJ document
-                    for field_name in ["texto", "contenido", "resumen", "encabezado", "observaciones", "despacho"]:
-                        val = hit.get(field_name)
-                        if val and isinstance(val, str):
-                            hit_text += "\n" + val
-                    
-                    # If hit text contains edicts or requires document fetch
                     doc_id = hit.get("idDocument") or hit.get("id")
-                    if (not hit_text or len(hit_text) < 150) and doc_id:
-                        try:
-                            doc_req_data = json.dumps({"idDocument": doc_id}).encode("utf-8")
-                            doc_req = urllib.request.Request(NEXUS_PJ_DOC_API, data=doc_req_data, headers=headers, method="POST")
-                            with urllib.request.urlopen(doc_req, context=ctx, timeout=10) as doc_resp:
-                                doc_valid, doc_bytes, _ = validate_and_read_response(doc_resp, f"{NEXUS_PJ_DOC_API}?id={doc_id}", min_bytes=100, is_json=True)
-                                if doc_valid:
-                                    doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
-                                    doc_hits = doc_body.get("hits", {})
-                                    hit_text += "\n" + (doc_hits.get("texto") or doc_hits.get("contenido") or "")
-                        except Exception as doc_err:
-                            logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
+                    if not doc_id:
+                        continue
                     
-                    # Slice and split into individual edict blocks
-                    section_text = slice_remates_section(hit_text)
-                    blocks = split_into_expediente_blocks(section_text)
-                    if blocks:
-                        edicts.extend(blocks)
-                    elif is_foreclosure_edict_text(hit_text):
-                        edicts.append(hit_text.strip())
+                    try:
+                        doc_payload = json.dumps({"id": doc_id, "idDocument": doc_id}).encode("utf-8")
+                        doc_req = urllib.request.Request(NEXUS_PJ_DOC_API, data=doc_payload, headers=headers, method="POST")
+                        with urllib.request.urlopen(doc_req, context=ctx, timeout=10) as doc_resp:
+                            doc_valid, doc_bytes, _ = validate_and_read_response(doc_resp, f"{NEXUS_PJ_DOC_API}?id={doc_id}", min_bytes=100, is_json=True)
+                            if doc_valid:
+                                doc_body = json.loads(doc_bytes.decode("utf-8", errors="ignore"))
+                                hit_obj = doc_body.get("hits", {}) if isinstance(doc_body.get("hits"), dict) else {}
+                                html = hit_obj.get("html", "")
+                                if html and BeautifulSoup:
+                                    soup = BeautifulSoup(html, "html.parser")
+                                    hit_text = soup.get_text("\n", strip=True)
+                                elif html:
+                                    hit_text = re.sub(r"<[^>]+>", "\n", html)
+                                else:
+                                    hit_text = hit_obj.get("texto") or hit_obj.get("contenido") or ""
+                                    
+                                if hit_text and len(hit_text) >= 100:
+                                    # Split by expediente blocks
+                                    blocks = split_into_expediente_blocks(hit_text)
+                                    if blocks:
+                                        edicts.extend(blocks)
+                                    else:
+                                        edicts.append(hit_text.strip())
+                    except Exception as doc_err:
+                        logger.debug(f"Nexus PJ document detail {doc_id} skipped: {doc_err}")
+                        
         except Exception as e:
-            logger.debug(f"Nexus PJ API query attempt skipped: {e}")
+            logger.debug(f"Nexus PJ query attempt skipped: {e}")
             
     logger.info(f"Extracted {len(edicts)} foreclosure edict blocks directly from Nexus PJ API feed.")
     return edicts
