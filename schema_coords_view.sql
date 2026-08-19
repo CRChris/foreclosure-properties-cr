@@ -1,16 +1,18 @@
 -- ==============================================================================
--- MIGRATION v2: Safe column additions + view + get_all_auctions RPC
+-- MIGRATION: Safe View & RPC Deployment (Drops existing view first)
 -- ==============================================================================
--- Run this ENTIRE script in the Supabase SQL editor.
--- This version safely adds missing columns before creating the view and RPC.
+-- Run this ENTIRE script in your Supabase SQL Editor.
 -- ==============================================================================
 
--- Step 1: Ensure required columns exist (safe IF NOT EXISTS)
+-- Step 1: Drop the old view if it exists (avoids column name conflict error 42P16)
+DROP VIEW IF EXISTS public.auctions_with_coords CASCADE;
+
+-- Step 2: Ensure required columns exist on auctions table
 ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS location_type VARCHAR(32) DEFAULT 'approximate_town';
 ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS parcel_polygon JSONB;
 ALTER TABLE public.auctions ADD COLUMN IF NOT EXISTS plano_catastrado VARCHAR(64);
 
--- Step 2: Add constraint if not already present
+-- Step 3: Add constraint if not already present
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -22,23 +24,20 @@ BEGIN
     END IF;
 END $$;
 
--- Step 3: Create or replace view
-CREATE OR REPLACE VIEW public.auctions_with_coords AS
+-- Step 4: Create fresh view with explicitly calculated latitude and longitude
+CREATE VIEW public.auctions_with_coords AS
 SELECT
     a.*,
-    ST_Y(a.location::geometry)::DOUBLE PRECISION AS latitude,
-    ST_X(a.location::geometry)::DOUBLE PRECISION AS longitude
+    CASE WHEN a.location IS NOT NULL THEN ST_Y(a.location::geometry)::DOUBLE PRECISION ELSE NULL END AS latitude,
+    CASE WHEN a.location IS NOT NULL THEN ST_X(a.location::geometry)::DOUBLE PRECISION ELSE NULL END AS longitude
 FROM public.auctions a;
 
--- Step 4: Grant access
+-- Step 5: Grant permissions on the view
 GRANT SELECT ON public.auctions_with_coords TO anon;
 GRANT SELECT ON public.auctions_with_coords TO authenticated;
 GRANT SELECT ON public.auctions_with_coords TO service_role;
 
--- Step 5: Force PostgREST schema cache reload
-NOTIFY pgrst, 'reload schema';
-
--- Step 6: Create get_all_auctions RPC (primary coord source, bypasses schema cache)
+-- Step 6: Create/Replace get_all_auctions RPC (primary high-speed function)
 CREATE OR REPLACE FUNCTION public.get_all_auctions(
     p_province TEXT DEFAULT NULL,
     p_canton TEXT DEFAULT NULL,
@@ -162,10 +161,10 @@ BEGIN
 END;
 $$;
 
--- Step 7: Grant RPC access
+-- Step 7: Grant permissions on the RPC
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO anon;
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_all_auctions(TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO service_role;
 
--- Step 8: Reload schema cache again after all changes
+-- Step 8: Notify PostgREST to reload its schema cache
 NOTIFY pgrst, 'reload schema';
