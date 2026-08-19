@@ -399,7 +399,7 @@ def slice_remates_section(full_text: str) -> str:
             start_idx = m.start()
             # Boundary stopping if another non-remate major chapter begins
             end_match = re.search(
-                r'\n\s*(?:EDICTOS\s+MATRIMONIALES|MARCAS\s+DE\s+FÁBRICA|CITACIONES\s*\n|T[IÍ]TULOS\s+SUPLETORIOS|ADMINISTRACI[ÓO]N\s+P[ÚU]BLICA\s*\n|INSTITUCIONES\s+DESCENTRALIZADAS\s*\n)\b',
+                r'\n\s*(?:EDICTOS\s+MATRIMONIALES|MARCAS\s+DE\s+FÁBRICA|CITACIONES|T[IÍ]TULOS\s+SUPLETORIOS|ADMINISTRACI[ÓO]N\s+P[ÚU]BLICA|INSTITUCIONES\s+DESCENTRALIZADAS)\b',
                 text_to_search[start_idx:],
                 re.IGNORECASE
             )
@@ -439,13 +439,23 @@ def split_into_expediente_blocks(text: str) -> List[str]:
 def is_foreclosure_edict_text(text: str) -> bool:
     """
     Validates whether an edict text contains authentic real estate foreclosure auction markers.
+    Strictly filters out vehicle auctions, coins/banknotes lots, and government fe de erratas notices.
     """
     if len(text) < 100:
         return False
     t_lower = text.lower()
+
+    # Reject non-real-estate auctions
+    if re.search(r'\b(vehículo|automóvil|placa\s+[A-Z0-9]+|marca:\s*|motocicleta|camión|chasis|estilo:\s*|carrocería)\b', t_lower):
+        return False
+    if re.search(r'\b(monedas\s+de\s+colección|billetes|muebles\s+y\s+enseres)\b', t_lower):
+        return False
+    if re.search(r'\b(fe\s+de\s+erratas|nombramiento|acuerdo\s+n[º°])\b', t_lower):
+        return False
+
     has_auction_kw = any(w in t_lower for w in ["remate", "rematará", "remataré", "subasta", "postor", "postura", "mejor postor", "al mejor postor"])
-    has_property_kw = any(w in t_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide", "lote", "propiedad", "naturaleza"])
-    has_judicial_kw = any(w in t_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de", "dólares", "colones", "horas"])
+    has_property_kw = any(w in t_lower for w in ["finca", "matrícula", "folio", "plano", "terreno", "inmueble", "cabida", "mide", "lote", "propiedad", "naturaleza", "filial", "condominio"])
+    has_judicial_kw = any(w in t_lower for w in ["expediente", "exp:", "exp.", "juzgado", "base:", "base de", "dólares", "colones", "horas", "precio"])
     return has_auction_kw and has_property_kw and has_judicial_kw
 
 def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -> str:
@@ -750,36 +760,42 @@ def parse_cr_price_string(p_str: str) -> Optional[float]:
     """
     Parses Costa Rican and international currency strings into float.
     Handles:
-      '72.000.000,00' -> 72000000.0
-      '220,000.00' -> 220000.0
-      '85.000.000' -> 85000000.0
-      '180,000' -> 180000.0
+      '¢17.925.766.16'  -> 17925766.16
+      '₡182.331.501.41' -> 182331501.41
+      '72.000.000,00'   -> 72000000.0
+      '220,000.00'      -> 220000.0
+      '85.000.000'      -> 85000000.0
+      '180,000'         -> 180000.0
     """
     if not p_str:
         return None
-    clean = p_str.strip().replace("CRC", "").replace("USD", "").replace("$", "").replace("₡", "").replace("¢", "").strip()
+    clean = re.sub(r'[^\d.,]', '', p_str.strip()).strip()
     if not clean:
         return None
 
     if "," in clean and "." in clean:
         if clean.rfind(",") > clean.rfind("."):
-            # European/CR format: 72.000.000,00
+            # European/CR format: 72.000.000,00 -> comma is decimal
             clean = clean.replace(".", "").replace(",", ".")
         else:
-            # US format: 72,000,000.00
+            # US format: 72,000,000.00 -> dot is decimal
             clean = clean.replace(",", "")
-    elif "." in clean and "," not in clean:
+    elif "." in clean:
         parts = clean.split(".")
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
-            # European thousand separator: 72.000.000 or 85.000
+        if len(parts) > 1 and len(parts[-1]) == 2:
+            # Last dot is cents: 17.925.766.16 -> 17925766.16 or 220.00
+            clean = "".join(parts[:-1]) + "." + parts[-1]
+        elif len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
+            # All dots are thousand separators: 85.000.000 -> 85000000
             clean = clean.replace(".", "")
-    elif "," in clean and "." not in clean:
+    elif "," in clean:
         parts = clean.split(",")
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3):
-            # US thousand separator: 72,000,000 or 180,000
+        if len(parts) > 1 and len(parts[-1]) == 2:
+            # Last comma is cents: 17,925,766,16 -> 17925766.16
+            clean = "".join(parts[:-1]) + "." + parts[-1]
+        elif len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
+            # All commas are thousand separators: 85,000,000 -> 85000000
             clean = clean.replace(",", "")
-        elif len(parts) == 2 and len(parts[1]) == 2:
-            clean = clean.replace(",", ".")
 
     try:
         val = float(clean)
@@ -792,30 +808,39 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
     Step 3: Resilient multi-court regex fallback parser.
     Robustly extracts structured property foreclosure data from varied Juzgados de Cobro / Civiles / Agrarios formats.
     Ensures missing non-critical fields (e.g., plano, defendant, exact district) do not drop the block.
+    Strictly filters out non-real-estate auctions (vehicles, coins, administrative notices).
     """
     try:
         text_lower = edict_text.lower()
 
+        # Reject non-real-estate auctions
+        if re.search(r'\b(vehículo|automóvil|placa\s+[A-Z0-9]+|marca:\s*|motocicleta|camión|chasis|estilo:\s*|carrocería)\b', text_lower):
+            return None
+        if re.search(r'\b(monedas\s+de\s+colección|billetes|muebles\s+y\s+enseres)\b', text_lower):
+            return None
+        if re.search(r'\b(fe\s+de\s+erratas|nombramiento|acuerdo\s+n[º°])\b', text_lower):
+            return None
+
         # 1. Expediente Docket Number (Fuzzy multi-pattern)
         exp_patterns = [
-            r"(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.?|CAUSA\s+N[ºo]?)\s*[:\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+)",
-            r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C)[A-Z0-9]*)\b",
-            r"\b([0-9]{2}-[0-9]{6}-[0-9]{4}-[A-Z0-9]+)\b",
+            r"(?:EXP(?:EDIENTE)?|N[ÚU]MERO\s+DE\s+EXP(?:EDIENTE)?|NO\.\s*EXP\.?|EXP\.)\s*[:\.\s]*([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+|\b[0-9]{2}-[0-9]{5,7}-[0-9]{3,4}\b|[A-Z]{2,4}-[0-9]{3,6}-[0-9]{2,4})",
+            r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-(?:CJ|CI|CA|AG|CO|J|C|PE|FA)[A-Z0-9]*)\b",
+            r"(?:expediente\s+n[úu]mero\s+|expediente\s+n[º°]\s*)([0-9]{2}-[0-9]{4,8}-[0-9]{3,4}-[A-Z0-9]+)",
         ]
         expediente = None
-        for ep in exp_patterns:
-            m = re.search(ep, edict_text, re.IGNORECASE)
+        for p in exp_patterns:
+            m = re.search(p, edict_text, re.IGNORECASE)
             if m:
                 expediente = m.group(1).strip()
                 break
 
         if not expediente:
-            # Fallback docket identifier
-            in_match = re.search(r"\(\s*(IN[0-9]{8,14})\s*\)", edict_text)
-            if in_match:
-                expediente = f"ED-{in_match.group(1)}"
+            # Check for general judicial docket format XX-XXXXXX-XXXX-XX anywhere in block
+            gen_match = re.search(r"\b([0-9]{2}-[0-9]{5,7}-[0-9]{3,4}-[A-Za-z0-9]+)\b", edict_text)
+            if gen_match:
+                expediente = gen_match.group(1).strip()
             else:
-                return None  # Real estate foreclosure must have a traceable docket
+                return None  # Real estate foreclosure must have a docket number
 
         # 2. Court / Juzgado Name
         court_match = re.search(r"((?:Juzgado|Tribunal)\s+[\w\s,.-]+?)(?:\.|$|\n|;|–|-|con\s+la\s+base|en\s+la\s+puerta|hace\s+saber)", edict_text, re.I)
@@ -890,34 +915,45 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         plano_match = re.search(r"(?:plano\s+(?:catastro\s+|catastrado\s+)?(?:n[úu]mero\s+|:)?|catastro\s+n[úu]mero\s+)([A-Z]{1,3}-[0-9]+-[0-9]{2,4}|[A-Z0-9]+-[0-9]+)", edict_text, re.I)
         plano = plano_match.group(1).strip() if plano_match else None
 
-        # 6. Currency & 3-Call Base Prices
-        is_usd = ("dólar" in text_lower or "$" in edict_text or "usd" in text_lower)
-        currency = "USD" if is_usd else "CRC"
+        # 6. Currency & 3-Call Base Prices (Exact Base Context)
+        base_match = re.search(r"(?:base\s+de\s+|con\s+la\s+base\s+de\s+|por\s+la\s+base\s+de\s+|con\s+una\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([^\.\;\n]+)", edict_text, re.I)
+        base_sentence = base_match.group(0) if base_match else edict_text
+        b_low = base_sentence.lower()
+
+        if "colón" in b_low or "colones" in b_low or "₡" in base_sentence or "¢" in base_sentence or "crc" in b_low:
+            currency = "CRC"
+        elif "dólar" in b_low or "dolares" in b_low or "usd" in b_low or "$" in base_sentence:
+            currency = "USD"
+        else:
+            if "colón" in text_lower or "colones" in text_lower or "₡" in edict_text or "¢" in edict_text:
+                currency = "CRC"
+            elif "dólar" in text_lower or "dolares" in text_lower or "usd" in text_lower:
+                currency = "USD"
+            else:
+                currency = "CRC"
 
         raw_price_matches = re.findall(
-            r'(?:USD|CRC|\$|₡|¢)\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})|'
-            r'(?:base\s+(?:de\s+)?|con\s+la\s+base\s+de\s+|precio\s+base\s+de\s+|base\s*:)\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})',
-            edict_text,
+            r'(?:USD|CRC|\$|₡|¢)?\s*([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]{4,12})',
+            base_sentence,
             re.I
         )
         prices = []
-        for match_tuple in raw_price_matches:
-            matched_str = match_tuple[0] or match_tuple[1]
-            if matched_str:
-                val = parse_cr_price_string(matched_str)
+        for match_str in raw_price_matches:
+            if match_str:
+                val = parse_cr_price_string(match_str)
                 if val:
-                    if currency == "USD" and val >= 2000:
+                    if currency == "USD" and 3000 <= val <= 50000000:
                         prices.append(val)
-                    elif currency == "CRC" and val >= 500000:
+                    elif currency == "CRC" and 500000 <= val <= 20000000000:
                         prices.append(val)
 
         if not prices:
-            # Fallback broader price search
+            # Fallback broader price search in whole text
             all_numbers = re.findall(r'([0-9]{1,3}(?:[\.,][0-9]{3})+(?:[\.,][0-9]{2})?)', edict_text)
             for num_str in all_numbers:
                 v = parse_cr_price_string(num_str)
                 if v:
-                    if (currency == "USD" and v >= 2000) or (currency == "CRC" and v >= 500000):
+                    if (currency == "USD" and 3000 <= v <= 50000000) or (currency == "CRC" and 500000 <= v <= 20000000000):
                         prices.append(v)
 
         if not prices:
