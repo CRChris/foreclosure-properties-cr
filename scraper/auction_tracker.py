@@ -18,7 +18,14 @@ import urllib.error
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from scraper.main import load_env_files
+try:
+    from scraper.main import load_env_files
+except (ImportError, ModuleNotFoundError):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from scraper.main import load_env_files
+    except (ImportError, ModuleNotFoundError):
+        from main import load_env_files
 
 load_env_files()
 

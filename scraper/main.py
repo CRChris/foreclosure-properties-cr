@@ -1666,8 +1666,8 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
     supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     
     if not supabase_url or not supabase_key:
-        logger.info("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing. Skipping remote database upload (Simulation mode).")
-        return len(records), 0, [r.get("expediente_number", "") for r in records]
+        logger.error("⚠️ SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing from environment. Skipping remote database upload (0 inserted).")
+        return 0, len(records), []
         
     try:
         ctx = create_ssl_context()
@@ -2112,7 +2112,10 @@ def main():
         # Trigger Automated Auction Call Progression & Lifecycle Tracker Engine
         logger.info("Executing automated lifecycle progression engine (Single Source of Truth RPC)...")
         try:
-            from scraper.auction_tracker import sync_auction_progression_via_rpc
+            try:
+                from scraper.auction_tracker import sync_auction_progression_via_rpc
+            except (ImportError, ModuleNotFoundError):
+                from auction_tracker import sync_auction_progression_via_rpc
             progression_result = sync_auction_progression_via_rpc()
             if progression_result.get("success"):
                 logger.info(f"✓ Progression Engine synced: {progression_result.get('total_processed', 0)} evaluated, {progression_result.get('total_updated', 0)} state transitions.")
