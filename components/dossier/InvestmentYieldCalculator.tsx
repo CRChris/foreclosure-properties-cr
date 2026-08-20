@@ -37,45 +37,52 @@ export function InvestmentYieldCalculator({
   const defaultMarketValue =
     auction.estimated_market_value || Math.round(auction.base_price_call_1 * 1.4);
 
-  // Reactive state inputs
-  const [targetBid, setTargetBid] = useState<number>(defaultBasePrice);
-  const [resaleValue, setResaleValue] = useState<number>(defaultMarketValue);
-  const [renovationBudget, setRenovationBudget] = useState<number>(
-    auction.currency === 'USD' ? 15000 : 8000000
-  );
-  const [holdingMonths, setHoldingMonths] = useState<number>(6);
-  const [municipalHOABuffer, setMunicipalHOABuffer] = useState<number>(
-    auction.currency === 'USD' ? 2500 : 1200000
-  );
+  // Reactive state inputs (default to '' so users can enter custom figures without hardcoded defaults)
+  const [targetBid, setTargetBid] = useState<number | ''>(defaultBasePrice);
+  const [resaleValue, setResaleValue] = useState<number | ''>(defaultMarketValue);
+  const [renovationBudget, setRenovationBudget] = useState<number | ''>('');
+  const [holdingMonths, setHoldingMonths] = useState<number | ''>(6);
+  const [municipalHOABuffer, setMunicipalHOABuffer] = useState<number | ''>('');
 
-  // Update target bid when user switches call stage in parent ladder
+  // Update target bid and resale value when auction data or stage changes
   useEffect(() => {
     setTargetBid(defaultBasePrice);
   }, [defaultBasePrice]);
+
+  useEffect(() => {
+    setResaleValue(defaultMarketValue);
+  }, [defaultMarketValue]);
+
+  // Numerical helpers for calculations
+  const numTargetBid = typeof targetBid === 'number' ? targetBid : 0;
+  const numResaleValue = typeof resaleValue === 'number' ? resaleValue : 0;
+  const numRenovation = typeof renovationBudget === 'number' ? renovationBudget : 0;
+  const numBuffer = typeof municipalHOABuffer === 'number' ? municipalHOABuffer : 0;
+  const numHoldingMonths = typeof holdingMonths === 'number' ? holdingMonths : 0;
 
   // Costa Rican Statutory Closing Cost Formulas:
   // - 1.50% Impuesto de Traspaso Inmobiliario (Ley 7088)
   // - 0.84% Timbres Registrales (Colegio Abogados, Fiscal, Agrario, Registro Nacional)
   // - 1.25% Honorarios Notariales / Protocolización de Remate (Decreto de Aranceles)
-  const transferTax = targetBid * 0.015;
-  const registryStamps = targetBid * 0.0084;
-  const legalNotaryFees = targetBid * 0.0125;
+  const transferTax = numTargetBid * 0.015;
+  const registryStamps = numTargetBid * 0.0084;
+  const legalNotaryFees = numTargetBid * 0.0125;
   const totalClosingFees = transferTax + registryStamps + legalNotaryFees;
 
   // Day of auction deposit (Postura Legal = 50%)
-  const courtDeposit50Pct = targetBid * 0.5;
+  const courtDeposit50Pct = numTargetBid * 0.5;
 
   // Total Capital Required
   const totalAcquisitionCost =
-    targetBid + totalClosingFees + renovationBudget + municipalHOABuffer;
+    numTargetBid + totalClosingFees + numRenovation + numBuffer;
 
   // Net Profit & Yield Metrics
-  const netProfit = resaleValue - totalAcquisitionCost;
+  const netProfit = numResaleValue - totalAcquisitionCost;
   const netROI = totalAcquisitionCost > 0 ? (netProfit / totalAcquisitionCost) * 100 : 0;
 
   // Annualized Yield (IRR estimation based on holding months)
   const annualizedROI =
-    holdingMonths > 0 ? netROI * (12 / holdingMonths) : netROI;
+    numHoldingMonths > 0 ? netROI * (12 / numHoldingMonths) : netROI;
 
   const isProfitable = netProfit > 0;
 
@@ -125,8 +132,8 @@ export function InvestmentYieldCalculator({
               </div>
               <Input
                 type="number"
-                value={targetBid || ''}
-                onChange={(e) => setTargetBid(Number(e.target.value))}
+                value={targetBid}
+                onChange={(e) => setTargetBid(e.target.value === '' ? '' : Number(e.target.value))}
                 className="font-mono text-base font-extrabold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 h-11"
               />
             </div>
@@ -140,24 +147,31 @@ export function InvestmentYieldCalculator({
               </div>
               <Input
                 type="number"
-                value={resaleValue || ''}
-                onChange={(e) => setResaleValue(Number(e.target.value))}
+                value={resaleValue}
+                onChange={(e) => setResaleValue(e.target.value === '' ? '' : Number(e.target.value))}
                 className="font-mono text-base font-extrabold text-slate-900 dark:text-white bg-white dark:bg-slate-900 h-11"
               />
             </div>
 
             {/* Renovation Budget & Holding Period Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <Wrench className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{t.dossier.renovationBudget}</span>
-                </label>
+              {/* Renovation Budget (Editable - Highlighted Light Green) */}
+              <div className="space-y-1.5 bg-emerald-50/60 dark:bg-emerald-950/25 p-3.5 rounded-2xl border border-emerald-300 dark:border-emerald-700/60 shadow-sm transition-all">
+                <div className="flex justify-between items-center text-xs">
+                  <label className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>{t.dossier.renovationBudget}</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-300/80 dark:border-emerald-700/60 px-1.5 py-0.5 rounded">
+                    {language === 'es' ? 'Editable' : 'Editable'}
+                  </span>
+                </div>
                 <Input
                   type="number"
-                  value={renovationBudget || ''}
-                  onChange={(e) => setRenovationBudget(Number(e.target.value))}
-                  className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 h-10"
+                  placeholder="0"
+                  value={renovationBudget}
+                  onChange={(e) => setRenovationBudget(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="font-mono text-xs font-bold text-slate-900 dark:text-slate-100 bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 placeholder-slate-400 dark:placeholder-slate-500 h-10"
                 />
               </div>
 
@@ -168,23 +182,30 @@ export function InvestmentYieldCalculator({
                 </label>
                 <Input
                   type="number"
-                  value={holdingMonths || ''}
-                  onChange={(e) => setHoldingMonths(Number(e.target.value))}
+                  placeholder="6"
+                  value={holdingMonths}
+                  onChange={(e) => setHoldingMonths(e.target.value === '' ? '' : Number(e.target.value))}
                   className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 h-10"
                 />
               </div>
             </div>
 
-            {/* Municipal & HOA Contingency */}
-            <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                {t.dossier.municipalHOABuffer} ({auction.currency}):
-              </label>
+            {/* Municipal & HOA Contingency (Editable - Highlighted Light Green) */}
+            <div className="space-y-1.5 bg-emerald-50/60 dark:bg-emerald-950/25 p-3.5 rounded-2xl border border-emerald-300 dark:border-emerald-700/60 shadow-sm transition-all">
+              <div className="flex justify-between items-center text-xs">
+                <label className="font-bold text-emerald-900 dark:text-emerald-300">
+                  {t.dossier.municipalHOABuffer} ({auction.currency}):
+                </label>
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-300/80 dark:border-emerald-700/60 px-1.5 py-0.5 rounded">
+                  {language === 'es' ? 'Editable' : 'Editable'}
+                </span>
+              </div>
               <Input
                 type="number"
-                value={municipalHOABuffer || ''}
-                onChange={(e) => setMunicipalHOABuffer(Number(e.target.value))}
-                className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 h-10"
+                placeholder="0"
+                value={municipalHOABuffer}
+                onChange={(e) => setMunicipalHOABuffer(e.target.value === '' ? '' : Number(e.target.value))}
+                className="font-mono text-xs font-bold text-slate-900 dark:text-slate-100 bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 focus:bg-white dark:focus:bg-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 placeholder-slate-400 dark:placeholder-slate-500 h-10"
               />
             </div>
           </div>
@@ -322,7 +343,7 @@ export function InvestmentYieldCalculator({
                   </span>
                   <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                     {formatCurrency(
-                      totalClosingFees + renovationBudget + municipalHOABuffer,
+                      totalClosingFees + numRenovation + numBuffer,
                       auction.currency
                     )}
                   </span>
