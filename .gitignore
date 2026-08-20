@@ -39,3 +39,4 @@ scraper/*.log
 *.pem
 *.pdf
 *.tsbuildinfo
+.vercel
