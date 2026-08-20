@@ -1749,19 +1749,36 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
                 logger.debug(f"Could not fetch existing expedientes (offset {offset}): {err}")
                 break
 
-        # 2. Filter out existing and terminal foreclosures
-        new_records = [
+        # 2. Filter out existing, terminal, and already-expired foreclosures
+        raw_new_records = [
             r for r in records 
             if r["expediente_number"].strip().upper() not in existing_expedientes 
             and r["expediente_number"].strip().upper() not in terminal_expedientes
             and r["expediente_number"] not in existing_expedientes
             and r["expediente_number"] not in terminal_expedientes
         ]
+
+        now = datetime.now()
+        new_records = []
+        for r in raw_new_records:
+            d3_str = r.get("auction_date_call_3")
+            d2_str = r.get("auction_date_call_2")
+            d1_str = r.get("auction_date_call_1")
+            
+            d3 = datetime.fromisoformat(d3_str.replace("Z", "+00:00")).replace(tzinfo=None) if d3_str else None
+            d2 = datetime.fromisoformat(d2_str.replace("Z", "+00:00")).replace(tzinfo=None) if d2_str else None
+            d1 = datetime.fromisoformat(d1_str.replace("Z", "+00:00")).replace(tzinfo=None) if d1_str else None
+
+            is_expired = d3 and d3 < now if d3 else (d2 and d2 < now if d2 else (d1 and d1 < now if d1 else False))
+            if is_expired:
+                logger.info(f"Skipping already-expired auction from feed: {r.get('expediente_number')}")
+            else:
+                new_records.append(r)
         
         skipped_count = len(records) - len(new_records)
 
         if not new_records:
-            logger.info("All discovered foreclosures are already up to date in Supabase PostGIS.")
+            logger.info("All discovered foreclosures are already up to date or expired in Supabase PostGIS.")
             return 0, skipped_count, []
 
         # 3. Post new records

@@ -1,16 +1,16 @@
-name: Daily Nexus PJ & Boletín Judicial Foreclosure Ingestion & Verification Pipeline
+name: Daily Foreclosure Scraper & Ingestion Pipeline (8:00 AM CR Time)
 
 on:
   schedule:
-    # 15:30 UTC = 9:30 AM Costa Rica Time (UTC-6), Daily
-    - cron: '30 15 * * *'
+    # 14:00 UTC = 8:00 AM Costa Rica Time (UTC-6), Daily
+    - cron: '0 14 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
 
 jobs:
-  ingest_and_verify:
-    name: Scrape, Verify Titles & Geocode Nexus PJ / Boletín Judicial Auctions
+  scrape_and_ingest:
+    name: Scrape Daily Publication, Filter Expired & Ingest Active Foreclosures
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Repository
@@ -23,18 +23,12 @@ jobs:
           cache: 'pip'
           cache-dependency-path: scraper/requirements.txt
 
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Ingestion Dependencies
+      - name: Install Scraper Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r scraper/requirements.txt
-          npm install
 
-      - name: Run Ingestion Engine (Scrapes Boletín Judicial / Nexus PJ)
+      - name: Run Ingestion Engine (Scrapes Boletín Judicial / Nexus PJ & Purges Expired)
         env:
           PYTHONPATH: .
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -47,16 +41,6 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL || secrets.DISCORD_WEBHOOK_URL || secrets.SLACK_WEBHOOK_URL }}
         run: |
           python scraper/main.py
-
-      - name: Run Post-Scan Verification & Cadastral Mapping Engine
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-        run: |
-          npx tsx scripts/verify_and_map.ts --today-only
 
       - name: Run Standalone Auction Call Progression Tracker (PostgreSQL RPC)
         env:
