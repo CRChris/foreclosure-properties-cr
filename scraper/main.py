@@ -2057,7 +2057,33 @@ def check_yield_and_alert(
         logger.warning(f"Context: {extra_context}")
     logger.warning("=" * 70)
 
-    return alert_info
+def has_today_been_processed(target_date_str: str) -> bool:
+    """
+    Checks if today's publication has already been processed and ingested.
+    Queries Supabase for auctions created on target_date_str or successful ingestion logs.
+    """
+    supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not supabase_key:
+        return False
+        
+    try:
+        ctx = create_ssl_context()
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+        }
+        url = f"{supabase_url}/rest/v1/auctions?select=id,created_at&created_at=gte.{target_date_str}T00:00:00&limit=1"
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+            if resp.status in (200, 206):
+                data = json.loads(resp.read().decode("utf-8"))
+                if data and len(data) > 0:
+                    return True
+    except Exception as e:
+        logger.debug(f"Could not check today's processing status: {e}")
+        
+    return False
 
 
 # ==============================================================================
@@ -2070,9 +2096,18 @@ def main():
     parser.add_argument("--url", type=str, help="URL of a Boletín Judicial publication or Nexus PJ document to parse")
     parser.add_argument("--text", type=str, help="Raw text string containing judicial notices to parse")
     parser.add_argument("--date", type=str, help="Target date in YYYY-MM-DD format (default: today)")
+    parser.add_argument("--retry-if-empty", action="store_true", help="Skip if today's publication was already processed in the earlier run")
     parser.add_argument("--dry-run", action="store_true", help="Extract and parse without uploading to Supabase")
     parser.add_argument("--test-discord", action="store_true", help="Send a test notification to configured Discord Webhook")
     args = parser.parse_args()
+
+    target_date_str = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    # If running as the 8:00 AM retry, check if 7:15 AM already processed today's publication
+    if args.retry_if_empty and not args.dry_run:
+        if has_today_been_processed(target_date_str):
+            logger.info(f"✅ Today's publication ({target_date_str}) was already successfully ingested during the earlier run. Skipping 8:00 AM retry.")
+            return
 
     # Quick Discord Webhook Test
     if args.test_discord:
@@ -2256,6 +2291,20 @@ def main():
                 logger.warning(f"Progression Engine warning: {progression_result.get('error')}")
         except Exception as ex:
             logger.warning(f"Could not run progression sync RPC: {ex}")
+
+        # Trigger Post-Scan Verification & Cadastral Mapping Engine immediately on new listings
+        if inserted_count > 0 or len(new_expedientes) > 0:
+            logger.info(f"🚀 Triggering Post-Scan Verification & Cadastral Mapping Engine for {inserted_count} newly added properties...")
+            try:
+                import subprocess
+                cmd = ["npx", "tsx", "scripts/verify_and_map.ts", "--today-only"]
+                proc = subprocess.run(cmd, check=False, text=True, capture_output=True)
+                if proc.stdout:
+                    logger.info(f"Verification Engine Summary:\n{proc.stdout}")
+                if proc.returncode != 0 and proc.stderr:
+                    logger.warning(f"Verification Engine stderr:\n{proc.stderr}")
+            except Exception as ex:
+                logger.warning(f"Could not run verification subprocess directly: {ex}")
 
         duration = time.time() - start_time
         status_str = "success" if inserted_count > 0 else "no_new_properties"
