@@ -28,6 +28,7 @@ import {
   Smartphone,
   ArrowRight,
   Info,
+  Banknote,
 } from 'lucide-react';
 
 interface ParticipateAuctionModalProps {
@@ -204,7 +205,9 @@ export function ParticipateAuctionModal({
   const { t, language } = useLanguage();
   const [mounted, setMounted] = useState(false);
   const [copiedExp, setCopiedExp] = useState(false);
-  const [copiedDeposit, setCopiedDeposit] = useState(false);
+  const [copiedDeposit50, setCopiedDeposit50] = useState(false);
+  const [copiedDeposit30, setCopiedDeposit30] = useState(false);
+  const [copiedCourtName, setCopiedCourtName] = useState(false);
   const [copiedIbanCRC, setCopiedIbanCRC] = useState(false);
   const [copiedIbanUSD, setCopiedIbanUSD] = useState(false);
 
@@ -250,7 +253,8 @@ export function ParticipateAuctionModal({
       ? auction.auction_date_call_3
       : auction.auction_date_call_1;
 
-  const depositAmount = activeBasePrice * 0.5;
+  const depositAmount50 = activeBasePrice * 0.5;
+  const depositAmount30 = activeBasePrice * 0.3;
 
   const bcrInfo = getJudicialBCRAccount(auction.court_name, auction.province);
 
@@ -271,10 +275,22 @@ export function ParticipateAuctionModal({
     setTimeout(() => setCopiedExp(false), 2500);
   };
 
-  const handleCopyDeposit = () => {
-    navigator.clipboard.writeText(String(Math.round(depositAmount)));
-    setCopiedDeposit(true);
-    setTimeout(() => setCopiedDeposit(false), 2500);
+  const handleCopyDeposit50 = () => {
+    navigator.clipboard.writeText(String(Math.round(depositAmount50)));
+    setCopiedDeposit50(true);
+    setTimeout(() => setCopiedDeposit50(false), 2500);
+  };
+
+  const handleCopyDeposit30 = () => {
+    navigator.clipboard.writeText(String(Math.round(depositAmount30)));
+    setCopiedDeposit30(true);
+    setTimeout(() => setCopiedDeposit30(false), 2500);
+  };
+
+  const handleCopyCourtName = () => {
+    navigator.clipboard.writeText(auction.court_name || '');
+    setCopiedCourtName(true);
+    setTimeout(() => setCopiedCourtName(false), 2500);
   };
 
   const handleCopyIbanCRC = () => {
@@ -373,19 +389,27 @@ export function ParticipateAuctionModal({
               </p>
             </div>
 
-            {/* Mandatory 50% Legal Deposit */}
+            {/* Mandatory Legal Deposits (30% Check vs 50% BCR) */}
             <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/40 space-y-1 relative overflow-hidden">
               <div className="absolute top-0 right-0 left-0 h-1 bg-emerald-500" />
               <span className="text-[10.5px] uppercase font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                {isEn ? '50% Legal Deposit (Postura)' : 'Depósito 50% Postura Legal'}
+                {isEn ? 'Statutory Bidding Deposit (Postura)' : 'Postura Legal Obligatoria'}
               </span>
-              <p className="text-base font-black text-emerald-800 dark:text-emerald-300 font-mono">
-                {formatCurrency(depositAmount, auction.currency)}
-              </p>
-              <p className="text-[10.5px] text-slate-600 dark:text-slate-300">
-                {isEn ? 'Required to participate & bid' : 'Requisito obligatorio para pujar'}
-              </p>
+              <div className="flex items-baseline justify-between pt-0.5">
+                <div>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isEn ? '30% Cashier’s Check:' : '30% Cheque Gerencia:'}</span>
+                  <p className="text-base font-black text-emerald-800 dark:text-emerald-300 font-mono">
+                    {formatCurrency(depositAmount30, auction.currency)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">{isEn ? '50% (BCR / Repeat):' : '50% (BCR / Insubsistencia):'}</span>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono">
+                    {formatCurrency(depositAmount50, auction.currency)}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -446,160 +470,281 @@ export function ParticipateAuctionModal({
             </div>
           </div>
 
-          {/* 3. Official Court BCR Judicial Account Information */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border border-emerald-300 dark:border-emerald-500/30 space-y-4 shadow-sm dark:shadow-xl">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <Landmark className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                    <span>{isEn ? 'Official Court BCR Judicial Account Information' : 'Cuentas Oficiales de Depósitos Judiciales (BCR)'}</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                      BCR • Poder Judicial
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {isEn
-                      ? 'Standardized Judicial Deposit System (SDJ) operated exclusively via Banco de Costa Rica'
-                      : 'Sistema de Depósitos Judiciales (SDJ) operado exclusivamente a través del Banco de Costa Rica'}
-                  </p>
-                </div>
+          {/* 3. Mandatory Legal Deposit Methods (Option 1: BCR vs Option 2: Cashier's Check) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <DollarSign className="w-4 h-4" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href={bcrInfo.officialBcrPortalUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-emerald-300 dark:border-emerald-500/30 hover:border-emerald-400 transition-colors shadow-sm"
-                >
-                  <span>Portal BCR</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                <a
-                  href={bcrInfo.officialPoderJudicialUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 transition-colors shadow-sm"
-                >
-                  <span>PJ Virtual</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+              <div>
+                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                  <span>{isEn ? 'Bidding Deposit Methods (Two Statutory Options)' : 'Opciones para Depositar la Postura Legal'}</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                    Ley N° 9342
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {isEn
+                    ? 'Choose either in-person cashier’s check (fastest refund) or advance electronic judicial deposit at BCR'
+                    : 'Elija entre cheque de gerencia en sala (devolución inmediata) o depósito judicial electrónico anticipado en BCR'}
+                </p>
               </div>
             </div>
 
-            {/* IBAN Numbers Display Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
-              {/* USD IBAN */}
-              <div className={`p-3.5 rounded-xl border space-y-1.5 transition-all ${
-                auction.currency === 'USD'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/50 shadow-inner'
-                  : 'bg-white dark:bg-slate-950/80 border-slate-200 dark:border-slate-800'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <span>{isEn ? 'US Dollars (USD $) IBAN' : 'Cuenta IBAN Dólares (USD $)'}</span>
-                  </span>
-                  {auction.currency === 'USD' && (
-                    <span className="text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-sans">
-                      {isEn ? 'Property Currency' : 'Moneda del Remate'}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Option 2: Same-Day In-Person Cashier's Check */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border-2 border-emerald-300 dark:border-emerald-500/40 space-y-3.5 relative overflow-hidden flex flex-col justify-between shadow-sm">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shrink-0">
+                        <Banknote className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono uppercase font-bold text-slate-500 dark:text-slate-400 block">
+                          {isEn ? 'Option A' : 'Opción A'}
+                        </span>
+                        <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                          {isEn ? 'Same-Day Cashier’s Check (Cheque de Gerencia)' : 'Cheque de Gerencia en Sala'}
+                        </h4>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-500/30 whitespace-nowrap">
+                      {isEn ? '⚡ Fastest Refund' : '⚡ Devolución Inmediata'}
                     </span>
-                  )}
+                  </div>
+
+                  <p className="text-[11.5px] text-slate-600 dark:text-slate-400 leading-normal">
+                    {isEn
+                      ? 'Bring a physical certified cashier’s check issued by any regulated Costa Rican bank directly to the courtroom on auction day.'
+                      : 'Lleve un cheque de gerencia físico emitido por cualquier banco regulado directamente a la sala de remates el día señalado.'}
+                  </p>
+
+                  {/* Dynamic Check Requirements Panel */}
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-xs font-mono">
+                    {/* Payee */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-sans font-bold text-slate-500 uppercase block">
+                        {isEn ? '1. Make Check Payable To (Páguese a la Orden de):' : '1. Páguese a la Orden de (Nombre Exacto):'}
+                      </span>
+                      <div className="flex items-center justify-between gap-1.5 p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                        <strong className="text-slate-900 dark:text-white text-[11.5px] font-sans font-bold select-all truncate">
+                          {auction.court_name}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={handleCopyCourtName}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 shrink-0"
+                          title="Copy court name"
+                        >
+                          {copiedCourtName ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Memo */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-sans font-bold text-slate-500 uppercase block">
+                        {isEn ? '2. Check Memo / Detail (Detalle en Cheque):' : '2. Detalle / Memo en Cheque:'}
+                      </span>
+                      <div className="flex items-center justify-between gap-1.5 p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                        <strong className="text-slate-900 dark:text-white text-xs select-all">
+                          EXP: {auction.expediente_number}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={handleCopyExp}
+                          className="p-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 shrink-0"
+                          title="Copy docket"
+                        >
+                          {copiedExp ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Deposit Amount Calculation */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-sans font-bold text-slate-500 uppercase block">
+                        {isEn ? '3. Check Amount (30% Standard Base):' : '3. Monto del Cheque (30% Base Estándar):'}
+                      </span>
+                      <div className="flex items-center justify-between gap-1.5 p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/40">
+                        <div>
+                          <strong className="text-emerald-700 dark:text-emerald-300 text-sm font-bold">
+                            {formatCurrency(depositAmount30, auction.currency)}
+                          </strong>
+                          <span className="text-[10px] text-slate-500 font-sans block">
+                            {isEn ? '(Or 50%/100% if designated as insubsistencia)' : '(O 50%/100% si se decretó insubsistencia)'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyDeposit30}
+                          className="p-1 rounded bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 shrink-0 border border-emerald-300 dark:border-emerald-700"
+                          title="Copy 30% deposit amount"
+                        >
+                          {copiedDeposit30 ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Requirements Note */}
+                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
+                    <p className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>{isEn ? 'Attendance Requirements:' : 'Requisitos en Audiencia:'}</span>
+                    </p>
+                    <p>
+                      {isEn
+                        ? 'Bring valid original ID (cédula, DIMEX, or passport) and arrive 20–30 minutes early to confirm docket status with the clerk.'
+                        : 'Llevar identificación original vigente (cédula, DIMEX o pasaporte) y presentarse 20–30 minutos antes para verificar el expediente.'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between gap-1 pt-0.5">
-                  <strong className="text-slate-900 dark:text-white text-xs sm:text-sm tracking-wide select-all">
-                    {bcrInfo.ibanUSD}
-                  </strong>
-                  <button
-                    type="button"
-                    onClick={handleCopyIbanUSD}
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-300 dark:border-slate-700 transition-all shrink-0"
-                    title="Copy USD IBAN"
-                  >
-                    {copiedIbanUSD ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
+
+                {/* Refund Benefit Callout */}
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/40 text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1 mt-2">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>{isEn ? 'Refund Benefit — Immediate Return:' : 'Ventaja de Reintegro Inmediato:'}</span>
+                  </p>
+                  <p className="text-slate-700 dark:text-slate-300">
+                    {isEn
+                      ? 'If you are outbid, the court returns the physical cashier’s check immediately at the conclusion of the hearing.'
+                      : 'Si otro postor supera su oferta, el juzgado le entrega el cheque físico inmediatamente al concluir el acto.'}
+                  </p>
                 </div>
               </div>
 
-              {/* CRC Colones IBAN */}
-              <div className={`p-3.5 rounded-xl border space-y-1.5 transition-all ${
-                auction.currency === 'CRC'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/50 shadow-inner'
-                  : 'bg-white dark:bg-slate-950/80 border-slate-200 dark:border-slate-800'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                    <span>{isEn ? 'Colones (CRC ₡) IBAN' : 'Cuenta IBAN Colones (CRC ₡)'}</span>
-                  </span>
-                  {auction.currency === 'CRC' && (
-                    <span className="text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 font-sans">
-                      {isEn ? 'Property Currency' : 'Moneda del Remate'}
+              {/* Option 1: Electronic Judicial Deposit (BCR) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3.5 relative overflow-hidden flex flex-col justify-between shadow-sm">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-500/30 shrink-0">
+                        <CreditCard className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono uppercase font-bold text-slate-500 dark:text-slate-400 block">
+                          {isEn ? 'Option B' : 'Opción B'}
+                        </span>
+                        <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                          {isEn ? 'Electronic Deposit (BCR Account)' : 'Depósito Electrónico (Cuenta BCR)'}
+                        </h4>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 text-[10px] font-bold border border-sky-300 dark:border-sky-500/30 whitespace-nowrap">
+                      {isEn ? '🌐 Remote / Advance' : '🌐 Remoto / Anticipado'}
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-1 pt-0.5">
-                  <strong className="text-slate-900 dark:text-white text-xs sm:text-sm tracking-wide select-all">
-                    {bcrInfo.ibanCRC}
-                  </strong>
-                  <button
-                    type="button"
-                    onClick={handleCopyIbanCRC}
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-300 dark:border-slate-700 transition-all shrink-0"
-                    title="Copy CRC IBAN"
-                  >
-                    {copiedIbanCRC ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 3 Payment Methods Breakdown */}
-            <div className="space-y-2 pt-1">
-              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                {isEn ? 'Three Convenient Ways to Pay Deposit:' : 'Tres Formas para Realizar el Depósito:'}
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-                {/* Method 1: BCR Online Banking */}
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1">
-                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>{isEn ? '1. BCR Online / App' : '1. BCR en Línea / App'}</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-normal">
+
+                  <p className="text-[11.5px] text-slate-600 dark:text-slate-400 leading-normal">
                     {isEn
-                      ? 'Go to Pagos / Servicios → Depósitos Judiciales. Type the 14-digit docket number. Generates official NUT receipt.'
-                      : 'Menú Pagos → Depósitos Judiciales. Digite los 14 dígitos del expediente. Emite comprobante con NUT.'}
+                      ? 'Deposit directly to the court’s official judicial account at Banco de Costa Rica prior to the auction.'
+                      : 'Deposite en la cuenta de depósitos judiciales del juzgado en el Banco de Costa Rica antes del remate.'}
                   </p>
+
+                  {/* IBAN Numbers Display Grid */}
+                  <div className="space-y-2 font-mono text-xs">
+                    {/* USD IBAN */}
+                    <div className={`p-2.5 rounded-xl border space-y-1 transition-all ${
+                      auction.currency === 'USD'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/50'
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9.5px] font-sans uppercase font-bold text-slate-500">
+                          {isEn ? 'USD ($) Judicial IBAN' : 'IBAN Dólares (USD $)'}
+                        </span>
+                        {auction.currency === 'USD' && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-sans">
+                            {isEn ? 'Property Currency' : 'Moneda Remate'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <strong className="text-slate-900 dark:text-white text-[11.5px] select-all">
+                          {bcrInfo.ibanUSD}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={handleCopyIbanUSD}
+                          className="p-1 rounded bg-white dark:bg-slate-800 text-slate-600 hover:text-emerald-600 border border-slate-200 dark:border-slate-700"
+                          title="Copy USD IBAN"
+                        >
+                          {copiedIbanUSD ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CRC Colones IBAN */}
+                    <div className={`p-2.5 rounded-xl border space-y-1 transition-all ${
+                      auction.currency === 'CRC'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-500/50'
+                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9.5px] font-sans uppercase font-bold text-slate-500">
+                          {isEn ? 'Colones (₡) Judicial IBAN' : 'IBAN Colones (CRC ₡)'}
+                        </span>
+                        {auction.currency === 'CRC' && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500 text-slate-950 font-sans">
+                            {isEn ? 'Property Currency' : 'Moneda Remate'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <strong className="text-slate-900 dark:text-white text-[11.5px] select-all">
+                          {bcrInfo.ibanCRC}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={handleCopyIbanCRC}
+                          className="p-1 rounded bg-white dark:bg-slate-800 text-slate-600 hover:text-emerald-600 border border-slate-200 dark:border-slate-700"
+                          title="Copy CRC IBAN"
+                        >
+                          {copiedIbanCRC ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Channels Grid */}
+                  <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
+                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-0.5">
+                      <div className="flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
+                        <Smartphone className="w-3 h-3" />
+                        <span>BCR App</span>
+                      </div>
+                      <p className="text-[9.5px] text-slate-500">Pagos → Depósitos</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-0.5">
+                      <div className="flex items-center gap-1 font-bold text-sky-600 dark:text-sky-400">
+                        <CreditCard className="w-3 h-3" />
+                        <span>SINPE</span>
+                      </div>
+                      <p className="text-[9.5px] text-slate-500">BAC / BNCR al IBAN</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-0.5">
+                      <div className="flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
+                        <Building className="w-3 h-3" />
+                        <span>Ventanilla</span>
+                      </div>
+                      <p className="text-[9.5px] text-slate-500">150+ sucursales BCR</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Method 2: SINPE from Other Banks */}
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1">
-                  <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-bold">
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>{isEn ? '2. SINPE Interbank' : '2. Transferencia SINPE'}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-normal">
-                    {isEn
-                      ? `Transfer from BAC/BNCR to IBAN above. In SINPE detail write: "EXP ${auction.expediente_number} - [Your Name & ID]".`
-                      : `Desde BAC/BNCR al IBAN indicado. En detalle SINPE poner: "EXP ${auction.expediente_number} - [Nombre y Cédula]".`}
+                {/* Refund Notice for BCR */}
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-500/30 text-[11px] text-amber-900 dark:text-amber-200 space-y-1 mt-2">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>{isEn ? 'Refund Notice if Outbid:' : 'Aviso de Reintegro si no resulta ganador:'}</span>
                   </p>
-                </div>
-
-                {/* Method 3: In-Person BCR Branch */}
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1">
-                  <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold">
-                    <Building className="w-3.5 h-3.5" />
-                    <span>{isEn ? '3. Any BCR Branch' : '3. Ventanilla BCR'}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-normal">
+                  <p className="text-slate-700 dark:text-slate-300">
                     {isEn
-                      ? 'Visit any of 150+ BCR branches. Request "Depósito Judicial de Remate" with docket number and court name.'
-                      : 'En cualquier sucursal BCR. Solicite "Depósito Judicial de Remate" indicando expediente y juzgado.'}
+                      ? 'Judicial deposit refunds typically take 3–10 business days following the court’s formal resolution (auto).'
+                      : 'El reintegro del depósito judicial suele tardar de 3 a 10 días hábiles tras dictarse el auto judicial correspondiente.'}
                   </p>
                 </div>
               </div>
@@ -621,16 +766,16 @@ export function ParticipateAuctionModal({
                     1
                   </span>
                   <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                    {isEn ? 'Prior to Auction Date' : 'Antes de la Subasta'}
+                    {isEn ? 'Prior to Auction' : 'Previo al Remate'}
                   </span>
                 </div>
                 <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
-                  {isEn ? 'Execute 50% Legal Deposit into BCR Account' : 'Realizar 50% de Postura en Cuenta BCR'}
+                  {isEn ? 'Prepare Cashier’s Check (30%) or BCR Deposit' : 'Preparar Cheque de Gerencia (30%) o Depósito BCR'}
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-400 leading-normal">
                   {isEn
-                    ? 'Execute the 50% bidding deposit into the official Judicial Account at Banco de Costa Rica (BCR) assigned to this court.'
-                    : 'Realice el depósito de postura legal del 50% en la Cuenta de Depósitos Judiciales del Juzgado en el Banco de Costa Rica (BCR).'}
+                    ? 'Obtain a 30% cashier’s check payable to the court with the docket number in the memo (for immediate refund), or transfer to the court’s BCR judicial account.'
+                    : 'Emita un cheque de gerencia del 30% a la orden del juzgado con el expediente en el memo (para devolución inmediata), o deposite en la cuenta BCR del juzgado.'}
                 </p>
 
                 {/* Account Reference Box */}
@@ -645,11 +790,11 @@ export function ParticipateAuctionModal({
                     </div>
                   </div>
                   <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
-                    <span className="text-slate-500">{isEn ? 'Deposit Amount:' : 'Monto Postura:'}</span>
+                    <span className="text-slate-500">{isEn ? '30% Check Amount:' : 'Monto Cheque (30%):'}</span>
                     <div className="flex items-center gap-1">
-                      <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(depositAmount, auction.currency)}</strong>
-                      <button onClick={handleCopyDeposit} className="p-1 hover:text-emerald-600 dark:hover:text-white" title="Copy amount">
-                        {copiedDeposit ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
+                      <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(depositAmount30, auction.currency)}</strong>
+                      <button onClick={handleCopyDeposit30} className="p-1 hover:text-emerald-600 dark:hover:text-white" title="Copy 30% amount">
+                        {copiedDeposit30 ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3 text-slate-400" />}
                       </button>
                     </div>
                   </div>
@@ -663,21 +808,21 @@ export function ParticipateAuctionModal({
                     2
                   </span>
                   <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                    {isEn ? '15 Mins Before Start' : '15 Min Antes del Remate'}
+                    {isEn ? '20-30 Mins Before Start' : '20-30 Min Antes'}
                   </span>
                 </div>
                 <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
-                  {isEn ? 'Present Deposit Voucher & Bidding' : 'Presentar Boleta y Participar en Pujas'}
+                  {isEn ? 'Present Check / Voucher & Bid' : 'Presentar Cheque / Boleta y Pujar'}
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-400 leading-normal">
                   {isEn
-                    ? 'Present original BCR deposit receipt and valid ID (Passport / DIMEX / Cédula) to the judge. Bids are called openly (pujas a viva voz) starting from the base.'
-                    : 'Presente la boleta física o digital original del BCR y su documento de identidad (Cédula / Pasaporte / DIMEX) al juez para registrar sus pujas a viva voz.'}
+                    ? 'Present your physical cashier’s check or BCR voucher and original ID (Passport / DIMEX / Cédula) to the judge. Bids are called openly (a viva voz).'
+                    : 'Presente su cheque de gerencia físico o boleta BCR junto a su cédula/DIMEX/pasaporte original al juez para registrar sus pujas a viva voz.'}
                 </p>
 
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
                   <p>• <strong>{isEn ? 'If you win:' : 'Si resulta ganador:'}</strong> {isEn ? 'Declared adjudicatario by court order.' : 'Declarado adjudicatario en el acta judicial.'}</p>
-                  <p>• <strong>{isEn ? 'If outbid:' : 'Si no gana:'}</strong> {isEn ? 'Deposit returned immediately after hearing.' : 'Devolución inmediata de la boleta de depósito.'}</p>
+                  <p>• <strong>{isEn ? 'If outbid:' : 'Si no gana:'}</strong> {isEn ? 'Cashier’s check returned immediately in courtroom.' : 'Cheque devuelto en sus manos al finalizar la audiencia.'}</p>
                 </div>
               </div>
             </div>

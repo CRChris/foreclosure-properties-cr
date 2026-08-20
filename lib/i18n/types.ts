@@ -118,6 +118,8 @@ export interface Translations {
     newToday: string;
     saveToWatchlist: string;
     savedToWatchlist: string;
+    share: string;
+    copiedLink: string;
     exportPDF: string;
     addToCalendar: string;
     courtNotice: string;

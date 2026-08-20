@@ -489,10 +489,10 @@ export function PropertyMap({
                   {/* Link to Dossier */}
                   <Link
                     href={`/auctions/${auction.id}`}
-                    className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded-lg transition-colors shadow-md"
+                    className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 !text-white text-white font-bold text-xs py-2 rounded-lg transition-colors shadow-md shadow-emerald-600/20"
                   >
-                    <span>{language === 'es' ? 'Ver Expediente y Avalúo' : 'View Legal Dossier'}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span className="!text-white text-white">{language === 'es' ? 'Ver Expediente y Avalúo' : 'View Legal Dossier'}</span>
+                    <ArrowRight className="w-3.5 h-3.5 !text-white text-white" />
                   </Link>
                 </div>
               </Popup>

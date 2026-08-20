@@ -33,6 +33,9 @@ import {
   Zap,
   ShieldAlert,
   Info,
+  CreditCard,
+  Banknote,
+  Check,
 } from 'lucide-react';
 
 interface ForeclosureGuideModalProps {
@@ -86,7 +89,7 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
     },
     {
       id: 'how_to_bid',
-      label: isEn ? '50% Deposit & Bidding' : 'Postura Legal (50%)',
+      label: isEn ? 'Deposit Methods & Bidding' : 'Depósitos y Postura Legal',
       icon: DollarSign,
     },
     {
@@ -358,21 +361,166 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
             </div>
           )}
 
-          {/* TAB 3: HOW TO BID & 50% DEPOSIT */}
+          {/* TAB 3: DEPOSIT METHODS & HOW TO BID */}
           {activeTab === 'how_to_bid' && (
             <div className="space-y-6 animate-in fade-in-50 duration-200">
+              {/* Header Overview Banner */}
               <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-200 text-xs sm:text-sm">
                 <p className="font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  {isEn ? 'Mandatory 50% Legal Bidding Deposit (Postura Legal)' : 'Depósito Obligatorio del 50% de Postura Legal'}
+                  {isEn ? 'Mandatory Legal Bidding Deposit (Postura Legal)' : 'Depósito Obligatorio de Postura Legal'}
                 </p>
                 <p>
                   {isEn
-                    ? 'To participate in any judicial auction in Costa Rica, bidders must deposit 50% of the active call base price prior to the start of the hearing into the official Judicial Account at Banco de Costa Rica (BCR).'
-                    : 'Para tener derecho a pujar en cualquier subasta judicial, todo postor debe depositar previamente el 50% de la base activa en la Cuenta de Depósitos Judiciales del despacho en el Banco de Costa Rica (BCR).'}
+                    ? 'To qualify and participate in any judicial auction in Costa Rica, bidders must secure their bidding eligibility through an official legal deposit. The Costa Rican judiciary accepts two distinct statutory deposit methods:'
+                    : 'Para tener derecho a pujar en cualquier subasta judicial en Costa Rica, todo postor debe garantizar su participación mediante la postura legal obligatoria. Los tribunales de Costa Rica admiten dos modalidades oficiales:'}
                 </p>
               </div>
 
+              {/* The Two Distinct Deposit Options */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Option 1: Electronic Judicial Deposit (BCR) */}
+                <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3.5 relative overflow-hidden flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-500/30 shrink-0">
+                          <CreditCard className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-mono uppercase font-bold text-slate-500 dark:text-slate-400">
+                            {isEn ? 'Option 1' : 'Opción 1'}
+                          </span>
+                          <h4 className="font-extrabold text-slate-900 dark:text-white text-sm">
+                            {isEn ? 'Electronic Judicial Deposit (BCR)' : 'Depósito Judicial Electrónico (BCR)'}
+                          </h4>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-sky-100 dark:bg-sky-950/80 text-sky-800 dark:text-sky-300 text-[10px] font-bold border border-sky-300 dark:border-sky-500/30 whitespace-nowrap shadow-sm">
+                        {isEn ? '🌐 Remote / Advance' : '🌐 Remoto / Anticipado'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {isEn
+                        ? 'Transfer or deposit funds directly into the presiding court’s designated judicial account (cuenta de depósitos judiciales) at Banco de Costa Rica (BCR) prior to the auction.'
+                        : 'Transfiera o deposite previamente en la cuenta oficial de depósitos judiciales del juzgado a cargo en el Banco de Costa Rica (BCR).'}
+                    </p>
+
+                    <div className="space-y-2 pt-1 text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                        <strong className="text-slate-900 dark:text-white block font-bold">
+                          {isEn ? 'Deposit Channels:' : 'Canales de Pago Habilitados:'}
+                        </strong>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                          {isEn
+                            ? '• BCR Online / App (Pagos → Depósitos Judiciales with 14-digit docket number)\n• Interbank SINPE transfer to the court’s official IBAN\n• In-person teller deposit at any BCR branch'
+                            : '• BCR en Línea / App (Menú Pagos → Depósitos Judiciales con expediente)\n• Transferencia SINPE interbancaria al IBAN del juzgado\n• En ventanilla de cualquier sucursal BCR'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Refund Notice */}
+                  <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-500/30 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>{isEn ? 'Refund Timeline if Outbid:' : 'Plazo de Devolución si no resulta ganador:'}</span>
+                    </p>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      {isEn
+                        ? 'If you are outbid, electronic judicial deposit refunds typically take 3–10 business days following the court’s formal resolution (auto de devolución) ordering the bank transfer back to your account.'
+                        : 'Si no resulta ganador, la devolución del depósito judicial electrónico suele tardar entre 3 y 10 días hábiles tras la emisión de la resolución formal (auto) del juez autorizando el reintegro.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Option 2: Same-Day In-Person Cashier's Check */}
+                <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-950 border-2 border-emerald-300 dark:border-emerald-500/40 space-y-3.5 relative overflow-hidden flex flex-col justify-between shadow-sm">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 shrink-0">
+                          <Banknote className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-mono uppercase font-bold text-slate-500 dark:text-slate-400">
+                            {isEn ? 'Option 2' : 'Opción 2'}
+                          </span>
+                          <h4 className="font-extrabold text-slate-900 dark:text-white text-sm">
+                            {isEn ? 'In-Person Cashier’s Check (Cheque de Gerencia)' : 'Cheque de Gerencia en Sala (Presencial)'}
+                          </h4>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-500/30 whitespace-nowrap shadow-sm">
+                        {isEn ? '⚡ Fastest Refund (Immediate)' : '⚡ Devolución Inmediata'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {isEn
+                        ? 'Bidders bring a physical certified cashier’s check (cheque de gerencia) directly to the courtroom (Juzgado) on the day of the auction.'
+                        : 'Los postores entregan un cheque de gerencia o certificado físico emitido por cualquier banco directamente en el juzgado el día del remate.'}
+                    </p>
+
+                    <div className="space-y-2 pt-1 text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+                        <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>{isEn ? 'Payable To:' : 'A la Orden de:'}</strong>{' '}
+                            {isEn
+                              ? 'Exact name of the presiding court (e.g. Juzgado de Cobro de Heredia).'
+                              : 'Nombre exacto del despacho judicial (ej. Juzgado de Cobro de Heredia).'}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>{isEn ? 'Memo / Detail:' : 'Detalle en Cheque:'}</strong>{' '}
+                            {isEn
+                              ? 'Include the 14-digit Case Docket Number (Número de Expediente).'
+                              : 'Indicar el número de expediente completo de 14 dígitos en el memo.'}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>{isEn ? 'Deposit Amount:' : 'Monto de Postura:'}</strong>{' '}
+                            {isEn
+                              ? '30% of the active base price for standard auctions (or 50% / 100% if designated as insubsistencia / repeat call in the notice).'
+                              : '30% de la base activa para subastas estándar (o 50% / 100% si el edicto señala insubsistencia por remate anterior fallido).'}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-1.5 text-[11px] text-slate-700 dark:text-slate-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          <span>
+                            <strong>{isEn ? 'Arrival & ID:' : 'Requisitos en Sala:'}</strong>{' '}
+                            {isEn
+                              ? 'Bring valid original ID (cédula, DIMEX, or passport) and arrive 20–30 minutes early to verify the court docket status.'
+                              : 'Presentar documento de identidad original vigente (cédula, DIMEX o pasaporte) y llegar 20–30 minutos antes para verificar el expediente.'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Immediate Refund Benefit Box */}
+                  <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-500/40 text-[11px] text-emerald-900 dark:text-emerald-200 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{isEn ? 'Key Benefit — Immediate Check Return:' : 'Ventaja Clave — Devolución Inmediata en el Acto:'}</span>
+                    </p>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      {isEn
+                        ? 'If you are outbid, the court returns the physical cashier’s check immediately at the conclusion of the hearing, allowing you to redeposit it into your bank without delay.'
+                        : 'Si otro postor supera su oferta, el juez le devuelve físicamente el cheque de gerencia en sus manos al finalizar la audiencia, sin retención de fondos ni trámites bancarios posteriores.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step-by-Step Participation Protocol */}
               <div className="space-y-3">
                 <h4 className="font-black text-slate-900 dark:text-white text-xs uppercase tracking-wider">
                   {isEn ? 'Step-by-Step Bidding Protocol' : 'Protocolo Paso a Paso para Participar'}
@@ -384,12 +532,12 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
                       1
                     </span>
                     <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                      {isEn ? 'Deposit 50% at BCR' : 'Depositar el 50% en BCR'}
+                      {isEn ? 'Prepare Legal Deposit' : 'Preparar Postura Legal'}
                     </h5>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {isEn
-                        ? 'Deposit 50% of the base price into the court’s official judicial account, referencing the exact Expediente docket number.'
-                        : 'Realice el depósito del 50% de la base en la cuenta judicial del Juzgado en el BCR indicando el número de expediente exacto.'}
+                        ? 'Choose Option 1 (BCR electronic transfer referencing the docket) or Option 2 (Cashier’s Check made payable to the court).'
+                        : 'Elija la Opción 1 (transferencia electrónica al BCR con expediente) o la Opción 2 (Cheque de Gerencia a nombre del juzgado).'}
                     </p>
                   </div>
 
@@ -398,12 +546,12 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
                       2
                     </span>
                     <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                      {isEn ? 'Present Voucher at Court' : 'Presentar Boleta en Audiencia'}
+                      {isEn ? 'Present Proof & Attend Hearing' : 'Presentarse en Audiencia'}
                     </h5>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {isEn
-                        ? 'Arrive 15 minutes before the hearing with your original deposit voucher and ID. The judge registers eligible bidders.'
-                        : 'Llegue 15 minutos antes de la hora señalada con la boleta de depósito original y su cédula/pasaporte. El juez registra a los postores.'}
+                        ? 'Arrive 20–30 minutes early with your physical cashier’s check or BCR voucher plus original ID (cédula/passport). The judge registers bidders.'
+                        : 'Llegue 20–30 minutos antes con su cheque de gerencia o boleta del BCR y documento de identidad original. El juez registrará su postura.'}
                     </p>
                   </div>
 
@@ -412,12 +560,12 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
                       3
                     </span>
                     <h5 className="font-bold text-slate-900 dark:text-white text-xs">
-                      {isEn ? 'Pay Balance in 3 Days' : 'Pagar Saldo en 3 Días'}
+                      {isEn ? 'Adjudication or Refund' : 'Adjudicación o Devolución'}
                     </h5>
                     <p className="text-xs text-slate-600 dark:text-slate-400">
                       {isEn
-                        ? 'If you win, you have exactly 3 business days to deposit the remaining winning bid price. Unsuccessful bidders receive their deposit back immediately.'
-                        : 'Si resulta adjudicatario, dispone de 3 días hábiles para depositar el resto del precio. A los postores no ganadores se les devuelve su depósito.'}
+                        ? 'If you win, deposit the remaining balance in 3 business days. If outbid, receive your cashier’s check on the spot (or BCR refund via court order).'
+                        : 'Si gana, pague el saldo en 3 días hábiles. Si no gana, reciba su cheque de inmediato en mano (o reintegro BCR por auto judicial).'}
                     </p>
                   </div>
                 </div>
@@ -431,8 +579,8 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
                 </p>
                 <p className="text-slate-700 dark:text-slate-300">
                   {isEn
-                    ? 'If the highest bidder fails to pay the remaining balance within 3 business days, they forfeit their entire 50% deposit as a court penalty to cover damages and procedural costs.'
-                    : 'Si el mejor postor no paga el saldo restante en el plazo perentorio de 3 días hábiles, pierde el 50% depositado a favor del proceso para cubrir costas y perjuicios.'}
+                    ? 'If the highest bidder fails to pay the remaining balance within 3 business days, they forfeit their entire deposit as a court penalty to cover damages and procedural costs.'
+                    : 'Si el mejor postor no paga el saldo restante en el plazo perentorio de 3 días hábiles, pierde el depósito efectuado a favor del proceso para cubrir costas y perjuicios.'}
                 </p>
               </div>
             </div>
@@ -824,6 +972,60 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
           {/* TAB 8: FAQ */}
           {activeTab === 'faq' && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border-2 border-emerald-300 dark:border-emerald-500/40 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>{isEn ? 'Which deposit method is better: Cashier’s Check or BCR Electronic Deposit?' : '¿Cuál método de postura es más recomendable: Cheque de Gerencia o Depósito BCR?'}</span>
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-500/30 whitespace-nowrap hidden sm:inline-block">
+                    {isEn ? 'Refund Comparison' : 'Comparativa de Reintegro'}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-600 dark:text-slate-400 space-y-2 leading-relaxed">
+                  <p>
+                    {isEn
+                      ? 'Both methods are legally valid under Costa Rican procedural law, but they offer different advantages depending on your strategy:'
+                      : 'Ambas opciones son legalmente válidas conforme a la normativa procesal de Costa Rica, pero ofrecen ventajas distintas según su perfil:'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-slate-900 dark:text-white font-bold flex items-center gap-1.5">
+                          <Banknote className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>{isEn ? 'Cashier’s Check (Cheque de Gerencia)' : 'Cheque de Gerencia en Sala'}</span>
+                        </strong>
+                        <span className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded">
+                          {isEn ? 'Fastest Refund' : 'Reintegro Inmediato'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {isEn
+                          ? 'Recommended for in-person attendees. Deposit is 30% of base (or 50%/100% if repeat call). If outbid, the judge immediately hands back your physical check at the conclusion of the hearing.'
+                          : 'Recomendado para asistencia presencial. Postura del 30% de la base (o 50%/100% en insubsistencias). Si no gana, el juez le devuelve el cheque físico de inmediato al terminar la audiencia.'}
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-slate-900 dark:text-white font-bold flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+                          <span>{isEn ? 'Electronic BCR Deposit' : 'Depósito Judicial BCR'}</span>
+                        </strong>
+                        <span className="text-[9.5px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/80 px-1.5 py-0.5 rounded">
+                          {isEn ? 'Remote / Online' : 'Remoto / Virtual'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {isEn
+                          ? 'Recommended for remote bidders participating via Teams Judicial or online banking. If outbid, the refund takes 3–10 business days following the formal court order (auto).'
+                          : 'Recomendado para postores virtuales por Teams o transferencias en línea. Si no gana, el reintegro toma de 3 a 10 días hábiles tras la emisión del auto judicial respectivo.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
                 <h4 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm flex items-center gap-2">
                   <HelpCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />

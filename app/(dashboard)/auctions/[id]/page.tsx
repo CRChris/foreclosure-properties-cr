@@ -52,6 +52,7 @@ import {
   Target,
   Navigation,
   Loader2,
+  Share2,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -65,6 +66,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const [selectedCall, setSelectedCall] = useState<1 | 2 | 3 | null>(null);
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isParticipateModalOpen, setIsParticipateModalOpen] = useState(false);
   const [auction, setAuction] = useState<Auction | null>(null);
@@ -137,6 +139,35 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       navigator.clipboard.writeText(auction.raw_edict_text);
       setCopiedEdict(true);
       setTimeout(() => setCopiedEdict(false), 2500);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!auction) return;
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const shareData = {
+      title: `Remate Judicial - ${auction.canton} (${auction.folio_real})`,
+      text: `${getLocalizedPropertyTitle(auction, language)} | Expediente: ${auction.expediente_number}`,
+      url: shareUrl,
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopiedShare(true);
+        setTimeout(() => setCopiedShare(false), 2500);
+      } catch (e) {
+        console.error('Failed to copy to clipboard', e);
+      }
     }
   };
 
@@ -232,6 +263,30 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           >
             <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
             <span>{isSaved ? t.dossier.savedToWatchlist : t.dossier.saveToWatchlist}</span>
+          </button>
+
+          {/* Share Button */}
+          <button
+            type="button"
+            onClick={handleShare}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+              copiedShare
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700 shadow-sm'
+                : 'bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 shadow-sm'
+            }`}
+            title={language === 'es' ? 'Compartir expediente' : 'Share dossier'}
+          >
+            {copiedShare ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-600 dark:text-emerald-400">{t.dossier.copiedLink}</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                <span>{t.dossier.share}</span>
+              </>
+            )}
           </button>
 
           {/* Add to Calendar */}
