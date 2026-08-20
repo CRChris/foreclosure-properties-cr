@@ -11,6 +11,7 @@ import {
   detectPropertyCharacteristics,
   getLiveAuctionProgressionState,
   getCallStageConfig,
+  getLocalizedPropertyTitle,
 } from '@/lib/utils';
 import Link from 'next/link';
 import { 
@@ -108,7 +109,7 @@ export function PropertyMap({
   height = '100%',
   className = '',
 }: PropertyMapProps) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [mapLayer, setMapLayer] = useState<'streets' | 'satellite'>('streets');
@@ -423,7 +424,7 @@ export function PropertyMap({
                   {/* Title & Expediente */}
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
-                      {auction.district ? `${auction.district}, ` : ''}{auction.canton} • Folio {auction.folio_real}
+                      {getLocalizedPropertyTitle(auction, language)} • Folio {auction.folio_real}
                     </p>
                     <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
                       <Scale className="w-2.5 h-2.5 text-slate-400 dark:text-slate-500 shrink-0" />
@@ -499,6 +500,14 @@ export function PropertyMap({
           );
         })}
       </MapContainer>
+
+      {/* Map Micro-Notice Attribution Overlay */}
+      <div className="absolute bottom-1 left-2 right-2 sm:left-auto sm:right-2 z-[400] max-w-md bg-white/90 dark:bg-slate-950/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800/80 rounded-lg px-2.5 py-1 text-[10px] text-slate-500 dark:text-slate-400 shadow-sm pointer-events-auto leading-tight flex items-center justify-between gap-2">
+        <span className="truncate">{t.disclaimer.micro.text}</span>
+        <Link href="/terms" target="_blank" className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0">
+          {language === 'es' ? 'Aviso Legal' : 'Terms'}
+        </Link>
+      </div>
     </div>
   );
 }

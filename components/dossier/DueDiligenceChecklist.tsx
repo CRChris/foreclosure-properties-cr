@@ -215,6 +215,19 @@ export function DueDiligenceChecklist({ auction }: DueDiligenceChecklistProps) {
         </div>
       </div>
 
+      {/* Compact In-App Notice & Due Diligence Banner */}
+      <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-500/30 text-xs flex items-start gap-2.5">
+        <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="space-y-0.5 flex-1">
+          <p className="font-bold text-amber-900 dark:text-amber-200">
+            {t.disclaimer.compact.title}
+          </p>
+          <p className="text-amber-800/90 dark:text-amber-300/90 leading-relaxed text-[11.5px]">
+            {t.disclaimer.compact.body}
+          </p>
+        </div>
+      </div>
+
       {/* Checklist Items List */}
       <div className="space-y-3">
         {CHECKLIST_ITEMS.map((item) => {

@@ -91,9 +91,32 @@ export default function DashboardLayout({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-          REmatrixCR • {t.nav.brandSubtitle}
+      <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 py-8 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 text-xs text-slate-500 dark:text-slate-400">
+          {/* Micro-Notice Banner */}
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-400 text-center sm:text-left">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{t.disclaimer.micro.text}</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-700 dark:text-slate-300">REmatrixCR</span>
+              <span>•</span>
+              <span className="text-slate-500">{t.nav.brandSubtitle}</span>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs">
+              <Link href="/auctions" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                {t.nav.catalog}
+              </Link>
+              <Link href="/map" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                {t.nav.map}
+              </Link>
+              <Link href="/terms" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline">
+                {t.nav.terms}
+              </Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

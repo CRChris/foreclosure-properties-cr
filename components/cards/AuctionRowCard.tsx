@@ -12,6 +12,8 @@ import {
   getLiveAuctionProgressionState,
   getCallStageConfig,
   isPropertyNewToday,
+  getLocalizedPropertyTitle,
+  sanitizeLocationName,
 } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
@@ -134,16 +136,31 @@ export function AuctionRowCard({
             )}
           </div>
 
-          {/* Location (District, Canton, Province) */}
+          {/* Location & Title */}
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span className="truncate">
-                {auction.district ? `${auction.district}, ` : ''}{auction.canton}
+                {getLocalizedPropertyTitle(auction, language)}
               </span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 pl-5 font-medium">
-              {auction.province}, Costa Rica
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+              <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                {(() => {
+                  const cleanDist = sanitizeLocationName(auction.district);
+                  const cleanCant = sanitizeLocationName(auction.canton);
+                  if (cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central') {
+                    return `${cleanDist}, ${cleanCant}, ${auction.province}`;
+                  }
+                  if (cleanDist && cleanDist.toLowerCase() !== 'central') {
+                    return `${cleanDist}, ${auction.province}`;
+                  }
+                  if (cleanCant && cleanCant.toLowerCase() !== 'central') {
+                    return `${cleanCant}, ${auction.province}`;
+                  }
+                  return `${auction.province}, Costa Rica`;
+                })()}
+              </span>
             </p>
           </div>
 

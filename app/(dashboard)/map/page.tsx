@@ -319,6 +319,14 @@ export default function MapExplorerPage() {
           })()}
         </div>
       </div>
+
+      {/* Map Explorer Micro-Notice Footer */}
+      <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11.5px] text-slate-600 dark:text-slate-400 text-center flex flex-col sm:flex-row items-center justify-between gap-2">
+        <span>{t.disclaimer.micro.text}</span>
+        <Link href="/terms" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0">
+          {t.nav.terms}
+        </Link>
+      </div>
     </div>
   );
 }

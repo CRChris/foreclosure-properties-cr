@@ -3,6 +3,7 @@
 import React from 'react';
 import { Home, Building2, Maximize2, Trees, Warehouse, MapPin, LucideIcon } from 'lucide-react';
 import { PropertyType } from '@/lib/types/auction';
+import { sanitizeLocationName } from '@/lib/utils';
 
 export interface PropertyTypeConfig {
   icon: LucideIcon;
@@ -306,7 +307,20 @@ export function PropertyTypeBanner({
           <p className="text-xs font-extrabold text-white flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="truncate max-w-[200px]">
-              {district ? `${district}, ` : ''}{canton || 'Costa Rica'}
+              {(() => {
+                const cleanDist = sanitizeLocationName(district);
+                const cleanCant = sanitizeLocationName(canton);
+                if (cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central') {
+                  return `${cleanDist}, ${cleanCant}`;
+                }
+                if (cleanDist && cleanDist.toLowerCase() !== 'central') {
+                  return cleanDist;
+                }
+                if (cleanCant && cleanCant.toLowerCase() !== 'central') {
+                  return cleanCant;
+                }
+                return province || 'Costa Rica';
+              })()}
             </span>
           </p>
         </div>

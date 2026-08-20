@@ -197,7 +197,7 @@ export default function RegisterPage() {
         </div>
 
         {/* Alternative Links */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
           <p className="text-xs text-slate-500 dark:text-slate-400">
             ¿Ya tienes cuenta?{' '}
             <Link
@@ -205,6 +205,13 @@ export default function RegisterPage() {
               className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
             >
               Iniciar sesión
+            </Link>
+          </p>
+
+          <p className="text-[10.5px] text-slate-400 dark:text-slate-500">
+            Al registrarte aceptas nuestro{' '}
+            <Link href="/terms" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+              Aviso Legal y Términos de Uso
             </Link>
           </p>
         </div>

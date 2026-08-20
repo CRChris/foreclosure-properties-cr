@@ -11,7 +11,7 @@ import {
   IngestionLog,
   LocationType,
 } from '@/lib/types/auction';
-import { detectPropertyCharacteristics, getLiveAuctionProgressionState } from '@/lib/utils';
+import { detectPropertyCharacteristics, getLiveAuctionProgressionState, getProvinceFromFolioOrPlano, sanitizeLocationName } from '@/lib/utils';
 import { 
   geocodePropertyLocation, 
   resolvePropertyLocation,
@@ -104,6 +104,17 @@ const COSTA_RICA_CENTROIDS: Record<string, [number, number]> = {
   'tarcoles': [9.7640, -84.6280],
   'puerto jimenez': [8.5333, -83.3000],
   'monteverde': [10.3000, -84.8167],
+  'paquera': [9.8210, -84.9350],
+  'cobano': [9.6800, -85.0900],
+  'lepanto': [9.9540, -85.2090],
+  'jicaral': [9.9750, -85.2750],
+  'santa teresa': [9.6450, -85.1680],
+  'malpais': [9.6050, -85.1450],
+  'montezuma': [9.6550, -85.0680],
+  'tambor': [9.7350, -85.0150],
+  'dominical': [9.2520, -83.8640],
+  'uvita': [9.1720, -83.7430],
+  'isla chira': [10.0900, -85.1500],
 
   // Alajuela Province
   'alajuela': [10.0163, -84.2116],
@@ -346,17 +357,24 @@ function mapRowToAuction(item: any): Auction {
 
   const isExactCadastral = item.location_type === 'exact_cadastral' || (parcelPolygonObj !== null);
 
+  // Extract authoritative Costa Rican province from Folio Real / Plano
+  const authoritativeProvince = getProvinceFromFolioOrPlano(
+    item.folio_real,
+    item.plano_catastrado,
+    item.province
+  );
+
   // Extract true property location from legal edict text
   const extractedLoc = extractLocationFromEdictText(
     item.raw_edict_text,
-    item.province,
+    authoritativeProvince,
     item.canton,
     item.district
   );
 
-  const effectiveProvince = (extractedLoc.province || item.province || 'San José') as CostaRicaProvince;
-  const effectiveCanton = (extractedLoc.canton || item.canton || 'Central').trim();
-  const effectiveDistrict = (extractedLoc.district || item.district || 'Central').trim();
+  const effectiveProvince = authoritativeProvince;
+  const effectiveCanton = (extractedLoc.canton || sanitizeLocationName(item.canton) || authoritativeProvince).trim();
+  const effectiveDistrict = (extractedLoc.district || sanitizeLocationName(item.district) || '').trim();
   const fullContextText = `${item.address_description || ''} ${item.raw_edict_text || ''} ${item.legal_summary || ''} ${item.naturaleza_raw || ''}`.toLowerCase();
 
   // Only fall back to resolveTownCentroid when lat/lng are genuinely missing.

@@ -12,6 +12,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       verifiedInvestor: 'Inversionista Verificado',
       dailyIngestionActive: 'Ingestión Boletín Judicial Activa (8:20 AM)',
       brandSubtitle: 'Portal de Inteligencia Inmobiliaria Judicial y Remates en Costa Rica',
+      terms: 'Términos y Aviso Legal',
     },
     filters: {
       searchPlaceholder: 'Buscar por cantón, distrito, expediente, banco o folio...',
@@ -238,6 +239,29 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       legalGroundingTitle: 'Fundamento Jurídico Procesal',
       viewAuditBreakdown: 'Ver Desglose de Puntuación',
     },
+    disclaimer: {
+      tabTitle: 'Aviso Legal y Términos',
+      comprehensive: {
+        title: 'Aviso Legal Importante y Términos de Uso',
+        subtitle: 'Marco Legal y Advertencia de Responsabilidad de REmatrixCR',
+        p1: 'Los cronogramas de subastas, datos de propiedades, información catastral y precios base que se muestran en esta plataforma se agregan automáticamente a partir de fuentes públicas, incluidos el Boletín Judicial y el Registro Nacional. Si bien nuestros sistemas operan continuamente para brindar información oportuna y estructurada, los expedientes judiciales, suspensiones de remates, ajustes de base y asientos registrales están sujetos a constantes cambios y errores involuntarios.',
+        p2: 'Esta plataforma funciona estrictamente como una herramienta automatizada de investigación informativa y descubrimiento de oportunidades. La plataforma no otorga garantías, expresas o implícitas, respecto a la exactitud, integridad, precisión de linderos, situación jurídica o validez de cualquier publicación de propiedad o estado de remate mostrado.',
+        userResponsibilityTitle: 'Responsabilidad del Usuario y Debida Diligencia Obligatoria:',
+        userResponsibilityBody: 'Los usuarios son los únicos responsables de realizar su propia debida diligencia legal, financiera, catastral y registral independiente. Antes de presentar posturas, comprometer fondos o tomar decisiones de compra, debe verificar de manera independiente todos los gravámenes, gravámenes hipotecarios, estudios de registro, planos catastrados, estados de impuestos municipales y expedientes judiciales directamente ante los registros judiciales oficiales de Costa Rica y el Registro Nacional.',
+        liabilityTitle: 'Exoneración y Límite de Responsabilidad:',
+        liabilityBody: 'Al utilizar esta aplicación, usted reconoce y acepta que la plataforma, sus desarrolladores, operadores y afiliados no asumen responsabilidad alguna por daños directos, indirectos, financieros o consecuentes derivados del uso o la confianza depositada en la información suministrada.',
+        officialSourcesTitle: 'Registros y Portales Públicos Oficiales',
+        officialSourcesBody: 'Enlaces directos a fuentes oficiales para su debida diligencia independiente.',
+        lastUpdated: 'Última actualización: Agosto 2026',
+      },
+      compact: {
+        title: 'Aviso y Debida Diligencia',
+        body: 'Aviso y Debida Diligencia: Los detalles de la publicación, fechas de remate y linderos en el mapa se compilan de fuentes públicas únicamente para fines de investigación preliminar. La información puede contener errores, omisiones o cambios ordenados por el tribunal. Los usuarios son los únicos responsables de verificar de forma independiente los títulos de propiedad, gravámenes y expedientes ante el Registro Nacional y los juzgados correspondientes antes de ofertar o comprometer fondos.',
+      },
+      micro: {
+        text: 'Aviso: Información automatizada con fines exclusivos de investigación. Los linderos y detalles de subasta no están garantizados; verifique los registros oficiales en el Registro Nacional y expedientes judiciales antes de ofertar.',
+      },
+    },
   },
   en: {
     nav: {
@@ -250,6 +274,7 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       verifiedInvestor: 'Verified Investor',
       dailyIngestionActive: 'Daily Gazette Ingestion Active (8:20 AM)',
       brandSubtitle: 'Costa Rica Judicial Real Estate Foreclosure & Auction Intelligence',
+      terms: 'Terms & Legal Disclaimer',
     },
     filters: {
       searchPlaceholder: 'Search by canton, district, court docket, bank or folio real...',
@@ -475,6 +500,29 @@ export const TRANSLATIONS: Record<Language, Translations> = {
       roadFrontageFactor: 'Direct Public Road Frontage',
       legalGroundingTitle: 'Legal & Procedural Foundation',
       viewAuditBreakdown: 'View Audit Score Matrix',
+    },
+    disclaimer: {
+      tabTitle: 'Terms & Disclaimer',
+      comprehensive: {
+        title: 'Important Legal Disclaimer & Terms of Use',
+        subtitle: 'Comprehensive Legal Framework & Informational Disclosure for REmatrixCR',
+        p1: 'The auction schedules, property data, cadastral information, and base prices displayed on this platform are aggregated automatically from public sources, including the Boletín Judicial and the Registro Nacional. While our systems work continuously to deliver timely and structured data, court dockets, auction cancellations, base adjustments, and public registry records are subject to frequent change and clerical error.',
+        p2: 'This platform functions strictly as an automated informational research and deal discovery tool. The platform makes no warranties—express or implied—regarding the accuracy, completeness, boundary precision, legal standing, or validity of any property listing or auction status shown.',
+        userResponsibilityTitle: 'User Responsibility & Mandatory Due Diligence:',
+        userResponsibilityBody: 'Users are solely responsible for conducting their own independent legal, financial, cadastral, and title due diligence. Before placing bids, committing funds, or making any purchase decisions, you must independently verify all property liens, title histories (estudios de registro), cadastral survey plans (planos catastrados), municipal tax statuses, and court proceedings directly through official Costa Rican judicial records and the Registro Nacional.',
+        liabilityTitle: 'Limitation of Liability:',
+        liabilityBody: 'By using this application, you acknowledge and agree that the platform, its developers, operators, and affiliates assume no liability for any direct, indirect, financial, or consequential damages resulting from the use of, or reliance upon, the information provided.',
+        officialSourcesTitle: 'Official Public Registries & Portals',
+        officialSourcesBody: 'Direct links to official governmental records for independent verification.',
+        lastUpdated: 'Last Updated: August 2026',
+      },
+      compact: {
+        title: 'Notice & Due Diligence',
+        body: 'Notice & Due Diligence: Automated listing details, auction dates, and map boundaries are compiled from public records for initial research purposes only. Data may contain errors, omissions, or court-ordered changes. Users are solely responsible for independently verifying all title records, liens, and case files with the Registro Nacional and relevant judicial courts prior to placing bids or committing funds.',
+      },
+      micro: {
+        text: 'Notice: Automated data provided for research purposes only. Boundaries and auction details are not guaranteed; verify all official records via the Registro Nacional and court dockets prior to bidding.',
+      },
     },
   },
 };

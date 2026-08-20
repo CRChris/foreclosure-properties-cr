@@ -201,7 +201,7 @@ export function ParticipateAuctionModal({
   isOpen,
   onClose,
 }: ParticipateAuctionModalProps) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const [mounted, setMounted] = useState(false);
   const [copiedExp, setCopiedExp] = useState(false);
   const [copiedDeposit, setCopiedDeposit] = useState(false);
@@ -330,6 +330,19 @@ export function ParticipateAuctionModal({
 
         {/* Modal Body (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 text-slate-700 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
+          {/* Compact Notice & Mandatory Due Diligence Warning */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/40 text-xs flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5 flex-1">
+              <p className="font-bold text-amber-950 dark:text-amber-200">
+                {t.disclaimer.compact.title}
+              </p>
+              <p className="text-amber-900/90 dark:text-amber-200/90 leading-relaxed text-[11.5px]">
+                {t.disclaimer.compact.body}
+              </p>
+            </div>
+          </div>
+
           {/* 1. Active Call Financial & Schedule Snapshot */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Scheduled Date & Time */}

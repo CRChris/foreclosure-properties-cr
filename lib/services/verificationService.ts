@@ -22,7 +22,7 @@
 import { Auction, CostaRicaProvince, PropertyType, LocationType } from '@/lib/types/auction';
 import { resolvePropertyLocation, resolveTownCentroid, parseFolioReal } from '@/lib/services/snitGeocodeService';
 import { extractPropertyDeterministic } from '@/lib/services/extractorService';
-import { detectPropertyCharacteristics, getLocalizedPropertyTitle } from '@/lib/utils';
+import { detectPropertyCharacteristics, getLocalizedPropertyTitle, sanitizeLocationName, getProvinceFromFolioOrPlano } from '@/lib/utils';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface VerificationResult {
@@ -76,22 +76,20 @@ export function verifyPropertyTitleAndCharacteristics(auction: Partial<Auction>)
   const rawText = auction.raw_edict_text || auction.address_description || '';
   const extracted = extractPropertyDeterministic(rawText);
 
-  // Determine true province from edict
-  let verifiedProvince: CostaRicaProvince = (auction.province as CostaRicaProvince) || 'San José';
-  if (extracted?.province) {
-    const p = extracted.province.trim();
-    if (['San José', 'Alajuela', 'Cartago', 'Heredia', 'Guanacaste', 'Puntarenas', 'Limón'].includes(p)) {
-      verifiedProvince = p as CostaRicaProvince;
-    }
-  }
+  // Determine true province: Folio Real is ground truth (e.g. 6- is Puntarenas), then edict
+  let verifiedProvince: CostaRicaProvince = getProvinceFromFolioOrPlano(
+    auction.folio_real || extracted?.finca_number,
+    auction.plano_catastrado || extracted?.plano_number,
+    extracted?.province || auction.province
+  );
 
   // Determine true canton & district
-  let verifiedCanton = (extracted?.canton || auction.canton || '').trim();
-  let verifiedDistrict = (extracted?.district || auction.district || '').trim();
+  let verifiedCanton = sanitizeLocationName(extracted?.canton || auction.canton);
+  let verifiedDistrict = sanitizeLocationName(extracted?.district || auction.district);
 
   // If extraction gave better canton/district, use it
-  if (!verifiedCanton && auction.canton) verifiedCanton = auction.canton.trim();
-  if (!verifiedDistrict && auction.district) verifiedDistrict = auction.district.trim();
+  if (!verifiedCanton && auction.canton) verifiedCanton = sanitizeLocationName(auction.canton);
+  if (!verifiedDistrict && auction.district) verifiedDistrict = sanitizeLocationName(auction.district);
 
   // Determine property type & construction
   let verifiedPropertyType: PropertyType = 'other';

@@ -11,6 +11,7 @@ export interface Translations {
     verifiedInvestor: string;
     dailyIngestionActive: string;
     brandSubtitle: string;
+    terms: string;
   };
   filters: {
     searchPlaceholder: string;
@@ -236,5 +237,28 @@ export interface Translations {
     roadFrontageFactor: string;
     legalGroundingTitle: string;
     viewAuditBreakdown: string;
+  };
+  disclaimer: {
+    tabTitle: string;
+    comprehensive: {
+      title: string;
+      subtitle: string;
+      p1: string;
+      p2: string;
+      userResponsibilityTitle: string;
+      userResponsibilityBody: string;
+      liabilityTitle: string;
+      liabilityBody: string;
+      officialSourcesTitle: string;
+      officialSourcesBody: string;
+      lastUpdated: string;
+    };
+    compact: {
+      title: string;
+      body: string;
+    };
+    micro: {
+      text: string;
+    };
   };
 }

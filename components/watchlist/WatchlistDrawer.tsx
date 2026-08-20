@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Auction } from '@/lib/types/auction';
-import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction, getLocalizedPropertyTitle } from '@/lib/utils';
+import { formatCurrency, formatArea, formatDateCR, getDaysUntilAuction, getLocalizedPropertyTitle, sanitizeLocationName } from '@/lib/utils';
 import {
   fetchUserWatchlist,
   saveToWatchlist,
@@ -174,7 +174,17 @@ export function WatchlistDrawer({
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-0.5">
                         <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">
-                          {auction.canton}, {auction.province}
+                          {(() => {
+                            const cleanDist = sanitizeLocationName(auction.district);
+                            const cleanCant = sanitizeLocationName(auction.canton);
+                            if (cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central') {
+                              return `${cleanDist}, ${cleanCant}`;
+                            }
+                            if (cleanCant && cleanCant.toLowerCase() !== 'central') {
+                              return `${cleanCant}, ${auction.province}`;
+                            }
+                            return auction.province || 'Costa Rica';
+                          })()}
                         </span>
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
                           {getLocalizedPropertyTitle(auction, language)}

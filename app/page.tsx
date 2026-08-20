@@ -292,21 +292,46 @@ export default function HomePage() {
           <div className="h-[420px] rounded-2xl overflow-hidden shadow-xl border border-slate-200 dark:border-slate-800">
             <MapWrapper auctions={auctions} height="100%" />
           </div>
+
+          {/* Micro-Notice below Map preview */}
+          <div className="mt-3 p-2.5 rounded-xl bg-slate-200/60 dark:bg-slate-950/60 border border-slate-300/60 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 text-center">
+            {t.disclaimer.micro.text}
+          </div>
         </div>
       </section>
 
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950 py-10 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-[10px]">
-              CR
-            </div>
-            <span className="font-semibold text-slate-700 dark:text-slate-400">
-              REmatrixCR
-            </span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 text-xs text-slate-500 dark:text-slate-400">
+          {/* Global Micro-Notice */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-400 text-center sm:text-left">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{t.disclaimer.micro.text}</span>
           </div>
-          <p>© {new Date().getFullYear()} {t.nav.brandSubtitle}.</p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-850">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-[10px]">
+                CR
+              </div>
+              <span className="font-semibold text-slate-700 dark:text-slate-400">
+                REmatrixCR
+              </span>
+              <span>•</span>
+              <p>© {new Date().getFullYear()} {t.nav.brandSubtitle}.</p>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs font-semibold">
+              <Link href="/auctions" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                {t.nav.catalog}
+              </Link>
+              <Link href="/map" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+                {t.nav.map}
+              </Link>
+              <Link href="/terms" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+                {t.nav.terms}
+              </Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

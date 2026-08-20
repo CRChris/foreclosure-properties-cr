@@ -193,6 +193,13 @@ export default function LoginPage() {
               Continuar como invitado al catálogo público
             </Link>
           </p>
+
+          <p className="text-[10.5px] text-slate-400 dark:text-slate-500 pt-1">
+            Al ingresar aceptas nuestro{' '}
+            <Link href="/terms" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+              Aviso Legal y Términos de Uso
+            </Link>
+          </p>
         </div>
       </div>
     </div>

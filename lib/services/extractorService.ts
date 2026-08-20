@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseFolioReal } from './snitGeocodeService';
+import { sanitizeLocationName, getProvinceFromFolioOrPlano } from '../utils';
 
 // ==============================================================================
 // 1. ZOD STRUCTURED OUTPUT SCHEMAS
@@ -460,11 +461,13 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
     }
   }
 
-  // Standardize finca format (e.g. 6-123456-000)
+  // Standardize finca format (e.g. 6-123456-000) and derive ground-truth province
   const normFolio = parseFolioReal(fincaNumber, province);
   if (normFolio) {
     fincaNumber = normFolio.formattedFolio;
+    province = normFolio.provinciaNombre;
   } else {
+    province = getProvinceFromFolioOrPlano(fincaNumber, null, province);
     const pDigit = PROVINCE_TO_DIGIT[normalizeSpanishText(province)] || '1';
     fincaNumber = `${pDigit}-${fincaNumber.replace(/\D/g, '') || '000000'}-000`;
   }
@@ -475,10 +478,33 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
 
   // 4. Canton & District
   const cantonMatch = normalizedText.match(/cant[oó]n\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+distrito|\s+de\s+|\s+cuya|\s+mide)/i);
-  const canton = cantonMatch ? cantonMatch[1].trim() : null;
+  let canton = sanitizeLocationName(cantonMatch ? cantonMatch[1] : null) || null;
 
   const distMatch = normalizedText.match(/distrito\s+(?:(?:n[úu]mero\s+|n[ºo]\.?\s*)?\d+\s*[-–]?\s*)?([A-Za-zÁÉÍÓÚáéíóú\s]+?)(?:,|\.|\s+cant[oó]n|\s+de\s+la|\s+cuya|\s+mide)/i);
-  const district = distMatch ? distMatch[1].trim() : null;
+  let district = sanitizeLocationName(distMatch ? distMatch[1] : null) || null;
+
+  // Keyword-assisted resolution for specific provinces
+  if (province === 'Puntarenas') {
+    if (norm.includes('jaco') || norm.includes('playa jaco')) {
+      district = district || 'Jacó';
+      canton = canton || 'Garabito';
+    } else if (norm.includes('herradura')) {
+      district = district || 'Herradura';
+      canton = canton || 'Garabito';
+    } else if (norm.includes('tarcoles')) {
+      district = district || 'Tárcoles';
+      canton = canton || 'Garabito';
+    } else if (norm.includes('cobano') || norm.includes('santa teresa') || norm.includes('malpais') || norm.includes('montezuma') || norm.includes('tambor')) {
+      district = district || 'Cóbano';
+      canton = canton || 'Puntarenas';
+    } else if (norm.includes('paquera')) {
+      district = district || 'Paquera';
+      canton = canton || 'Puntarenas';
+    } else if (norm.includes('lepanto') || norm.includes('jicaral')) {
+      district = district || 'Lepanto';
+      canton = canton || 'Puntarenas';
+    }
+  }
 
   // 5. Verbatim Naturaleza & Classification
   const naturalezaRaw = extractVerbatimNaturaleza(normalizedText) || `Inmueble situado en ${province}`;

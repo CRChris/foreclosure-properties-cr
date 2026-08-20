@@ -32,6 +32,7 @@ import {
   Award,
   Zap,
   ShieldAlert,
+  Info,
 } from 'lucide-react';
 
 interface ForeclosureGuideModalProps {
@@ -39,10 +40,10 @@ interface ForeclosureGuideModalProps {
   onClose: () => void;
 }
 
-type GuideTab = 'process_calls' | 'eligibility' | 'how_to_bid' | 'opportunity_ratings' | 'court_locations' | 'app_guide' | 'faq';
+type GuideTab = 'process_calls' | 'eligibility' | 'how_to_bid' | 'opportunity_ratings' | 'court_locations' | 'app_guide' | 'legal_disclaimer' | 'faq';
 
 export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModalProps) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<GuideTab>('process_calls');
   const [mounted, setMounted] = useState(false);
 
@@ -102,6 +103,11 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
       id: 'app_guide',
       label: isEn ? 'Using REmatrixCR' : 'Uso de la Plataforma',
       icon: Compass,
+    },
+    {
+      id: 'legal_disclaimer',
+      label: isEn ? 'Legal Disclaimer & Terms' : 'Aviso Legal y Términos',
+      icon: ShieldAlert,
     },
     {
       id: 'faq',
@@ -750,7 +756,72 @@ export function ForeclosureGuideModal({ isOpen, onClose }: ForeclosureGuideModal
             </div>
           )}
 
-          {/* TAB 7: FAQ */}
+          {/* TAB: LEGAL DISCLAIMER & TERMS */}
+          {activeTab === 'legal_disclaimer' && (
+            <div className="space-y-5 animate-in fade-in-50 duration-200">
+              {/* Comprehensive Disclaimer Header */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
+                  <Scale className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{t.disclaimer.comprehensive.title}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                  {t.disclaimer.comprehensive.p1}
+                </p>
+              </div>
+
+              {/* Informational Tool & No Warranty */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xs sm:text-sm">
+                  <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isEn ? 'Automated Informational Tool & Warranty Disclaimer' : 'Herramienta Informativa y Ausencia de Garantías'}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {t.disclaimer.comprehensive.p2}
+                </p>
+              </div>
+
+              {/* User Responsibility Alert */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-500/40 space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-950 dark:text-amber-200 font-bold text-xs sm:text-sm">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>{t.disclaimer.comprehensive.userResponsibilityTitle}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                  {t.disclaimer.comprehensive.userResponsibilityBody}
+                </p>
+              </div>
+
+              {/* Limitation of Liability */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xs sm:text-sm">
+                  <ShieldAlert className="w-4 h-4 text-rose-500" />
+                  <span>{t.disclaimer.comprehensive.liabilityTitle}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {t.disclaimer.comprehensive.liabilityBody}
+                </p>
+              </div>
+
+              {/* Action Link to dedicated /terms page */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs">
+                <span className="text-slate-600 dark:text-slate-400">
+                  {isEn ? 'For full printable legal terms & official registry links:' : 'Para consultar el documento legal completo e imprimirlo:'}
+                </span>
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-sm shrink-0"
+                >
+                  <span>{isEn ? 'Open Full Terms Page' : 'Abrir Página de Términos'}</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: FAQ */}
           {activeTab === 'faq' && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">

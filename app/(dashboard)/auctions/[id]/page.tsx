@@ -515,6 +515,31 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         selectedCall={selectedCall}
       />
 
+      {/* Compact In-App Disclaimer Banner */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/40 space-y-2 text-xs">
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <p className="font-bold text-amber-950 dark:text-amber-200">
+              {t.disclaimer.compact.title}
+            </p>
+            <p className="text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+              {t.disclaimer.compact.body}
+            </p>
+            <div className="pt-1">
+              <Link
+                href="/terms"
+                target="_blank"
+                className="font-bold text-amber-950 dark:text-amber-200 underline hover:text-emerald-600 dark:hover:text-emerald-400 inline-flex items-center gap-1"
+              >
+                <span>{t.disclaimer.comprehensive.title}</span>
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Due Diligence Legal Checklist */}
       <DueDiligenceChecklist auction={auction} />
 

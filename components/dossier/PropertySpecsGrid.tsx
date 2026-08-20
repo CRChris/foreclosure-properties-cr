@@ -4,7 +4,7 @@ import React from 'react';
 import { Auction } from '@/lib/types/auction';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
-import { detectPropertyCharacteristics, localizeRealEstateText, formatDateAdded } from '@/lib/utils';
+import { detectPropertyCharacteristics, localizeRealEstateText, formatDateAdded, sanitizeLocationName } from '@/lib/utils';
 import {
   FileText,
   Compass,
@@ -93,11 +93,21 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
 
   // Naturaleza text
   const rawNaturaleza = auction.naturaleza_raw || auction.address_description;
+  const cleanDist = sanitizeLocationName(auction.district);
+  const cleanCant = sanitizeLocationName(auction.canton);
+  const locStr = cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central'
+    ? `${cleanDist}, ${cleanCant}, ${auction.province}`
+    : cleanDist && cleanDist.toLowerCase() !== 'central'
+    ? `${cleanDist}, ${auction.province}`
+    : cleanCant && cleanCant.toLowerCase() !== 'central'
+    ? `${cleanCant}, ${auction.province}`
+    : `${auction.province}, Costa Rica`;
+
   const naturaleza = rawNaturaleza
     ? localizeRealEstateText(rawNaturaleza, language)
     : (language === 'en'
-        ? `Real estate registered under Folio Real ${auction.folio_real}, located in ${auction.district}, ${auction.canton}, ${auction.province}.`
-        : `Terreno inscrito bajo matrícula ${auction.folio_real}, ubicado en ${auction.district}, ${auction.canton}, ${auction.province}.`);
+        ? `Real estate registered under Folio Real ${auction.folio_real}, located in ${locStr}.`
+        : `Terreno inscrito bajo matrícula ${auction.folio_real}, ubicado en ${locStr}.`);
 
   // Servidumbres text
   const servidumbres = auction.servidumbres_notes || (

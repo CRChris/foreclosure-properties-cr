@@ -2,6 +2,7 @@ import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { 
   Auction, 
+  CostaRicaProvince,
   Currency, 
   InvestorMetrics, 
   CostaRicaClosingCosts, 
@@ -766,20 +767,328 @@ export function localizeRealEstateText(text: string | null | undefined, language
 }
 
 /**
+ * Authoritative mapping of Costa Rican Province codes (1-7) to official names
+ */
+export const PROVINCE_CODE_TO_NAME: Record<string, CostaRicaProvince> = {
+  '1': 'San José',
+  '2': 'Alajuela',
+  '3': 'Cartago',
+  '4': 'Heredia',
+  '5': 'Guanacaste',
+  '6': 'Puntarenas',
+  '7': 'Limón',
+};
+
+/**
+ * Derives the ground truth Costa Rican province from Folio Real (matrícula) or Plano Catastrado
+ */
+export function getProvinceFromFolioOrPlano(
+  folioReal?: string | null,
+  planoCatastrado?: string | null,
+  fallback?: CostaRicaProvince | string | null
+): CostaRicaProvince {
+  // 1. Folio Real prefix is ground truth in Costa Rica (e.g. 6-123456-000 -> Puntarenas)
+  if (folioReal) {
+    const cleanFolio = folioReal.trim().toUpperCase().replace(/^(?:FOLIO\s*REAL|FINCA|MATR[IÍ]CULA)[:\s]*/i, '');
+    const mFolio = cleanFolio.match(/^([1-7])\s*[-/]/);
+    if (mFolio && PROVINCE_CODE_TO_NAME[mFolio[1]]) {
+      return PROVINCE_CODE_TO_NAME[mFolio[1]];
+    }
+  }
+
+  // 2. Plano Catastrado prefix (e.g. P-0948699-2004 or 6-948699-2004 -> Puntarenas)
+  if (planoCatastrado) {
+    const cleanPlano = planoCatastrado.trim().toUpperCase().replace(/^(?:PLANO|CATASTRO)[:\s]*/i, '');
+    const mNum = cleanPlano.match(/^([1-7])\s*[-/]/);
+    if (mNum && PROVINCE_CODE_TO_NAME[mNum[1]]) {
+      return PROVINCE_CODE_TO_NAME[mNum[1]];
+    }
+    const mLetter = cleanPlano.match(/^(SJ|A|C|H|G|P|L)\s*[-/]/i);
+    if (mLetter) {
+      const codeMap: Record<string, CostaRicaProvince> = {
+        SJ: 'San José',
+        A: 'Alajuela',
+        C: 'Cartago',
+        H: 'Heredia',
+        G: 'Guanacaste',
+        P: 'Puntarenas',
+        L: 'Limón',
+      };
+      const found = codeMap[mLetter[1].toUpperCase()];
+      if (found) return found;
+    }
+  }
+
+  // 3. Fallback province
+  if (fallback) {
+    const norm = fallback.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (norm.includes('san jose')) return 'San José';
+    if (norm.includes('alajuela')) return 'Alajuela';
+    if (norm.includes('cartago')) return 'Cartago';
+    if (norm.includes('heredia')) return 'Heredia';
+    if (norm.includes('guanacaste')) return 'Guanacaste';
+    if (norm.includes('puntarenas')) return 'Puntarenas';
+    if (norm.includes('limon')) return 'Limón';
+  }
+
+  return 'San José';
+}
+
+/**
+ * Sanitizes and normalizes Costa Rican canton and district names.
+ * Strips legal ordinals (primero, 11º, nº), noise words (de, del, en), and discards single-letter fragments (e.g. 'o').
+ */
+export function sanitizeLocationName(rawName?: string | null): string {
+  if (!rawName || typeof rawName !== 'string') return '';
+
+  let name = rawName
+    .trim()
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\\/#º°ª]+/g, ' ')
+    .replace(/^[\s\-–—:;,\.]+|[\s\-–—:;,\.]+$/g, '')
+    .trim();
+
+  // Strip leading court numbering and ordinals: '11º Garabito' -> 'Garabito', 'primero Jacó' -> 'Jacó'
+  name = name.replace(/^(?:(?:n[úu]mero\s*|n[ºo°ª]\.?\s*|c[oó]digo\s*)?\d+[ºo°ª\.\-–—:]*)\s*/i, '');
+  name = name.replace(/^(?:primero|primera|segundo|segunda|tercero|tercera|cuarto|cuarta|quinto|quinta|sexto|sexta|septimo|séptimo|septima|séptima|octavo|octava|noveno|novena|d[eé]cimo|d[eé]cima|und[eé]cimo|und[eé]cima|duod[eé]cimo|duod[eé]cima|onceavo|onceava|doceavo|doceava|treceavo|catorceavo|quinceavo)\s*[:-]?\s*/i, '');
+  name = name.replace(/^(?:cero|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince)\s*[:-]?\s*/i, '');
+  name = name.replace(/^(?:distrito|cant[oó]n|provincia)\s*[:-]?\s*/i, '');
+  name = name.replace(/^[\s\-–—:;,\.]+|[\s\-–—:;,\.]+$/g, '').trim();
+
+  // Legitimate Costa Rican toponyms that start with articles
+  const VALID_PREFIX_NAMES = [
+    'la guacima', 'la guácima', 'la fortuna', 'la uruca', 'la union', 'la unión', 'la cruz',
+    'la asuncion', 'la asunción', 'la ribera', 'la garita', 'la suiza', 'la palma', 'la tigra',
+    'la palmera', 'la rita', 'la virgen', 'la cuesta', 'la amistad', 'la ceiba', 'la trinidad',
+    'la victoria', 'la aurora', 'la legua',
+    'los chiles', 'los angeles', 'los ángeles', 'los laureles', 'los reyes', 'los negritos',
+    'los sitios', 'los guido', 'los suenos', 'los sueños', 'los arcos', 'los cedros',
+    'las juntas', 'las delicias', 'las palmas', 'las mercedes', 'las vueltas', 'las horquetas',
+    'las canas', 'las cañas', 'las nubes',
+    'el roble', 'el guarco', 'el carmen', 'el tejar', 'el rosario', 'el cairo', 'el general',
+    'el silencio', 'el porvenir', 'el prado', 'el cacao', 'el coyol', 'el alto',
+  ];
+
+  const normLower = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const isValidPrefixed = VALID_PREFIX_NAMES.some((p) => normLower.startsWith(p));
+
+  if (!isValidPrefixed) {
+    name = name.replace(/^(?:de\s+la\s+|de\s+los\s+|de\s+las\s+|de\s+el\s+|del\s+|de\s+|en\s+|el\s+|la\s+|los\s+|las\s+|un\s+|una\s+|y\s+|o\s+)/i, '');
+    name = name.replace(/^[\s\-–—:;,\.]+|[\s\-–—:;,\.]+$/g, '').trim();
+  }
+
+  // JUNK & SINGLE CHARACTER FILTER:
+  // Discard isolated letters like 'o', 'a', 'y', 'de', 'del', 'en', 'un', or non-alphabetic
+  if (name.length <= 1 || /^(?:o|a|y|e|de|del|en|el|la|los|las|un|una|al|con|sin|por|para|finca|lote|terreno|distrito|canton|cantón|provincia|numero|número|plano|matricula|matrícula|folio|real)$/i.test(name)) {
+    return '';
+  }
+
+  // Canonical name formatting
+  const CANONICAL_MAP: Record<string, string> = {
+    'jaco': 'Jacó',
+    'garabito': 'Garabito',
+    'san sebastian': 'San Sebastián',
+    'san jose': 'San José',
+    'perez zeledon': 'Pérez Zeledón',
+    'san isidro': 'San Isidro',
+    'escazu': 'Escazú',
+    'santa ana': 'Santa Ana',
+    'desamparados': 'Desamparados',
+    'alajuela': 'Alajuela',
+    'heredia': 'Heredia',
+    'cartago': 'Cartago',
+    'guanacaste': 'Guanacaste',
+    'puntarenas': 'Puntarenas',
+    'limon': 'Limón',
+    'paquera': 'Paquera',
+    'cobano': 'Cóbano',
+    'lepanto': 'Lepanto',
+    'jicaral': 'Lepanto',
+    'santa teresa': 'Santa Teresa',
+    'malpais': 'Malpaís',
+    'montezuma': 'Montezuma',
+    'tambor': 'Tambor',
+    'quepos': 'Quepos',
+    'aguirre': 'Quepos',
+    'manuel antonio': 'Manuel Antonio',
+    'herradura': 'Herradura',
+    'tarcoles': 'Tárcoles',
+    'golfito': 'Golfito',
+    'osa': 'Osa',
+    'palmar': 'Palmar',
+    'coto brus': 'Coto Brus',
+    'san vito': 'San Vito',
+    'parrita': 'Parrita',
+    'corredores': 'Corredores',
+    'ciudad neily': 'Ciudad Neily',
+    'monteverde': 'Monteverde',
+    'puerto jimenez': 'Puerto Jiménez',
+    'san ramon': 'San Ramón',
+    'san carlos': 'San Carlos',
+    'la fortuna': 'La Fortuna',
+    'ciudad quesada': 'Ciudad Quesada',
+    'la guacima': 'La Guácima',
+    'tibas': 'Tibás',
+    'belen': 'Belén',
+    'la asuncion': 'La Asunción',
+    'moravia': 'Moravia',
+    'curridabat': 'Curridabat',
+    'montes de oca': 'Montes de Oca',
+    'san pedro': 'San Pedro',
+    'tamarindo': 'Tamarindo',
+    'playas del coco': 'Playas del Coco',
+    'liberia': 'Liberia',
+    'santa cruz': 'Santa Cruz',
+    'nicoya': 'Nicoya',
+    'nosara': 'Nosara',
+    'samara': 'Sámara',
+    'pococi': 'Pococí',
+    'guapiles': 'Guápiles',
+    'siquirres': 'Siquirres',
+    'talamanca': 'Talamanca',
+    'puerto viejo': 'Puerto Viejo',
+  };
+
+  const key = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (CANONICAL_MAP[key]) {
+    return CANONICAL_MAP[key];
+  }
+
+  // Capitalize words neatly
+  return name.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.substring(1).toLowerCase());
+}
+
+/**
+ * Resolves full clean location context (Province, Canton, District)
+ */
+export function resolveLocationContext(auction: Partial<Auction>): {
+  province: CostaRicaProvince;
+  canton: string;
+  district: string;
+} {
+  const province = getProvinceFromFolioOrPlano(
+    auction.folio_real,
+    auction.plano_catastrado,
+    auction.province
+  );
+
+  let canton = sanitizeLocationName(auction.canton);
+  let district = sanitizeLocationName(auction.district);
+
+  // If the declared canton/district belongs to a different province (e.g., court docket in San José vs property in Puntarenas)
+  if (province !== 'San José') {
+    if (canton.toLowerCase() === 'san jose' || district.toLowerCase() === 'san sebastian' || canton.toLowerCase() === 'central') {
+      canton = '';
+      district = '';
+    }
+  }
+
+  const fullText = `${auction.address_description || ''} ${auction.raw_edict_text || ''} ${auction.naturaleza_raw || ''} ${auction.legal_summary || ''}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (province === 'Puntarenas') {
+    if (fullText.includes('jaco') || fullText.includes('playa jaco')) {
+      district = 'Jacó';
+      canton = 'Garabito';
+    } else if (fullText.includes('herradura') || fullText.includes('los suenos')) {
+      district = 'Herradura';
+      canton = 'Garabito';
+    } else if (fullText.includes('tarcoles')) {
+      district = 'Tárcoles';
+      canton = 'Garabito';
+    } else if (fullText.includes('manuel antonio')) {
+      district = 'Manuel Antonio';
+      canton = 'Quepos';
+    } else if (fullText.includes('quepos') || fullText.includes('aguirre')) {
+      district = 'Quepos';
+      canton = 'Quepos';
+    } else if (
+      fullText.includes('cobano') ||
+      fullText.includes('santa teresa') ||
+      fullText.includes('malpais') ||
+      fullText.includes('montezuma') ||
+      fullText.includes('tambor')
+    ) {
+      district = 'Cóbano';
+      canton = 'Puntarenas';
+    } else if (fullText.includes('paquera')) {
+      district = 'Paquera';
+      canton = 'Puntarenas';
+    } else if (fullText.includes('lepanto') || fullText.includes('jicaral')) {
+      district = 'Lepanto';
+      canton = 'Puntarenas';
+    } else if (fullText.includes('dominical') || fullText.includes('uvita')) {
+      district = 'Bahía Ballena';
+      canton = 'Osa';
+    }
+  } else if (province === 'Guanacaste') {
+    if (fullText.includes('tamarindo')) {
+      district = 'Tamarindo';
+      canton = 'Santa Cruz';
+    } else if (fullText.includes('playas del coco') || fullText.includes('del coco')) {
+      district = 'Playas del Coco';
+      canton = 'Carrillo';
+    } else if (fullText.includes('flamingos') || fullText.includes('playa flamingo')) {
+      district = 'Flamingo';
+      canton = 'Santa Cruz';
+    } else if (fullText.includes('nosara')) {
+      district = 'Nosara';
+      canton = 'Nicoya';
+    } else if (fullText.includes('samara')) {
+      district = 'Sámara';
+      canton = 'Nicoya';
+    }
+  } else if (province === 'Alajuela') {
+    if (fullText.includes('la fortuna') || fullText.includes('arenal') || fullText.includes('volcan arenal')) {
+      district = 'La Fortuna';
+      canton = 'San Carlos';
+    } else if (fullText.includes('la guacima') || fullText.includes('los reyes')) {
+      district = 'La Guácima';
+      canton = 'Alajuela';
+    }
+  } else if (province === 'San José') {
+    if (fullText.includes('escazu') || fullText.includes('san rafael de escazu') || fullText.includes('san antonio de escazu')) {
+      canton = 'Escazú';
+    } else if (fullText.includes('santa ana') || fullText.includes('pozos') || fullText.includes('piedades')) {
+      canton = 'Santa Ana';
+    } else if (fullText.includes('san sebastian')) {
+      district = 'San Sebastián';
+      canton = 'San José';
+    }
+  }
+
+  return {
+    province,
+    canton: canton || province,
+    district: district || '',
+  };
+}
+
+/**
  * Return an executive, accurate localized property title for foreclosure dossiers and cards
  */
 export function getLocalizedPropertyTitle(auction: Auction, language: 'es' | 'en'): string {
   const { propertyType, isCondominio, hasConstruction } = detectPropertyCharacteristics(auction);
-  
-  const canton = (auction.canton || '').trim();
-  const district = (auction.district || '').trim();
-  const province = (auction.province || '').trim();
+  const { province, canton, district } = resolveLocationContext(auction);
 
-  const locationStr = district && canton && district.toLowerCase() !== canton.toLowerCase()
-    ? `${district}, ${canton}`
-    : canton
-    ? `${canton}, ${province}`
-    : province || 'Costa Rica';
+  let locationStr = '';
+  if (
+    district &&
+    canton &&
+    district.toLowerCase() !== canton.toLowerCase() &&
+    canton.toLowerCase() !== province.toLowerCase() &&
+    canton.toLowerCase() !== 'central'
+  ) {
+    locationStr = `${district}, ${canton}`;
+  } else if (district && district.toLowerCase() !== 'central') {
+    locationStr = `${district}, ${province}`;
+  } else if (canton && canton.toLowerCase() !== 'central' && canton.toLowerCase() !== province.toLowerCase()) {
+    locationStr = `${canton}, ${province}`;
+  } else {
+    locationStr = province || 'Costa Rica';
+  }
 
   const nat = (auction.naturaleza_raw || '').toLowerCase();
   const addr = (auction.address_description || '').toLowerCase();

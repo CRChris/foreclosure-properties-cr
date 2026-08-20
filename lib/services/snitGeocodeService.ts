@@ -1,4 +1,5 @@
 import proj4 from 'proj4';
+import { sanitizeLocationName } from '../utils';
 
 // Define Costa Rica Transverse Mercator 2005 (CRTM05) Projection (EPSG:5367)
 export const CRTM05_PROJ4_DEF =
@@ -686,6 +687,17 @@ export const COSTA_RICA_TOWN_CENTROIDS: Record<string, [number, number]> = {
   'tarcoles': [9.7640, -84.6280],
   'puerto jimenez': [8.5333, -83.3000],
   'monteverde': [10.3000, -84.8167],
+  'paquera': [9.8210, -84.9350],
+  'cobano': [9.6800, -85.0900],
+  'lepanto': [9.9540, -85.2090],
+  'jicaral': [9.9750, -85.2750],
+  'santa teresa': [9.6450, -85.1680],
+  'malpais': [9.6050, -85.1450],
+  'montezuma': [9.6550, -85.0680],
+  'tambor': [9.7350, -85.0150],
+  'dominical': [9.2520, -83.8640],
+  'uvita': [9.1720, -83.7430],
+  'isla chira': [10.0900, -85.1500],
 
   // Alajuela
   'alajuela': [10.0163, -84.2116],
@@ -825,22 +837,28 @@ export function extractLocationFromEdictText(
   let district = (fallbackDist || 'Central').trim();
 
   if (!text || typeof text !== 'string') {
-    return { province, canton, district };
+    return {
+      province,
+      canton: sanitizeLocationName(canton) || province,
+      district: sanitizeLocationName(district) || '',
+    };
   }
 
-  // 1. Match Finca/Partido de la Provincia de [Provincia]
-  const mProv = text.match(/(?:Finca|Partido|propiedad|terreno)\s+de\s+la\s+Provincia\s+de\s+([A-Za-z\u00C0-\u00FF\s]+?)(?:,|\.|;|\s+matr[íi]cula|\s+folio)/i)
-    || text.match(/Partido\s+de\s+([A-Za-z\u00C0-\u00FF]+)/i);
-  if (mProv) {
-    const rawProv = mProv[1].trim();
-    const norm = normalizeGeoKey(rawProv);
-    if (norm.includes('alajuela')) province = 'Alajuela';
-    else if (norm.includes('cartago')) province = 'Cartago';
-    else if (norm.includes('heredia')) province = 'Heredia';
-    else if (norm.includes('guanacaste')) province = 'Guanacaste';
-    else if (norm.includes('puntarenas')) province = 'Puntarenas';
-    else if (norm.includes('limon')) province = 'Limón';
-    else if (norm.includes('san jose')) province = 'San José';
+  // 1. Match Finca/Partido de la Provincia de [Provincia] ONLY if fallbackProv is not already locked by folio real
+  if (!fallbackProv || fallbackProv === 'San José') {
+    const mProv = text.match(/(?:Finca|Partido|propiedad|terreno)\s+de\s+la\s+Provincia\s+de\s+([A-Za-z\u00C0-\u00FF\s]+?)(?:,|\.|;|\s+matr[íi]cula|\s+folio)/i)
+      || text.match(/Partido\s+de\s+([A-Za-z\u00C0-\u00FF]+)/i);
+    if (mProv) {
+      const rawProv = mProv[1].trim();
+      const norm = normalizeGeoKey(rawProv);
+      if (norm.includes('alajuela')) province = 'Alajuela';
+      else if (norm.includes('cartago')) province = 'Cartago';
+      else if (norm.includes('heredia')) province = 'Heredia';
+      else if (norm.includes('guanacaste')) province = 'Guanacaste';
+      else if (norm.includes('puntarenas')) province = 'Puntarenas';
+      else if (norm.includes('limon')) province = 'Limón';
+      else if (norm.includes('san jose')) province = 'San José';
+    }
   }
 
   // 2. Match Distrito [Num/Nombre]: [Distrito], Cantón [Num/Nombre]: [Cantón]
@@ -848,34 +866,57 @@ export function extractLocationFromEdictText(
     || text.match(/Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
 
   if (mDistCant) {
-    district = mDistCant[1]
-      .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
-      .replace(/^[\s\-–—:;,\.]+/g, '')
-      .trim();
-    canton = mDistCant[2]
-      .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
-      .replace(/^[\s\-–—:;,\.]+/g, '')
-      .trim();
+    district = mDistCant[1];
+    canton = mDistCant[2];
   } else {
     // Try inverted: Cantón: [Cantón], Distrito: [Distrito]
     const mCantDist = text.match(/Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
     if (mCantDist) {
-      canton = mCantDist[1]
-        .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
-        .replace(/^[\s\-–—:;,\.]+/g, '')
-        .trim();
-      district = mCantDist[2]
-        .replace(/^(?:primero|segundo|tercero|cuarto|quinto|sexto|septimo|séptimo|octavo|noveno|décimo|decimo|\d+)\s*[:-]?\s*/i, '')
-        .replace(/^[\s\-–—:;,\.]+/g, '')
-        .trim();
+      canton = mCantDist[1];
+      district = mCantDist[2];
     }
   }
 
-  // Capitalize neatly
-  district = district.replace(/^[\s\-–—:;,\.]+/g, '').trim();
-  canton = canton.replace(/^[\s\-–—:;,\.]+/g, '').trim();
+  // Sanitize both names
+  let cleanDistrict = sanitizeLocationName(district);
+  let cleanCanton = sanitizeLocationName(canton);
 
-  return { province, canton, district };
+  const fullNorm = normalizeGeoKey(text);
+
+  // Keyword-assisted resolution for specific provinces
+  if (province === 'Puntarenas') {
+    if (fullNorm.includes('jaco') || fullNorm.includes('playa jaco')) {
+      cleanDistrict = cleanDistrict || 'Jacó';
+      cleanCanton = cleanCanton || 'Garabito';
+    } else if (fullNorm.includes('herradura') || fullNorm.includes('los suenos')) {
+      cleanDistrict = cleanDistrict || 'Herradura';
+      cleanCanton = cleanCanton || 'Garabito';
+    } else if (fullNorm.includes('tarcoles')) {
+      cleanDistrict = cleanDistrict || 'Tárcoles';
+      cleanCanton = cleanCanton || 'Garabito';
+    } else if (fullNorm.includes('manuel antonio')) {
+      cleanDistrict = cleanDistrict || 'Manuel Antonio';
+      cleanCanton = cleanCanton || 'Quepos';
+    } else if (fullNorm.includes('quepos') || fullNorm.includes('aguirre')) {
+      cleanDistrict = cleanDistrict || 'Quepos';
+      cleanCanton = cleanCanton || 'Quepos';
+    } else if (fullNorm.includes('cobano') || fullNorm.includes('santa teresa') || fullNorm.includes('malpais') || fullNorm.includes('montezuma') || fullNorm.includes('tambor')) {
+      cleanDistrict = cleanDistrict || 'Cóbano';
+      cleanCanton = cleanCanton || 'Puntarenas';
+    } else if (fullNorm.includes('paquera')) {
+      cleanDistrict = cleanDistrict || 'Paquera';
+      cleanCanton = cleanCanton || 'Puntarenas';
+    } else if (fullNorm.includes('lepanto') || fullNorm.includes('jicaral')) {
+      cleanDistrict = cleanDistrict || 'Lepanto';
+      cleanCanton = cleanCanton || 'Puntarenas';
+    }
+  }
+
+  return {
+    province,
+    canton: cleanCanton || province,
+    district: cleanDistrict || '',
+  };
 }
 
 export const HIGH_PRECISION_LANDMARKS: Array<{
