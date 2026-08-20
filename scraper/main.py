@@ -1076,6 +1076,55 @@ def parse_cr_price_string(p_str: str) -> Optional[float]:
     except ValueError:
         return None
 
+
+def normalize_folio_real(raw_folio: Optional[str], fallback_prov: str = "San José") -> str:
+    """
+    Standardizes a Costa Rican Folio Real to [Province]-[Finca]-[Sublot] (e.g. 6-117243-000).
+    Eliminates duplicate '-000-000' tails and resolves missing province prefixes.
+    """
+    if not raw_folio:
+        p_code = PROVINCE_PREFIXES.get(fallback_prov.lower().strip(), "1")
+        return f"{p_code}-000000-000"
+    
+    clean = re.sub(r"^(?:FOLIO\s*REAL|FINCA|MATR[IÍ]CULA)[:\s]*", "", str(raw_folio).strip(), flags=re.I)
+    clean = clean.replace("(", "").replace(")", "").strip()
+    if not clean:
+        p_code = PROVINCE_PREFIXES.get(fallback_prov.lower().strip(), "1")
+        return f"{p_code}-000000-000"
+
+    parts = [p.strip() for p in re.split(r"[-/]", clean) if p.strip()]
+    p_code = PROVINCE_PREFIXES.get(fallback_prov.lower().strip(), "1")
+    finca_num = ""
+    sublot = "000"
+
+    if len(parts) == 1:
+        finca_num = parts[0].lstrip("0") or parts[0]
+    elif len(parts) == 2:
+        if parts[0] in ("1", "2", "3", "4", "5", "6", "7"):
+            p_code = parts[0]
+            finca_num = parts[1].lstrip("0") or parts[1]
+        else:
+            finca_num = parts[0].lstrip("0") or parts[0]
+            sublot = parts[1]
+    elif len(parts) >= 3:
+        if parts[0] in ("1", "2", "3", "4", "5", "6", "7"):
+            p_code = parts[0]
+            finca_num = parts[1].lstrip("0") or parts[1]
+            sublot = parts[2] or "000"
+        else:
+            finca_num = parts[0].lstrip("0") or parts[0]
+            sublot = parts[1] or "000"
+
+    sublot = re.sub(r"[^A-Za-z0-9]", "", sublot)
+    if not sublot or sublot in ("0", "00", "DERECHO000", "DERECHO"):
+        sublot = "000"
+    elif sublot.isdigit():
+        sublot = sublot.zfill(3)[-3:]
+
+    clean_finca = re.sub(r"\D", "", finca_num) or finca_num
+    return f"{p_code}-{clean_finca}-{sublot}"
+
+
 def extract_single_edict_regex_fallback(edict_text: str) -> Optional[ForeclosureAuction]:
     """
     Step 3: Resilient multi-court regex fallback parser.
@@ -1178,12 +1227,8 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
                         detected_prov = prov.title()
                         break
 
-        # Standardize Folio Real format (e.g. 1-123456-000)
-        if "-" not in folio:
-            p_code = PROVINCE_PREFIXES.get(detected_prov.lower(), "1")
-            folio = f"{p_code}-{folio}-000"
-        elif folio.count("-") == 1:
-            folio = f"{folio}-000"
+        # Standardize Folio Real format to Costa Rican [Province]-[Finca]-[Sublot] (e.g. 6-117243-000)
+        folio = normalize_folio_real(folio, detected_prov)
 
         # Canton detection
         detected_canton = "Central"
@@ -1469,16 +1514,12 @@ def extract_auctions_with_gemini(edict_chunks: List[str], api_key: Optional[str]
             # Check for multiple distinct folios mentioned in the same edict notice
             all_folios = find_all_unique_folios_in_text(chunk)
             
-            # Standardize discovered folios
+            # Standardize discovered folios using Costa Rican [Province]-[Finca]-[Sublot] format
             standardized_folios = []
             for f in all_folios:
-                if "-" not in f:
-                    p_code = PROVINCE_PREFIXES.get((extracted.province or "San José").lower(), "1")
-                    f = f"{p_code}-{f}-000"
-                elif f.count("-") == 1:
-                    f = f"{f}-000"
-                if f not in standardized_folios:
-                    standardized_folios.append(f)
+                norm_f = normalize_folio_real(f, extracted.province or "San José")
+                if norm_f not in standardized_folios:
+                    standardized_folios.append(norm_f)
                     
             if len(standardized_folios) > 1:
                 logger.info(f"✨ Multi-property notice detected! Found {len(standardized_folios)} distinct folios for case {extracted.expediente_number}: {standardized_folios}")
@@ -1746,6 +1787,76 @@ def upsert_to_supabase(records: List[Dict[str, Any]]) -> Tuple[int, int, List[st
     except Exception as e:
         logger.error(f"Error during Supabase insert: {e}")
         return 0, len(records), []
+
+
+def purge_expired_auctions_from_supabase() -> int:
+    """
+    Evaluates auctions in Supabase and deletes all auctions whose 3rd call date
+    has already expired (or terminal states: passed_call_3, deserted).
+    Returns count of deleted auctions.
+    """
+    supabase_url = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not supabase_key:
+        return 0
+
+    try:
+        ctx = create_ssl_context()
+        now_iso = datetime.now().isoformat()
+        
+        # Query auctions with call dates
+        fetch_url = f"{supabase_url}/rest/v1/auctions?select=id,expediente_number,auction_date_call_1,auction_date_call_2,auction_date_call_3,call_stage,sale_status"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+        }
+        
+        req = urllib.request.Request(fetch_url, headers=headers)
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            if resp.status != 200:
+                return 0
+            auctions = json.loads(resp.read().decode("utf-8"))
+
+        now = datetime.now()
+        expired_ids = []
+
+        for a in auctions:
+            d3_str = a.get("auction_date_call_3")
+            d2_str = a.get("auction_date_call_2")
+            d1_str = a.get("auction_date_call_1")
+            
+            d3 = datetime.fromisoformat(d3_str.replace("Z", "+00:00")).replace(tzinfo=None) if d3_str else None
+            d2 = datetime.fromisoformat(d2_str.replace("Z", "+00:00")).replace(tzinfo=None) if d2_str else None
+            d1 = datetime.fromisoformat(d1_str.replace("Z", "+00:00")).replace(tzinfo=None) if d1_str else None
+
+            is_expired = d3 and d3 < now if d3 else (d2 and d2 < now if d2 else (d1 and d1 < now if d1 else False))
+            is_terminal = a.get("call_stage") == "passed_call_3" or a.get("sale_status") in ("deserted", "adjudicated_to_creditor", "adjudicated_to_bidder")
+
+            if is_expired or is_terminal:
+                expired_ids.append(a.get("id"))
+
+        if not expired_ids:
+            return 0
+
+        logger.info(f"Purging {len(expired_ids)} expired auctions from database...")
+        deleted_count = 0
+        batch_size = 50
+        for i in range(0, len(expired_ids), batch_size):
+            batch = expired_ids[i:i + batch_size]
+            id_filter = ",".join(batch)
+            del_url = f"{supabase_url}/rest/v1/auctions?id=in.({id_filter})"
+            del_req = urllib.request.Request(del_url, headers=headers, method="DELETE")
+            with urllib.request.urlopen(del_req, context=ctx, timeout=15) as del_resp:
+                if del_resp.status in (200, 204):
+                    deleted_count += len(batch)
+
+        logger.info(f"✓ Purged {deleted_count} expired auctions from database.")
+        return deleted_count
+    except Exception as e:
+        logger.warning(f"Error purging expired auctions: {e}")
+        return 0
+
 
 # ==============================================================================
 # 7. RECONCILIATION AUDIT & DISCORD NOTIFICATION ENGINE
@@ -2108,6 +2219,11 @@ def main():
 
         logger.info(f"Upserting {len(enriched_records)} records to Supabase PostGIS...")
         inserted_count, skipped_count, new_expedientes = upsert_to_supabase(enriched_records)
+
+        # Purge any expired auctions automatically (3rd Call expired)
+        purged_expired_count = purge_expired_auctions_from_supabase()
+        if purged_expired_count > 0:
+            logger.info(f"✓ Automatically purged {purged_expired_count} expired auctions from database.")
 
         # Trigger Automated Auction Call Progression & Lifecycle Tracker Engine
         logger.info("Executing automated lifecycle progression engine (Single Source of Truth RPC)...")

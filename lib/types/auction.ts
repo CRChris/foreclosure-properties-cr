@@ -107,7 +107,7 @@ export interface TitleSecurityRating {
   keyFactors: string[];
 }
 
-export type LocationType = 'exact_cadastral' | 'approximate_town';
+export type LocationType = 'exact_cadastral' | 'approximate_town' | 'pending_mapping';
 
 export interface Auction {
   id: string;

@@ -22,8 +22,10 @@ export interface NormalizedFolioReal {
   provincia: string; // '1' through '7'
   provinciaNombre: string; // e.g. 'San José', 'Puntarenas'
   finca: string; // e.g. '123456' (leading zeros stripped)
+  finca7Digits: string; // e.g. '0123456' (7-digit zero-padded for SNIT)
   duplicado?: string; // e.g. '000' or '0'
   horizontal?: string; // e.g. '000' or '001'
+  formattedFolio: string; // e.g. '6-123456-000'
   raw: string;
 }
 
@@ -215,11 +217,10 @@ export function normalizePlano(rawPlano?: string | null): NormalizedPlano | null
 /**
  * Normalizes a Costa Rican Folio Real / Finca identifier.
  * Examples:
- * - "6-123456-000" -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
- * - "6-123456"     -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
- * - "P-123456-000" -> { provincia: "6", provinciaNombre: "Puntarenas", finca: "123456", duplicado: "000", horizontal: "000", raw: ... }
- * - "123456-000"   -> extracts finca "123456", uses fallback province if available
- * - "502241-000-000" -> extracts finca "502241", uses fallback province if available
+ * - "6-123456-000"     -> { provincia: "6", finca: "123456", finca7Digits: "0123456", formattedFolio: "6-123456-000" }
+ * - "117243-000-000"   -> extracts finca "117243", formats as "6-117243-000" using fallback province Puntarenas
+ * - "230392-000-000"   -> extracts finca "230392", formats as "3-230392-000" using fallback province Cartago
+ * - "207759-001-000"   -> extracts finca "207759", filial "001", formats as "3-207759-001"
  */
 export function parseFolioReal(
   rawFolio?: string | null,
@@ -233,6 +234,7 @@ export function parseFolioReal(
     .trim()
     .toUpperCase()
     .replace(/^(?:FOLIO\s*REAL|FINCA|MATR[IÍ]CULA)[:\s]*/i, '')
+    .replace(/[\(\)]/g, '')
     .trim();
 
   if (!cleaned) {
@@ -243,51 +245,75 @@ export function parseFolioReal(
   let defaultProvCode = '1';
   let defaultProvName = 'San José';
   if (fallbackProvince) {
-    const normP = normalizeGeoKey(fallbackProvince).toUpperCase();
-    for (const [key, val] of Object.entries(PROVINCE_MAP)) {
-      if (key === normP || val.name.toUpperCase() === normP || val.code === normP) {
-        defaultProvCode = val.code;
-        defaultProvName = val.name;
-        break;
-      }
+    // Helper to find province
+    const lookup = (val: string) => Object.values(PROVINCE_MAP).find(p => p.code === val || p.name.toUpperCase() === val.toUpperCase());
+    const match = lookup(fallbackProvince);
+    if (match) {
+      defaultProvCode = match.code;
+      defaultProvName = match.name;
     }
   }
 
-  // Format 1: [Provincia]-[Finca]-[Duplicado]-[Horizontal]
-  // e.g. "6-123456-000", "P-123456-000", "SJ-12345-000", "1-392841-000", "3-345-000"
-  const mHyphen = cleaned.match(/^([0-9A-Z]{1,3})[-/](\d+)(?:[-/]([0-9A-Z]+))?(?:[-/]([0-9A-Z]+))?$/);
-  if (mHyphen) {
-    const provKey = mHyphen[1];
-    const provMatch = PROVINCE_MAP[provKey];
-    if (provMatch) {
-      const fincaNum = mHyphen[2].replace(/^0+/, '');
-      return {
-        provincia: provMatch.code,
-        provinciaNombre: provMatch.name,
-        finca: fincaNum || mHyphen[2],
-        duplicado: mHyphen[3] || '000',
-        horizontal: mHyphen[4] || '000',
-        raw: rawFolio,
-      };
+  // Split by hyphens or slashes
+  const parts = cleaned.split(/[-/]/).map(p => p.trim()).filter(Boolean);
+
+  let provCode = defaultProvCode;
+  let provName = defaultProvName;
+  let fincaNum = '';
+  let sublot = '000';
+
+  if (parts.length === 1) {
+    // Pure number: e.g. '117243'
+    fincaNum = parts[0].replace(/^0+/, '');
+  } else if (parts.length === 2) {
+    if (/^[1-7]$/.test(parts[0])) {
+      // '6-117243' -> prov 6, finca 117243, sublot 000
+      provCode = parts[0];
+      const matchProv = Object.values(PROVINCE_MAP).find(p => p.code === provCode);
+      if (matchProv) provName = matchProv.name;
+      fincaNum = parts[1].replace(/^0+/, '');
+    } else {
+      // '117243-000' -> finca 117243, sublot 000, fallback prov
+      fincaNum = parts[0].replace(/^0+/, '');
+      sublot = parts[1];
+    }
+  } else if (parts.length >= 3) {
+    if (/^[1-7]$/.test(parts[0])) {
+      // '6-117243-000' or '6-117243-000-000'
+      provCode = parts[0];
+      const matchProv = Object.values(PROVINCE_MAP).find(p => p.code === provCode);
+      if (matchProv) provName = matchProv.name;
+      fincaNum = parts[1].replace(/^0+/, '');
+      sublot = parts[2] || '000';
+    } else {
+      // '117243-000-000' -> finca 117243, sublot 000, fallback prov
+      fincaNum = parts[0].replace(/^0+/, '');
+      sublot = parts[1] || '000';
     }
   }
 
-  // Format 2: [Finca]-[Duplicado]-[Horizontal] without explicit province prefix
-  // e.g. "502241-000-000", "692660-000-000", "261945-000", "212023"
-  const mDigits = cleaned.match(/^(\d+)(?:[-/]([0-9A-Z]+))?(?:[-/]([0-9A-Z]+))?$/);
-  if (mDigits) {
-    const fincaNum = mDigits[1].replace(/^0+/, '');
-    return {
-      provincia: defaultProvCode,
-      provinciaNombre: defaultProvName,
-      finca: fincaNum || mDigits[1],
-      duplicado: mDigits[2] || '000',
-      horizontal: mDigits[3] || '000',
-      raw: rawFolio,
-    };
+  // Clean sublot (e.g. if '000-000' or non-alphanumeric, standardize to 3-digit or 000)
+  sublot = sublot.replace(/[^A-Za-z0-9]/g, '');
+  if (!sublot || sublot === '0' || sublot === '00' || sublot === 'DERECHO000' || sublot === 'DERECHO') {
+    sublot = '000';
+  } else if (/^\d+$/.test(sublot)) {
+    sublot = sublot.padStart(3, '0').slice(-3);
   }
 
-  return null;
+  const cleanFincaDigits = fincaNum.replace(/\D/g, '') || fincaNum;
+  const finca7Digits = cleanFincaDigits.padStart(7, '0');
+  const formatted = `${provCode}-${cleanFincaDigits}-${sublot}`;
+
+  return {
+    provincia: provCode,
+    provinciaNombre: provName,
+    finca: cleanFincaDigits,
+    finca7Digits,
+    duplicado: sublot,
+    horizontal: sublot,
+    formattedFolio: formatted,
+    raw: rawFolio,
+  };
 }
 
 /**
@@ -523,16 +549,16 @@ export async function lookupByFolioReal(
     };
   }
 
-  const { provincia, finca, duplicado } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 3000;
+  const { provincia, finca, finca7Digits, duplicado } = normalized;
+  const timeoutMs = options?.timeoutMs ?? 3500;
   const customFetch = options?.fetchFn ?? fetch;
 
-  // 1. Query official SNIT SIRI service by finca number
+  // 1. Query official SNIT SIRI service by finca number (requires 7-digit zero padded finca for exact match)
   const siriUrls = [
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${finca7Digits}&provincia=${provincia}`,
     `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${finca}&provincia=${provincia}`,
-    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${encodeURIComponent(`${provincia}-${finca}`)}`,
-    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${encodeURIComponent(`${provincia}-${finca}-${duplicado || '000'}`)}`,
-    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${finca}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${provincia}-${finca7Digits}`,
+    `https://www.snitcr.go.cr/Visor/services/siri?tipoquery=finca&finca=${provincia}-${finca}`,
   ];
 
   for (const siriUrl of siriUrls) {

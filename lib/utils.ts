@@ -398,13 +398,55 @@ export function getDaysUntilAuction(
 /**
  * Decode Costa Rica Folio Real to readable string
  * e.g. '6-189342-000' -> Province 6 (Puntarenas), Finca 189342, Sublot 000
+ * Handles legacy '117243-000-000' or single-dash formats safely.
  */
-export function parseFolioReal(folio: string): { provinceCode: number; fincaNumber: string; sublot: string } {
-  const parts = folio.split('-');
+export function parseFolioReal(folio: string, fallbackProvinceCode: number = 1): { provinceCode: number; fincaNumber: string; sublot: string; formattedFolio: string } {
+  if (!folio) {
+    return { provinceCode: fallbackProvinceCode, fincaNumber: '', sublot: '000', formattedFolio: '' };
+  }
+  const clean = folio.trim().replace(/^(?:FOLIO\s*REAL|FINCA|MATR[IÍ]CULA)[:\s]*/i, '').replace(/[\(\)]/g, '');
+  const parts = clean.split(/[-/]/).map(p => p.trim()).filter(Boolean);
+
+  let prov = fallbackProvinceCode;
+  let finca = '';
+  let sublot = '000';
+
+  if (parts.length === 1) {
+    finca = parts[0].replace(/^0+/, '');
+  } else if (parts.length === 2) {
+    if (/^[1-7]$/.test(parts[0])) {
+      prov = parseInt(parts[0], 10);
+      finca = parts[1].replace(/^0+/, '');
+    } else {
+      finca = parts[0].replace(/^0+/, '');
+      sublot = parts[1];
+    }
+  } else if (parts.length >= 3) {
+    if (/^[1-7]$/.test(parts[0])) {
+      prov = parseInt(parts[0], 10);
+      finca = parts[1].replace(/^0+/, '');
+      sublot = parts[2] || '000';
+    } else {
+      finca = parts[0].replace(/^0+/, '');
+      sublot = parts[1] || '000';
+    }
+  }
+
+  sublot = sublot.replace(/[^A-Za-z0-9]/g, '');
+  if (!sublot || sublot === '0' || sublot === '00' || sublot === 'DERECHO000' || sublot === 'DERECHO') {
+    sublot = '000';
+  } else if (/^\d+$/.test(sublot)) {
+    sublot = sublot.padStart(3, '0').slice(-3);
+  }
+
+  const cleanFinca = finca.replace(/\D/g, '') || finca;
+  const formattedFolio = `${prov}-${cleanFinca}-${sublot}`;
+
   return {
-    provinceCode: parts[0] ? parseInt(parts[0], 10) : 0,
-    fincaNumber: parts[1] || '',
-    sublot: parts[2] || '000',
+    provinceCode: prov,
+    fincaNumber: cleanFinca,
+    sublot,
+    formattedFolio,
   };
 }
 
@@ -724,114 +766,116 @@ export function localizeRealEstateText(text: string | null | undefined, language
 }
 
 /**
- * Return an executive, localized property title for foreclosure dossiers and cards
+ * Return an executive, accurate localized property title for foreclosure dossiers and cards
  */
 export function getLocalizedPropertyTitle(auction: Auction, language: 'es' | 'en'): string {
-  const { propertyType } = detectPropertyCharacteristics(auction);
-  const text = `${auction.address_description || ''} ${auction.legal_summary || ''} ${auction.raw_edict_text || ''} ${auction.canton} ${auction.district}`.toLowerCase();
+  const { propertyType, isCondominio, hasConstruction } = detectPropertyCharacteristics(auction);
+  
+  const canton = (auction.canton || '').trim();
+  const district = (auction.district || '').trim();
+  const province = (auction.province || '').trim();
 
-  // 1. Identify specific signature properties for high-caliber titles
-  if (text.includes('los laureles')) {
-    return language === 'en'
-      ? 'Luxury Gated Residence in Los Laureles, Escazú'
-      : 'Residencia en Condominio Los Laureles, Escazú';
+  const locationStr = district && canton && district.toLowerCase() !== canton.toLowerCase()
+    ? `${district}, ${canton}`
+    : canton
+    ? `${canton}, ${province}`
+    : province || 'Costa Rica';
+
+  const nat = (auction.naturaleza_raw || '').toLowerCase();
+  const addr = (auction.address_description || '').toLowerCase();
+
+  // Check for genuine condominium or development name in address
+  let condoName = '';
+  const condoMatch = (auction.address_description || '').match(/(?:condominio|residencial|oficentro|torre|hacienda)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\s]+?)(?:,\s*|\.\s*|filial|casa|lote|m[óo]dulo|piso|$)/i);
+  if (condoMatch && condoMatch[1]) {
+    const rawName = condoMatch[1].trim();
+    if (rawName.length >= 3 && rawName.length <= 35 && !rawName.toLowerCase().startsWith('de') && !rawName.toLowerCase().startsWith('en')) {
+      condoName = rawName;
+    }
   }
 
-  if (text.includes('acqua') || (text.includes('jacó') && text.includes('penthouse'))) {
-    return language === 'en'
-      ? 'Oceanfront Luxury Penthouse in Jacó, Garabito'
-      : 'Penthouse Frente al Mar en Jacó, Garabito';
+  // 1. Condominium / Apartments
+  if (propertyType === 'condo_apartment' || isCondominio) {
+    if (condoName) {
+      return language === 'es'
+        ? `Condominio ${condoName} en ${locationStr}`
+        : `Condominium at ${condoName} in ${locationStr}`;
+    }
+    if (addr.includes('penthouse') || nat.includes('penthouse')) {
+      return language === 'es'
+        ? `Penthouse en Condominio en ${locationStr}`
+        : `Condominium Penthouse in ${locationStr}`;
+    }
+    return language === 'es'
+      ? `Condominio Residencial en ${locationStr}`
+      : `Residential Condominium in ${locationStr}`;
   }
 
-  if (text.includes('langosta') || text.includes('cala luna') || text.includes('tamarindo')) {
-    return language === 'en'
-      ? 'Private Beach Villa in Playa Langosta, Tamarindo'
-      : 'Villa de Playa en Playa Langosta, Tamarindo';
+  // 2. Commercial / Industrial
+  if (propertyType === 'commercial_industrial') {
+    if (addr.includes('bodega') || nat.includes('bodega') || addr.includes('nave industrial') || nat.includes('nave industrial')) {
+      return language === 'es'
+        ? `Bodega / Nave Industrial en ${locationStr}`
+        : `Industrial Warehouse in ${locationStr}`;
+    }
+    if (addr.includes('oficina') || addr.includes('oficentro')) {
+      return language === 'es'
+        ? `Oficina Comercial en ${locationStr}`
+        : `Commercial Office in ${locationStr}`;
+    }
+    return language === 'es'
+      ? `Inmueble Comercial en ${locationStr}`
+      : `Commercial Property in ${locationStr}`;
   }
 
-  if (text.includes('valle del sol')) {
-    return language === 'en'
-      ? 'Contemporary Two-Story Residence in Valle del Sol, Santa Ana'
-      : 'Casa Contemporánea en Valle del Sol, Santa Ana';
+  // 3. Agricultural Land / Farm
+  if (propertyType === 'agricultural_land') {
+    if (nat.includes('café') || nat.includes('cafe') || nat.includes('cafetal')) {
+      return language === 'es'
+        ? `Finca Cafetalera en ${locationStr}`
+        : `Coffee Farm & Land in ${locationStr}`;
+    }
+    if (nat.includes('ganado') || nat.includes('ganadera') || nat.includes('pasto')) {
+      return language === 'es'
+        ? `Finca Ganadera / Repasto en ${locationStr}`
+        : `Cattle Ranch & Pasture in ${locationStr}`;
+    }
+    return language === 'es'
+      ? `Finca Agrícola / Terreno en ${locationStr}`
+      : `Agricultural Land / Farm in ${locationStr}`;
   }
 
-  if (text.includes('los reyes') || text.includes('guácima') || text.includes('guacima')) {
-    return language === 'en'
-      ? 'Golf Course Home & Lot in Hacienda Los Reyes, La Guácima'
-      : 'Casa y Terreno con Vista al Golf en Hacienda Los Reyes, La Guácima';
+  // 4. Building Lot (Bare land / Terreno para construir)
+  if (propertyType === 'building_lot' || (!hasConstruction && (nat.includes('terreno') || nat.includes('lote') || nat.includes('solar')))) {
+    if (auction.area_m2 && auction.area_m2 > 0) {
+      const formattedArea = auction.area_m2 >= 10000 
+        ? `${(auction.area_m2 / 10000).toFixed(1)} ha` 
+        : `${Math.round(auction.area_m2)} m²`;
+      return language === 'es'
+        ? `Terreno para Construir (${formattedArea}) en ${locationStr}`
+        : `Building Lot (${formattedArea}) in ${locationStr}`;
+    }
+    return language === 'es'
+      ? `Terreno para Construir en ${locationStr}`
+      : `Building Lot in ${locationStr}`;
   }
 
-  if (text.includes('belén') || text.includes('belen')) {
-    return language === 'en'
-      ? 'Gated Community Home in Belén, Heredia'
-      : 'Casa en Condominio Cerrado en Belén, Heredia';
+  // 5. Single Family Home / Residence
+  if (propertyType === 'single_family_home' || hasConstruction) {
+    if (condoName) {
+      return language === 'es'
+        ? `Casa en ${condoName}, ${locationStr}`
+        : `Home in ${condoName}, ${locationStr}`;
+    }
+    return language === 'es'
+      ? `Casa de Habitación en ${locationStr}`
+      : `Single-Family Home in ${locationStr}`;
   }
 
-  if (text.includes('manuel antonio')) {
-    return language === 'en'
-      ? 'Panoramic Ocean View Estate in Manuel Antonio, Quepos'
-      : 'Finca con Vista Panorámica al Mar en Manuel Antonio, Quepos';
-  }
-
-  if (text.includes('monterán') || text.includes('monteran') || text.includes('granadilla')) {
-    return language === 'en'
-      ? 'Tuscan-Style Luxury Estate in Monterán, Curridabat'
-      : 'Residencia Estilo Toscano en Monterán, Curridabat';
-  }
-
-  if (text.includes('las palmas') || text.includes('playas del coco') || text.includes('coco')) {
-    return language === 'en'
-      ? 'Furnished Beach Villa in Las Palmas, Playas del Coco'
-      : 'Villa Amueblada en Las Palmas, Playas del Coco';
-  }
-
-  if (text.includes('arenal') || text.includes('florencia') || text.includes('ron ron')) {
-    return language === 'en'
-      ? 'Arenal Volcano Eco-Farm & Estate in San Carlos'
-      : 'Finca Ecoturística y Agropecuaria en Volcán Arenal, San Carlos';
-  }
-
-  if (text.includes('rohrmoser') || text.includes('el cedro') || (text.includes('pavas') && text.includes('comercial'))) {
-    return language === 'en'
-      ? 'First-Floor Commercial Suite & Corporate Offices in Rohrmoser'
-      : 'Local Comercial y Oficinas Corporativas en Rohrmoser';
-  }
-
-  if (text.includes('grecia') || text.includes('san isidro')) {
-    return language === 'en'
-      ? 'Country Villa & Fruit Orchard in San Isidro, Grecia'
-      : 'Quinta Campestre con Frutales en San Isidro, Grecia';
-  }
-
-  // 2. Fallback to clean, 100% localized structured title
-  const typeMap: Record<PropertyType, { es: string; en: string }> = {
-    single_family_home: {
-      es: `Casa de Habitación en ${auction.district}, ${auction.canton}`,
-      en: `Single-Family Home in ${auction.district}, ${auction.canton}`,
-    },
-    condo_apartment: {
-      es: `Condominio Residencial en ${auction.district}, ${auction.canton}`,
-      en: `Residential Condominium in ${auction.district}, ${auction.canton}`,
-    },
-    building_lot: {
-      es: `Lote para Construir en ${auction.district}, ${auction.canton}`,
-      en: `Building Lot in ${auction.district}, ${auction.canton}`,
-    },
-    agricultural_land: {
-      es: `Finca Agrícola / Quinta en ${auction.district}, ${auction.canton}`,
-      en: `Agricultural Land / Farm in ${auction.district}, ${auction.canton}`,
-    },
-    commercial_industrial: {
-      es: `Inmueble Comercial / Industrial en ${auction.district}, ${auction.canton}`,
-      en: `Commercial / Industrial Property in ${auction.district}, ${auction.canton}`,
-    },
-    other: {
-      es: `Inmueble Judicial en ${auction.district}, ${auction.canton}`,
-      en: `Judicial Foreclosure Property in ${auction.district}, ${auction.canton}`,
-    },
-  };
-
-  return typeMap[propertyType]?.[language] || `${auction.district}, ${auction.canton}`;
+  // 6. Generic Foreclosure Property
+  return language === 'es'
+    ? `Inmueble Judicial en ${locationStr}`
+    : `Judicial Foreclosure Property in ${locationStr}`;
 }
 
 /**

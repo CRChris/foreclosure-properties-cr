@@ -51,6 +51,7 @@ import {
   Gavel,
   Target,
   Navigation,
+  Loader2,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -571,8 +572,8 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           </div>
         </div>
 
-        {/* Dynamic Cadastral Banner (Exact vs Approximate) */}
-        {auction.location_type === 'exact_cadastral' ? (
+        {/* Dynamic Cadastral Banner (Lot Boundaries vs Exact Pin vs In Process vs Approximate) */}
+        {auction.parcel_polygon ? (
           <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200 text-xs">
             <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
@@ -588,6 +589,36 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               </p>
             </div>
           </div>
+        ) : auction.location_type === 'exact_cadastral' ? (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200 text-xs">
+            <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold">
+                {language === 'en'
+                  ? '🎯 Exact GPS Geolocation Verified'
+                  : '🎯 Ubicación Exacta Georreferenciada'}
+              </p>
+              <p className="text-emerald-800/90 dark:text-emerald-300/90 leading-tight">
+                {language === 'en'
+                  ? `Pin is placed at the exact verified location coordinates [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`
+                  : `El marcador se encuentra en la ubicación exacta verificada [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`}
+              </p>
+            </div>
+          </div>
+        ) : auction.location_type === 'pending_mapping' ? (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-500/40 text-sky-900 dark:text-sky-200 text-xs">
+            <Loader2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5 animate-spin" />
+            <div className="space-y-0.5">
+              <p className="font-bold">
+                {language === 'en' ? '⏳ Map Location in Process' : '⏳ Georreferenciación en Proceso'}
+              </p>
+              <p className="leading-tight text-sky-800 dark:text-sky-300">
+                {language === 'en'
+                  ? 'The automated mapping pipeline is currently resolving cadastral survey coordinates for this property.'
+                  : 'El motor de georreferenciación se encuentra procesando el plano catastrado y coordenadas para este inmueble.'}
+              </p>
+            </div>
+          </div>
         ) : (
           <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -597,8 +628,8 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               </p>
               <p className="leading-tight">
                 {language === 'en'
-                  ? 'Judicial foreclosure edicts do not publish direct GPS coordinates. The marker represents the district/canton center. Consult the registered survey (Plano Catastrado) for physical boundaries.'
-                  : 'Los edictos de remate judicial no incluyen coordenadas GPS directas. El marcador representa el centroide distrital. Consulte el plano catastrado para linderos físicos exactos.'}
+                  ? 'The marker represents the district/canton center. Consult the registered survey (Plano Catastrado) for physical boundaries.'
+                  : 'El marcador representa el centroide distrital. Consulte el plano catastrado para linderos físicos exactos.'}
               </p>
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { LocationType } from '@/lib/types/auction';
-import { Target, MapPin, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Target, MapPin, Loader2 } from 'lucide-react';
 
 interface CadastralLocationBadgeProps {
   locationType?: LocationType;
@@ -19,6 +19,7 @@ export function CadastralLocationBadge({
   size = 'sm',
   className = '',
 }: CadastralLocationBadgeProps) {
+  const isPending = locationType === 'pending_mapping';
   const isExact = locationType === 'exact_cadastral' || hasPolygon;
 
   const sizeClasses = {
@@ -35,13 +36,35 @@ export function CadastralLocationBadge({
     lg: 'w-4 h-4',
   };
 
-  if (isExact) {
+  // 1. Pending Mapping State (Newly scanned or in-flight geocoding)
+  if (isPending) {
     return (
       <span
         title={
           language === 'es'
-            ? 'Geolocalización exacta mediante polígono del Catastro Nacional (SNIT)'
-            : 'Exact GPS geolocation via National Cadastre parcel polygon (SNIT)'
+            ? 'Georreferenciación catastral en proceso...'
+            : 'Cadastral mapping in process...'
+        }
+        className={`inline-flex items-center font-bold rounded-lg border transition-all shadow-sm ${
+          sizeClasses[size]
+        } bg-sky-50 text-sky-800 border-sky-300 dark:bg-sky-950/80 dark:border-sky-500/50 dark:text-sky-300 ${className}`}
+      >
+        <Loader2 className={`${iconSizes[size]} text-sky-600 dark:text-sky-400 animate-spin shrink-0`} />
+        <span>
+          {language === 'es' ? 'Ubicación en proceso' : 'Location in process'}
+        </span>
+      </span>
+    );
+  }
+
+  // 2. Exact Cadastral Lot Boundary (Polygon)
+  if (hasPolygon) {
+    return (
+      <span
+        title={
+          language === 'es'
+            ? 'Linderos y polígono exacto del Catastro Nacional (SNIT)'
+            : 'Exact parcel boundary polygon from National Cadastre (SNIT)'
         }
         className={`inline-flex items-center font-bold rounded-lg border transition-all shadow-sm ${
           sizeClasses[size]
@@ -53,12 +76,34 @@ export function CadastralLocationBadge({
         </span>
         <Target className={`${iconSizes[size]} text-emerald-600 dark:text-emerald-400 shrink-0`} />
         <span>
-          {language === 'es' ? 'Ubicación Exacta (SNIT)' : 'Exact Location (SNIT)'}
+          {language === 'es' ? 'Polígono Catastrado (SNIT)' : 'Cadastral Parcel (SNIT)'}
         </span>
       </span>
     );
   }
 
+  // 3. Exact Pin Location (GPS / Cadastral Point without polygon boundary)
+  if (isExact) {
+    return (
+      <span
+        title={
+          language === 'es'
+            ? 'Coordenadas GPS exactas verificadas'
+            : 'Exact verified GPS pin coordinates'
+        }
+        className={`inline-flex items-center font-bold rounded-lg border transition-all shadow-sm ${
+          sizeClasses[size]
+        } bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:border-emerald-500/50 dark:text-emerald-300 ${className}`}
+      >
+        <Target className={`${iconSizes[size]} text-emerald-600 dark:text-emerald-400 shrink-0`} />
+        <span>
+          {language === 'es' ? 'Ubicación Exacta' : 'Exact Location'}
+        </span>
+      </span>
+    );
+  }
+
+  // 4. Approximate Town / District Centroid
   return (
     <span
       title={

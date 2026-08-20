@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseFolioReal } from './snitGeocodeService';
 
 // ==============================================================================
 // 1. ZOD STRUCTURED OUTPUT SCHEMAS
@@ -460,11 +461,12 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   }
 
   // Standardize finca format (e.g. 6-123456-000)
-  if (!fincaNumber.includes('-')) {
+  const normFolio = parseFolioReal(fincaNumber, province);
+  if (normFolio) {
+    fincaNumber = normFolio.formattedFolio;
+  } else {
     const pDigit = PROVINCE_TO_DIGIT[normalizeSpanishText(province)] || '1';
-    fincaNumber = `${pDigit}-${fincaNumber}-000`;
-  } else if (fincaNumber.split('-').length === 2) {
-    fincaNumber = `${fincaNumber}-000`;
+    fincaNumber = `${pDigit}-${fincaNumber.replace(/\D/g, '') || '000000'}-000`;
   }
 
   // 3. Plano Catastrado

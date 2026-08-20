@@ -27,7 +27,8 @@ import {
   Navigation,
   Globe,
   Satellite,
-  Target
+  Target,
+  Loader2
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -227,28 +228,48 @@ export function PropertyMap({
         </button>
       </div>
 
-      {/* Cadastral / Approximate Status Banner */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] max-w-xs sm:max-w-md pointer-events-auto hidden sm:block">
-        {selectedAuction?.location_type === 'exact_cadastral' ? (
-          <div className="bg-emerald-950/95 text-emerald-100 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
-            <Target className="w-4 h-4 text-emerald-400 shrink-0 animate-pulse" />
-            <p className="leading-tight font-medium">
-              {language === 'en'
-                ? `🎯 Exact Cadastral Lot Displayed (Plano ${selectedAuction.plano_catastrado || ''})`
-                : `🎯 Polígono Catastral Exacto en Pantalla (Plano ${selectedAuction.plano_catastrado || ''})`}
-            </p>
-          </div>
-        ) : (
-          <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3.5 py-2 text-[11px] text-amber-900 dark:text-amber-200/95 shadow-xl flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <p className="leading-tight">
-              {language === 'en'
-                ? '📍 Approximate location by district center. Verify Plano Catastrado.'
-                : '📍 Ubicación aproximada por centroide distrital. Verifique el plano catastrado.'}
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Cadastral / Approximate / In-Process Status Banner */}
+      {selectedAuction && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] max-w-xs sm:max-w-md pointer-events-auto hidden sm:block">
+          {selectedAuction.parcel_polygon ? (
+            <div className="bg-emerald-950/95 text-emerald-100 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
+              <Target className="w-4 h-4 text-emerald-400 shrink-0 animate-pulse" />
+              <p className="leading-tight font-medium">
+                {language === 'en'
+                  ? `🎯 Exact Cadastral Lot Displayed (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`
+                  : `🎯 Polígono Catastral Exacto en Pantalla (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`}
+              </p>
+            </div>
+          ) : selectedAuction.location_type === 'exact_cadastral' ? (
+            <div className="bg-emerald-950/95 text-emerald-100 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
+              <Target className="w-4 h-4 text-emerald-400 shrink-0" />
+              <p className="leading-tight font-medium">
+                {language === 'en'
+                  ? '🎯 Exact Pin Location Georeferenced'
+                  : '🎯 Ubicación Exacta Georreferenciada'}
+              </p>
+            </div>
+          ) : selectedAuction.location_type === 'pending_mapping' ? (
+            <div className="bg-sky-950/95 text-sky-100 backdrop-blur-md border border-sky-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-sky-400 shrink-0 animate-spin" />
+              <p className="leading-tight font-medium">
+                {language === 'en'
+                  ? '⏳ Map location in process...'
+                  : '⏳ Georreferenciación en proceso...'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3.5 py-2 text-[11px] text-amber-900 dark:text-amber-200/95 shadow-xl flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="leading-tight">
+                {language === 'en'
+                  ? '📍 Approximate location by district center. Verify Plano Catastrado.'
+                  : '📍 Ubicación aproximada por centroide distrital. Verifique el plano catastrado.'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Interactive Legend Overlay (Top-Right) */}
       <div className="absolute top-3 right-3 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-700 dark:text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden md:block">
