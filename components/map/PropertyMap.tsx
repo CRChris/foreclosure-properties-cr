@@ -272,22 +272,58 @@ export function PropertyMap({
       )}
 
       {/* Interactive Legend Overlay (Top-Right) */}
-      <div className="absolute top-3 right-3 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-700 dark:text-slate-300 shadow-xl space-y-1.5 pointer-events-auto hidden md:block">
-        <p className="font-semibold text-slate-900 dark:text-slate-200 flex items-center gap-1">
-          <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>{language === 'es' ? 'Señalamiento de Remate' : 'Auction Call Stage'}</span>
-        </p>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block ring-2 ring-emerald-500/20" />
-          <span>{language === 'es' ? '1° Remate' : '1st Call'}</span>
+      <div className="absolute top-3 right-3 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800/90 rounded-2xl p-3 text-[11px] text-slate-700 dark:text-slate-300 shadow-2xl space-y-2.5 pointer-events-auto hidden md:block max-w-[215px]">
+        {/* Stage Header */}
+        <div>
+          <p className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1.5 pb-1 border-b border-slate-200/60 dark:border-slate-800/60">
+            <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>{language === 'es' ? 'Etapa de Remate' : 'Auction Call Stage'}</span>
+          </p>
+          <div className="space-y-1 pl-0.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block ring-2 ring-emerald-500/20" />
+              <span>{language === 'es' ? '1° Remate (Base 100%)' : '1st Call (Base 100%)'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block ring-2 ring-yellow-500/20" />
+              <span>{language === 'es' ? '2° Remate (-25% Base)' : '2nd Call (-25% Base)'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block ring-2 ring-orange-500/20" />
+              <span>{language === 'es' ? '3° Remate (-75% Base)' : '3rd Call (-75% Base)'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600" />
+              </span>
+              <span>{language === 'es' ? 'En Progreso / Hoy' : 'Live / In Progress'}</span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block ring-2 ring-yellow-500/20" />
-          <span>{language === 'es' ? '2° Remate' : '2nd Call'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block ring-2 ring-orange-500/20" />
-          <span>{language === 'es' ? '3° Remate' : '3rd Call'}</span>
+
+        {/* Location Accuracy Header */}
+        <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-800/60">
+          <p className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 mb-1.5">
+            <Target className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>{language === 'es' ? 'Precisión de Ubicación' : 'Location Accuracy'}</span>
+          </p>
+          <div className="space-y-1.5 pl-0.5">
+            <div className="flex items-center gap-2">
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border border-white dark:border-slate-900 text-[8px] items-center justify-center font-black text-white shrink-0">
+                ✓
+              </span>
+              <span className="leading-tight text-slate-900 dark:text-slate-200 font-medium">
+                {language === 'es' ? 'Linderos SNIT (Exacto)' : 'SNIT Parcel (Exact)'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-400 dark:border-slate-500 shrink-0 inline-block" />
+              <span className="leading-tight text-slate-500 dark:text-slate-400">
+                {language === 'es' ? 'Centroide Distrital' : 'District Centroid'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
