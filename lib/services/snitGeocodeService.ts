@@ -53,6 +53,8 @@ export interface SnitGeocodeOptions {
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   fallbackProvince?: string | null;
+  apiKey?: string | null;
+  skipGemini?: boolean;
 }
 
 // Province lookup dictionary for Costa Rica
@@ -1094,15 +1096,127 @@ export interface ResolvedPropertyLocation {
   lat: number;
   lng: number;
   location_type: 'exact_cadastral' | 'approximate_town';
-  resolutionSource: 'plano' | 'folio_real' | 'town_fallback';
+  resolutionSource: 'plano' | 'folio_real' | 'gemini_ai' | 'town_fallback';
   polygonGeoJSON: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry | null;
   isExact: boolean;
   error?: string;
   normalizedPlano?: NormalizedPlano | null;
   normalizedFolio?: NormalizedFolioReal | null;
+  geminiResolvedAs?: string | null;
+  geminiReasoning?: string | null;
   province?: string;
   canton?: string;
   district?: string;
+}
+
+export const GEMINI_GEOCODE_JSON_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    latitude: { type: "NUMBER", nullable: true, description: "Latitude coordinate in Costa Rica (8.0 to 11.5)" },
+    longitude: { type: "NUMBER", nullable: true, description: "Longitude coordinate in Costa Rica (-86.0 to -82.5)" },
+    confidence: { type: "STRING", enum: ["high", "medium", "low", "none"], description: "Confidence level of geocoding" },
+    resolved_as: { type: "STRING", nullable: true, description: "Specific neighborhood, development, or landmark matched" },
+    reasoning: { type: "STRING", nullable: true, description: "Clues used from the edict" }
+  },
+  required: ["latitude", "longitude", "confidence", "resolved_as", "reasoning"]
+};
+
+/**
+ * Intelligent AI Geocoder using Gemini Flash:
+ * Interprets Costa Rican Boletín Judicial edict text to extract high-accuracy coordinates
+ * for residential developments, condominiums, beach sectors, and neighborhoods.
+ */
+export async function lookupByGeminiGeocoding(property: {
+  folio_real?: string | null;
+  province?: string | null;
+  canton?: string | null;
+  district?: string | null;
+  address_description?: string | null;
+  raw_edict_text?: string | null;
+  apiKey?: string | null;
+  timeoutMs?: number;
+}): Promise<{
+  lat: number;
+  lng: number;
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  resolved_as: string | null;
+  reasoning: string | null;
+} | null> {
+  const apiKey = property.apiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  const prompt = `You are a Costa Rican GIS specialist and expert in Boletín Judicial property records.
+Your task is to extract the EXACT GPS coordinates (latitude, longitude) of a real estate property from a Costa Rican judicial foreclosure edict.
+
+## PROPERTY DATA
+Folio Real: ${property.folio_real || 'N/A'}
+Province (from DB): ${property.province || 'N/A'}
+Canton (from DB): ${property.canton || 'N/A'}
+District (from DB): ${property.district || 'N/A'}
+Address Description: ${property.address_description || 'N/A'}
+Legal Edict Text: ${property.raw_edict_text || 'N/A'}
+
+## INSTRUCTIONS
+Analyze the edict text carefully:
+1. Identify the PROPERTY's actual location (ignore court address, notary office, and bank headquarters - these are just filing locations, not the property).
+2. Extract the specific neighborhood, condominium name, residential development, street name, or local landmark mentioned in the "Naturaleza" or "Linderos" sections.
+3. Use your knowledge of Costa Rican geography to determine the most accurate GPS coordinate for that exact location.
+4. If a specific address, crossing (esquina), or residential development name is mentioned (e.g. "Residencial Valle del Sol", "Condominio Los Laureles", "Hacienda Los Reyes"), return coordinates at that specific development — NOT at the canton or district center.
+5. Cross-reference the Folio Real province code (first digit: 1=San José, 2=Alajuela, 3=Cartago, 4=Heredia, 5=Guanacaste, 6=Puntarenas, 7=Limón) to validate the province.`;
+
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const timeoutMs = property.timeoutMs ?? 10000;
+
+  for (const model of models) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            response_mime_type: 'application/json',
+            response_schema: GEMINI_GEOCODE_JSON_SCHEMA,
+            temperature: 0.1,
+          },
+        }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timer));
+
+      if (res.ok) {
+        const json = await res.json();
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          const parsed = JSON.parse(text);
+          if (
+            typeof parsed.latitude === 'number' &&
+            typeof parsed.longitude === 'number' &&
+            parsed.latitude >= 8.0 &&
+            parsed.latitude <= 11.5 &&
+            parsed.longitude >= -86.0 &&
+            parsed.longitude <= -82.5 &&
+            (parsed.confidence === 'high' || parsed.confidence === 'medium')
+          ) {
+            return {
+              lat: Number(parsed.latitude.toFixed(6)),
+              lng: Number(parsed.longitude.toFixed(6)),
+              confidence: parsed.confidence,
+              resolved_as: parsed.resolved_as || null,
+              reasoning: parsed.reasoning || null,
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 /**
@@ -1110,7 +1224,8 @@ export interface ResolvedPropertyLocation {
  * Executes the full Costa Rican geolocation hierarchy:
  * 1. If property.plano is present -> lookupCadastralPlano(property.plano).
  * 2. If plano fails or is missing AND property.folioReal / finca is present -> lookupByFolioReal(property.folioReal).
- * 3. If both fail -> fallback to high-precision landmark / neighborhood / district center.
+ * 2.5 If Gemini API key is configured -> lookupByGeminiGeocoding (AI neighborhood/development resolution).
+ * 3. Fallback to high-precision landmark / neighborhood / district center.
  */
 export async function resolvePropertyLocation(
   property: PropertyGeocodeInput,
@@ -1165,6 +1280,36 @@ export async function resolvePropertyLocation(
         polygonGeoJSON: folioResult.polygonGeoJSON,
         isExact: true,
         normalizedFolio: folioResult.normalizedFolio,
+        province: effectiveProvince,
+        canton: effectiveCanton,
+        district: effectiveDistrict,
+      };
+    }
+  }
+
+  // 2.5 Try Gemini AI high-precision geocoding
+  if (!options?.skipGemini) {
+    const geminiResult = await lookupByGeminiGeocoding({
+      folio_real: rawFolio,
+      province: effectiveProvince,
+      canton: effectiveCanton,
+      district: effectiveDistrict,
+      address_description: property.address_description,
+      raw_edict_text: property.raw_edict_text,
+      apiKey: options?.apiKey,
+      timeoutMs: options?.timeoutMs,
+    });
+
+    if (geminiResult && geminiResult.lat && geminiResult.lng) {
+      return {
+        lat: geminiResult.lat,
+        lng: geminiResult.lng,
+        location_type: 'approximate_town',
+        resolutionSource: 'gemini_ai',
+        polygonGeoJSON: null,
+        isExact: geminiResult.confidence === 'high',
+        geminiResolvedAs: geminiResult.resolved_as,
+        geminiReasoning: geminiResult.reasoning,
         province: effectiveProvince,
         canton: effectiveCanton,
         district: effectiveDistrict,

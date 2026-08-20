@@ -10,10 +10,12 @@ interface BackfillResultItem {
   expediente: string;
   folio_real?: string;
   plano?: string;
-  resolutionSource?: 'plano' | 'folio_real' | 'town_fallback';
+  resolutionSource?: 'plano' | 'folio_real' | 'gemini_ai' | 'town_fallback';
   status: 'updated_exact' | 'resolved_approximate' | 'skipped' | 'error';
   lat?: number;
   lng?: number;
+  resolved_as?: string | null;
+  reasoning?: string | null;
   error?: string;
 }
 
@@ -163,6 +165,8 @@ async function handleBackfill(request: NextRequest) {
             status: 'updated_exact',
             lat,
             lng,
+            resolved_as: geocode.geminiResolvedAs,
+            reasoning: geocode.geminiReasoning,
           });
         } else {
           approxCount++;
@@ -175,6 +179,8 @@ async function handleBackfill(request: NextRequest) {
             status: 'resolved_approximate',
             lat,
             lng,
+            resolved_as: geocode.geminiResolvedAs,
+            reasoning: geocode.geminiReasoning,
           });
         }
       } catch (itemErr: any) {
