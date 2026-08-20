@@ -439,7 +439,7 @@ export async function lookupCadastralPlano(
   }
 
   const { provincia, numero, anio, plano12Digits } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 10000;
+  const timeoutMs = options?.timeoutMs ?? 3000;
   const customFetch = options?.fetchFn ?? fetch;
 
   // 1. Query official SNIT SIRI service (Visor Fincas / Planos backend)
@@ -497,68 +497,10 @@ export async function lookupCadastralPlano(
     } catch {}
   }
 
-  // 2. Query SNIT GeoServer WFS endpoints as fallback
-  const wfsEndpoints = [
-    'https://geos.snitcr.go.cr/geoserver/wfs',
-    'https://siri.snitcr.go.cr/Geoservicios/wfs',
-  ];
-
-  for (const baseUrl of wfsEndpoints) {
-    try {
-      const url = new URL(baseUrl);
-      url.searchParams.set('service', 'WFS');
-      url.searchParams.set('version', '1.1.0');
-      url.searchParams.set('request', 'GetFeature');
-      url.searchParams.set('typeName', 'catastro');
-      url.searchParams.set('outputFormat', 'application/json');
-      url.searchParams.set('cql_filter', `plano='${numero}' AND anio='${anio}' AND provincia='${provincia}'`);
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-      const response = await customFetch(url.toString(), {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timer));
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.type === 'FeatureCollection' && Array.isArray(data.features) && data.features.length > 0) {
-          const reprojectedFeatures = data.features.map((feature: any) => ({
-            ...feature,
-            geometry: {
-              ...feature.geometry,
-              coordinates: reprojectCoordinates(feature.geometry?.coordinates),
-            },
-          }));
-
-          const primaryFeature = reprojectedFeatures[0];
-          const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
-
-          if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
-            return {
-              success: true,
-              lat: centroid.lat,
-              lng: centroid.lng,
-              polygonGeoJSON: {
-                type: 'FeatureCollection',
-                features: reprojectedFeatures,
-              },
-              isExact: true,
-              normalizedPlano: normalized,
-              properties: primaryFeature.properties,
-            };
-          }
-        }
-      }
-    } catch {}
-  }
-
   return {
     success: false,
     isExact: false,
-    error: `No cadastral records found in SNIT for plano ${numero}-${anio} in province ${provincia}`,
+    error: `No cadastral records found in SNIT SIRI for plano ${numero}-${anio} in province ${provincia}`,
     normalizedPlano: normalized,
   };
 }
@@ -582,7 +524,7 @@ export async function lookupByFolioReal(
   }
 
   const { provincia, finca, duplicado } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 10000;
+  const timeoutMs = options?.timeoutMs ?? 3000;
   const customFetch = options?.fetchFn ?? fetch;
 
   // 1. Query official SNIT SIRI service by finca number
@@ -643,73 +585,10 @@ export async function lookupByFolioReal(
     } catch {}
   }
 
-  // 2. Query SNIT GeoServer WFS with finca and provincia CQL filter
-  const wfsEndpoints = [
-    'https://geos.snitcr.go.cr/geoserver/wfs',
-    'https://siri.snitcr.go.cr/Geoservicios/wfs',
-  ];
-
-  const typeNames = ['registro_inmobiliario:catastro', 'catastro', 'predio', 'limite_predial'];
-
-  for (const baseUrl of wfsEndpoints) {
-    for (const typeName of typeNames) {
-      try {
-        const url = new URL(baseUrl);
-        url.searchParams.set('service', 'WFS');
-        url.searchParams.set('version', '2.0.0');
-        url.searchParams.set('request', 'GetFeature');
-        url.searchParams.set('typeName', typeName);
-        url.searchParams.set('outputFormat', 'application/json');
-        url.searchParams.set('cql_filter', `finca='${finca}' AND provincia='${provincia}'`);
-
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-        const response = await customFetch(url.toString(), {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        }).finally(() => clearTimeout(timer));
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.type === 'FeatureCollection' && Array.isArray(data.features) && data.features.length > 0) {
-            const reprojectedFeatures = data.features.map((feature: any) => ({
-              ...feature,
-              geometry: {
-                ...feature.geometry,
-                coordinates: reprojectCoordinates(feature.geometry?.coordinates),
-              },
-            }));
-
-            const primaryFeature = reprojectedFeatures[0];
-            const centroid = extractCentroidFromGeometry(primaryFeature.geometry);
-
-            if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
-              return {
-                success: true,
-                lat: centroid.lat,
-                lng: centroid.lng,
-                polygonGeoJSON: {
-                  type: 'FeatureCollection',
-                  features: reprojectedFeatures,
-                },
-                isExact: true,
-                normalizedFolio: normalized,
-                resolutionSource: 'folio_real',
-                properties: primaryFeature.properties,
-              };
-            }
-          }
-        }
-      } catch {}
-    }
-  }
-
   return {
     success: false,
     isExact: false,
-    error: `No cadastral records found in SNIT for finca ${finca} in province ${provincia}`,
+    error: `No cadastral records found in SNIT SIRI for finca ${finca} in province ${provincia}`,
     normalizedFolio: normalized,
   };
 }
@@ -1125,6 +1004,9 @@ export const GEMINI_GEOCODE_JSON_SCHEMA = {
  * Intelligent AI Geocoder using Gemini Flash:
  * Interprets Costa Rican Boletín Judicial edict text to extract high-accuracy coordinates
  * for residential developments, condominiums, beach sectors, and neighborhoods.
+ *
+ * Uses plain text generation (no response_schema) to avoid Gemini hanging on sparse inputs.
+ * JSON is extracted from the response text via regex.
  */
 export async function lookupByGeminiGeocoding(property: {
   folio_real?: string | null;
@@ -1143,30 +1025,30 @@ export async function lookupByGeminiGeocoding(property: {
   reasoning: string | null;
 } | null> {
   const apiKey = property.apiKey || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
+  if (!apiKey) return null;
+
+  // Include full edict text (up to 4000 chars) to capture property clauses in long notices
+  const edictExcerpt = (property.raw_edict_text || 'N/A').slice(0, 4000);
 
   const prompt = `You are a Costa Rican GIS specialist and expert in Boletín Judicial property records.
-Your task is to extract the EXACT GPS coordinates (latitude, longitude) of a real estate property from a Costa Rican judicial foreclosure edict.
+Return ONLY a JSON object — no markdown, no code fences, no explanation outside the JSON.
 
-## PROPERTY DATA
-Folio Real: ${property.folio_real || 'N/A'}
-Province (from DB): ${property.province || 'N/A'}
-Canton (from DB): ${property.canton || 'N/A'}
-District (from DB): ${property.district || 'N/A'}
-Address Description: ${property.address_description || 'N/A'}
-Legal Edict Text: ${property.raw_edict_text || 'N/A'}
+PROPERTY DATA:
+- Folio Real: ${property.folio_real || 'N/A'} (province code: 1=San José 2=Alajuela 3=Cartago 4=Heredia 5=Guanacaste 6=Puntarenas 7=Limón)
+- Province / Canton / District: ${property.province || 'N/A'} / ${property.canton || 'N/A'} / ${property.district || 'N/A'}
+- Address Description: ${property.address_description || 'N/A'}
+- Edict Text (excerpt): ${edictExcerpt}
 
-## INSTRUCTIONS
-Analyze the edict text carefully:
-1. Identify the PROPERTY's actual location (ignore court address, notary office, and bank headquarters - these are just filing locations, not the property).
-2. Extract the specific neighborhood, condominium name, residential development, street name, or local landmark mentioned in the "Naturaleza" or "Linderos" sections.
-3. Use your knowledge of Costa Rican geography to determine the most accurate GPS coordinate for that exact location.
-4. If a specific address, crossing (esquina), or residential development name is mentioned (e.g. "Residencial Valle del Sol", "Condominio Los Laureles", "Hacienda Los Reyes"), return coordinates at that specific development — NOT at the canton or district center.
-5. Cross-reference the Folio Real province code (first digit: 1=San José, 2=Alajuela, 3=Cartago, 4=Heredia, 5=Guanacaste, 6=Puntarenas, 7=Limón) to validate the province.`;
+TASK: Return the GPS coordinates of the PROPERTY ITSELF.
+- Ignore the court/juzgado, notary office, bank HQ — those are just legal filing locations.
+- Priority: (1) named condominium/residencial/urbanización in "Naturaleza" clause, (2) street intersections in "Linderos", (3) beach or neighborhood name, (4) district centroid as last resort (set confidence "low").
+- Costa Rica lat range: 8.0–11.2, lng range: -86.0 to -82.5.
 
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+Return this exact JSON shape:
+{"latitude": <number or null>, "longitude": <number or null>, "confidence": "high"|"medium"|"low"|"none", "resolved_as": "<what specific place was identified>", "reasoning": "<1-2 sentences>"}`;
+
+  // Active Gemini models with free-tier quota available
+  const models = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.6-flash'];
   const timeoutMs = property.timeoutMs ?? 10000;
 
   for (const model of models) {
@@ -1181,39 +1063,56 @@ Analyze the edict text carefully:
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            response_mime_type: 'application/json',
-            response_schema: GEMINI_GEOCODE_JSON_SCHEMA,
+            // Plain text — no response_schema, avoids Gemini stalling on sparse properties
             temperature: 0.1,
+            maxOutputTokens: 1024,
           },
         }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timer));
 
-      if (res.ok) {
-        const json = await res.json();
-        const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          if (
-            typeof parsed.latitude === 'number' &&
-            typeof parsed.longitude === 'number' &&
-            parsed.latitude >= 8.0 &&
-            parsed.latitude <= 11.5 &&
-            parsed.longitude >= -86.0 &&
-            parsed.longitude <= -82.5 &&
-            (parsed.confidence === 'high' || parsed.confidence === 'medium')
-          ) {
-            return {
-              lat: Number(parsed.latitude.toFixed(6)),
-              lng: Number(parsed.longitude.toFixed(6)),
-              confidence: parsed.confidence,
-              resolved_as: parsed.resolved_as || null,
-              reasoning: parsed.reasoning || null,
-            };
-          }
-        }
+      if (!res.ok) continue;
+
+      const json = await res.json();
+      const finishReason = json.candidates?.[0]?.finishReason;
+
+      // Skip if content was filtered or empty
+      if (finishReason === 'SAFETY' || finishReason === 'RECITATION') continue;
+
+      const rawText: string = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!rawText) continue;
+
+      // Extract JSON from text (handles markdown fences or bare JSON)
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) continue;
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch {
+        continue;
       }
-    } catch {}
+
+      const lat = typeof parsed.latitude === 'number' ? parsed.latitude : null;
+      const lng = typeof parsed.longitude === 'number' ? parsed.longitude : null;
+
+      if (
+        lat !== null && lng !== null &&
+        lat >= 8.0 && lat <= 11.5 &&
+        lng >= -86.0 && lng <= -82.5 &&
+        (parsed.confidence === 'high' || parsed.confidence === 'medium' || parsed.confidence === 'low')
+      ) {
+        return {
+          lat: Number(lat.toFixed(6)),
+          lng: Number(lng.toFixed(6)),
+          confidence: parsed.confidence,
+          resolved_as: typeof parsed.resolved_as === 'string' ? parsed.resolved_as : null,
+          reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : null,
+        };
+      }
+    } catch {
+      // Timeout or network error — try next model
+    }
   }
 
   return null;
