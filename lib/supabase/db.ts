@@ -359,27 +359,33 @@ function mapRowToAuction(item: any): Auction {
   const effectiveDistrict = (extractedLoc.district || item.district || 'Central').trim();
   const fullContextText = `${item.address_description || ''} ${item.raw_edict_text || ''} ${item.legal_summary || ''} ${item.naturaleza_raw || ''}`.toLowerCase();
 
-  // If not exact cadastral, resolve accurate district/canton coordinates with landmark matching
-  if (!isExactCadastral) {
-    const resolved = resolveTownCentroid(
-      effectiveProvince,
-      effectiveCanton,
-      effectiveDistrict,
-      String(item.id || item.folio_real || item.expediente_number || ''),
-      fullContextText
-    );
-    lat = resolved.lat;
-    lng = resolved.lng;
-  } else if (!lat || !lng) {
-    const fallback = resolveTownCentroid(
-      effectiveProvince,
-      effectiveCanton,
-      effectiveDistrict,
-      String(item.id || item.folio_real || item.expediente_number || ''),
-      fullContextText
-    );
-    lat = fallback.lat;
-    lng = fallback.lng;
+  // Only fall back to resolveTownCentroid when lat/lng are genuinely missing.
+  // If the DB has stored coordinates (from a backfill or ingest), trust and use them.
+  // This allows Gemini AI geocoded or previously resolved coordinates to be served as-is.
+  if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+    if (isExactCadastral) {
+      // Exact cadastral but no coordinates somehow — use centroid from parcel polygon or fall through
+      const fallback = resolveTownCentroid(
+        effectiveProvince,
+        effectiveCanton,
+        effectiveDistrict,
+        String(item.id || item.folio_real || item.expediente_number || ''),
+        fullContextText
+      );
+      lat = fallback.lat;
+      lng = fallback.lng;
+    } else {
+      // No DB coordinates at all — run landmark/centroid resolution
+      const resolved = resolveTownCentroid(
+        effectiveProvince,
+        effectiveCanton,
+        effectiveDistrict,
+        String(item.id || item.folio_real || item.expediente_number || ''),
+        fullContextText
+      );
+      lat = resolved.lat;
+      lng = resolved.lng;
+    }
   }
 
   // Derive smart property category from text if column not present in table
