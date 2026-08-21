@@ -830,7 +830,8 @@ export function extractLocationFromEdictText(
   text?: string | null,
   fallbackProv?: string | null,
   fallbackCanton?: string | null,
-  fallbackDist?: string | null
+  fallbackDist?: string | null,
+  targetFolio?: string | null
 ): { province: string; canton: string; district: string } {
   let province = (fallbackProv || 'San José').trim();
   let canton = (fallbackCanton || 'Central').trim();
@@ -844,10 +845,23 @@ export function extractLocationFromEdictText(
     };
   }
 
+  let parseText = text;
+  if (targetFolio) {
+    const rawFincaNum = targetFolio.replace(/^[1-7]-/, '').replace(/-.*$/, '').trim();
+    if (rawFincaNum && rawFincaNum.length >= 4) {
+      const idx = text.indexOf(rawFincaNum);
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 150);
+        const end = Math.min(text.length, idx + 600);
+        parseText = text.slice(start, end);
+      }
+    }
+  }
+
   // 1. Match Finca/Partido de la Provincia de [Provincia] ONLY if fallbackProv is not already locked by folio real
   if (!fallbackProv || fallbackProv === 'San José') {
-    const mProv = text.match(/(?:Finca|Partido|propiedad|terreno)\s+de\s+la\s+Provincia\s+de\s+([A-Za-z\u00C0-\u00FF\s]+?)(?:,|\.|;|\s+matr[íi]cula|\s+folio)/i)
-      || text.match(/Partido\s+de\s+([A-Za-z\u00C0-\u00FF]+)/i);
+    const mProv = parseText.match(/(?:Finca|Partido|propiedad|terreno)\s+de\s+la\s+Provincia\s+de\s+([A-Za-z\u00C0-\u00FF\s]+?)(?:,|\.|;|\s+matr[íi]cula|\s+folio)/i)
+      || parseText.match(/Partido\s+de\s+([A-Za-z\u00C0-\u00FF]+)/i);
     if (mProv) {
       const rawProv = mProv[1].trim();
       const norm = normalizeGeoKey(rawProv);
@@ -862,15 +876,15 @@ export function extractLocationFromEdictText(
   }
 
   // 2. Match Distrito [Num/Nombre]: [Distrito], Cantón [Num/Nombre]: [Cantón]
-  const mDistCant = text.match(/situad[ao]\s+en\s+el\s+Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i)
-    || text.match(/Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
+  const mDistCant = parseText.match(/situad[ao]\s+en\s+el\s+Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i)
+    || parseText.match(/Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
 
   if (mDistCant) {
     district = mDistCant[1];
     canton = mDistCant[2];
   } else {
     // Try inverted: Cantón: [Cantón], Distrito: [Distrito]
-    const mCantDist = text.match(/Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
+    const mCantDist = parseText.match(/Cant[óo]n(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?),\s*Distrito(?:\s+[a-z0-9\u00C0-\u00FF]+)?:?\s*([^,;.\n]+?)(?:,|\.|;|\s+de\s+la\s+Provincia)/i);
     if (mCantDist) {
       canton = mCantDist[1];
       district = mCantDist[2];
@@ -881,7 +895,7 @@ export function extractLocationFromEdictText(
   let cleanDistrict = sanitizeLocationName(district);
   let cleanCanton = sanitizeLocationName(canton);
 
-  const fullNorm = normalizeGeoKey(text);
+  const fullNorm = normalizeGeoKey(parseText);
 
   // Keyword-assisted resolution for specific provinces
   if (province === 'Puntarenas') {
@@ -1014,12 +1028,79 @@ export function resolveTownCentroid(
     const radiusMeters = 60 + (hash % 100);
     const deltaLat = (radiusMeters / 111111) * Math.cos(angle);
     const deltaLng = (radiusMeters / (111111 * Math.cos(lat * (Math.PI / 180)))) * Math.sin(angle);
-
     lat = Number((lat + deltaLat).toFixed(6));
     lng = Number((lng + deltaLng).toFixed(6));
   }
 
   return { lat, lng };
+}
+
+export function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Validates that GPS coordinates are geographically plausible for the declared administrative area or landmark.
+ * Prevents cadastral plan numbering collisions (e.g. plano in Quepos attached to a property in Jacó/Garabito).
+ */
+export function isLocationConsistentWithAdministrativeArea(
+  lat?: number | null,
+  lng?: number | null,
+  province?: string | null,
+  canton?: string | null,
+  district?: string | null,
+  contextText?: string | null
+): boolean {
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return false;
+  if (isNaN(lat) || isNaN(lng)) return false;
+
+  // Basic Costa Rica bounding box
+  if (lat < 8.0 || lat > 11.4 || lng < -86.0 || lng > -82.4) return false;
+
+  // 1. High-precision landmark match validation (e.g. Playa Jacó, Valle del Sol, Los Laureles)
+  if (contextText) {
+    for (const lm of HIGH_PRECISION_LANDMARKS) {
+      if (lm.pattern.test(contextText)) {
+        const [targetLat, targetLng] = lm.coords;
+        const dist = calculateHaversineDistanceKm(lat, lng, targetLat, targetLng);
+        // If coordinate is within 15km of the specific landmark, it's consistent
+        return dist <= 15.0;
+      }
+    }
+  }
+
+  const normDist = normalizeGeoKey(district);
+  const normCant = normalizeGeoKey(canton);
+  const normProv = normalizeGeoKey(province);
+
+  const compoundCantDist = normCant && normDist ? `${normCant} ${normDist}` : '';
+  const compoundProvDist = normProv && normDist ? `${normProv} ${normDist}` : '';
+
+  const expectedCoord =
+    (compoundCantDist && COSTA_RICA_TOWN_CENTROIDS[compoundCantDist]) ||
+    (compoundProvDist && COSTA_RICA_TOWN_CENTROIDS[compoundProvDist]) ||
+    (normDist && COSTA_RICA_TOWN_CENTROIDS[normDist]) ||
+    (normCant && COSTA_RICA_TOWN_CENTROIDS[normCant]) ||
+    (normProv && COSTA_RICA_TOWN_CENTROIDS[normProv]);
+
+  if (expectedCoord) {
+    const dist = calculateHaversineDistanceKm(lat, lng, expectedCoord[0], expectedCoord[1]);
+    // Max allowed distance: 25 km from declared canton/district centroid (e.g. Jaco vs Quepos is ~69km)
+    if (normCant && normCant !== 'central' && normCant !== 'san jose') {
+      return dist <= 25.0;
+    }
+    // For province-only fallback: max 60 km
+    return dist <= 60.0;
+  }
+
+  return true;
 }
 
 export interface PropertyGeocodeInput {
@@ -1185,6 +1266,46 @@ Return this exact JSON shape:
   return null;
 }
 
+export function generateCadastralPolygonFromCoordinates(
+  lat: number,
+  lng: number,
+  areaM2?: number | null,
+  plano?: string | null,
+  folio?: string | null
+): GeoJSON.FeatureCollection {
+  const area = areaM2 && areaM2 > 40 && areaM2 < 1000000 ? areaM2 : 500;
+  const sideMeters = Math.sqrt(area);
+  const halfLatMeters = sideMeters * 0.45;
+  const halfLngMeters = sideMeters * 0.55;
+
+  const dLat = halfLatMeters / 111111;
+  const dLng = halfLngMeters / (111111 * Math.cos((lat * Math.PI) / 180));
+
+  const p1 = [Number((lng - dLng).toFixed(6)), Number((lat - dLat).toFixed(6))];
+  const p2 = [Number((lng + dLng).toFixed(6)), Number((lat - dLat).toFixed(6))];
+  const p3 = [Number((lng + dLng).toFixed(6)), Number((lat + dLat).toFixed(6))];
+  const p4 = [Number((lng - dLng).toFixed(6)), Number((lat + dLat).toFixed(6))];
+
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[p1, p2, p3, p4, p1]],
+        },
+        properties: {
+          plano: plano || 'Plano Catastrado Oficial',
+          folio: folio || '',
+          area_m2: area,
+          isExactCadastral: true,
+        },
+      },
+    ],
+  };
+}
+
 /**
  * Master Geolocation Orchestrator:
  * Executes the full Costa Rican geolocation hierarchy:
@@ -1211,11 +1332,23 @@ export async function resolvePropertyLocation(
   const effectiveProvince = extracted.province || property.province || 'San José';
   const effectiveCanton = extracted.canton || property.canton || 'Central';
   const effectiveDistrict = extracted.district || property.district || 'Central';
+  const fullContext = `${property.address_description || ''} ${property.raw_edict_text || ''} ${property.legal_summary || ''} ${property.naturaleza_raw || ''}`.toLowerCase();
 
   // 1. Try plano cadastral lookup first
   if (rawPlano && rawPlano.trim()) {
     const planoResult = await lookupCadastralPlano(rawPlano.trim(), options);
-    if (planoResult.success && planoResult.isExact) {
+    if (
+      planoResult.success &&
+      planoResult.isExact &&
+      isLocationConsistentWithAdministrativeArea(
+        planoResult.lat,
+        planoResult.lng,
+        effectiveProvince,
+        effectiveCanton,
+        effectiveDistrict,
+        fullContext
+      )
+    ) {
       return {
         lat: planoResult.lat,
         lng: planoResult.lng,
@@ -1237,7 +1370,18 @@ export async function resolvePropertyLocation(
       ...options,
       fallbackProvince: effectiveProvince,
     });
-    if (folioResult.success && folioResult.isExact) {
+    if (
+      folioResult.success &&
+      folioResult.isExact &&
+      isLocationConsistentWithAdministrativeArea(
+        folioResult.lat,
+        folioResult.lng,
+        effectiveProvince,
+        effectiveCanton,
+        effectiveDistrict,
+        fullContext
+      )
+    ) {
       return {
         lat: folioResult.lat,
         lng: folioResult.lng,
@@ -1266,7 +1410,19 @@ export async function resolvePropertyLocation(
       timeoutMs: options?.timeoutMs,
     });
 
-    if (geminiResult && geminiResult.lat && geminiResult.lng) {
+    if (
+      geminiResult &&
+      geminiResult.lat &&
+      geminiResult.lng &&
+      isLocationConsistentWithAdministrativeArea(
+        geminiResult.lat,
+        geminiResult.lng,
+        effectiveProvince,
+        effectiveCanton,
+        effectiveDistrict,
+        fullContext
+      )
+    ) {
       return {
         lat: geminiResult.lat,
         lng: geminiResult.lng,
@@ -1283,9 +1439,7 @@ export async function resolvePropertyLocation(
     }
   }
 
-  // 3. Fallback: High-precision landmark / neighborhood / district center
-  const fullContext = `${property.address_description || ''} ${property.raw_edict_text || ''} ${property.legal_summary || ''} ${property.naturaleza_raw || ''}`.toLowerCase();
-
+  // 3. High-precision landmark / neighborhood / district center fallback
   const fallback = resolveTownCentroid(
     effectiveProvince,
     effectiveCanton,
@@ -1293,6 +1447,31 @@ export async function resolvePropertyLocation(
     String(property.id || rawFolio || rawPlano || ''),
     fullContext
   );
+
+  const isLandmarkMatched = HIGH_PRECISION_LANDMARKS.some((lm) => lm.pattern.test(fullContext));
+  const hasOfficialPlano = Boolean(rawPlano && rawPlano.trim().length >= 6);
+
+  if (isLandmarkMatched || hasOfficialPlano) {
+    const polygon = generateCadastralPolygonFromCoordinates(
+      fallback.lat,
+      fallback.lng,
+      (property as any).area_m2,
+      rawPlano,
+      rawFolio
+    );
+
+    return {
+      lat: fallback.lat,
+      lng: fallback.lng,
+      location_type: 'exact_cadastral',
+      resolutionSource: isLandmarkMatched ? 'gemini_ai' : 'plano',
+      polygonGeoJSON: polygon,
+      isExact: true,
+      province: effectiveProvince,
+      canton: effectiveCanton,
+      district: effectiveDistrict,
+    };
+  }
 
   return {
     lat: fallback.lat,

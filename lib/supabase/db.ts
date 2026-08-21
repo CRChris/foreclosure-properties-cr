@@ -19,7 +19,10 @@ import {
   extractCentroidFromGeometry,
   extractLocationFromEdictText,
   resolveTownCentroid,
+  isLocationConsistentWithAdministrativeArea,
+  generateCadastralPolygonFromCoordinates,
 } from '@/lib/services/snitGeocodeService';
+import { extractLotSizeM2 } from '@/lib/services/extractorService';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
 import { createClient, isSupabaseConfigured } from './client';
 
@@ -372,38 +375,55 @@ function mapRowToAuction(item: any): Auction {
     item.district
   );
 
+  const cleanDbCanton = sanitizeLocationName(item.canton);
+  const cleanDbDistrict = sanitizeLocationName(item.district);
   const effectiveProvince = authoritativeProvince;
-  const effectiveCanton = (extractedLoc.canton || sanitizeLocationName(item.canton) || authoritativeProvince).trim();
-  const effectiveDistrict = (extractedLoc.district || sanitizeLocationName(item.district) || '').trim();
+  const effectiveCanton = (cleanDbCanton && !cleanDbCanton.toLowerCase().startsWith('provincia') && cleanDbCanton.toLowerCase() !== 'central' ? cleanDbCanton : (extractedLoc.canton || cleanDbCanton || authoritativeProvince)).trim();
+  const effectiveDistrict = (cleanDbDistrict && !cleanDbDistrict.toLowerCase().startsWith('distrito') && cleanDbDistrict.toLowerCase() !== 'central' ? cleanDbDistrict : (extractedLoc.district || cleanDbDistrict || '')).trim();
   const fullContextText = `${item.address_description || ''} ${item.raw_edict_text || ''} ${item.legal_summary || ''} ${item.naturaleza_raw || ''}`.toLowerCase();
 
-  // Only fall back to resolveTownCentroid when lat/lng are genuinely missing.
-  // If the DB has stored coordinates (from a backfill or ingest), trust and use them.
-  // This allows Gemini AI geocoded or previously resolved coordinates to be served as-is.
-  if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-    if (isExactCadastral) {
-      // Exact cadastral but no coordinates somehow — use centroid from parcel polygon or fall through
-      const fallback = resolveTownCentroid(
-        effectiveProvince,
-        effectiveCanton,
-        effectiveDistrict,
-        String(item.id || item.folio_real || item.expediente_number || ''),
-        fullContextText
-      );
-      lat = fallback.lat;
-      lng = fallback.lng;
-    } else {
-      // No DB coordinates at all — run landmark/centroid resolution
-      const resolved = resolveTownCentroid(
-        effectiveProvince,
-        effectiveCanton,
-        effectiveDistrict,
-        String(item.id || item.folio_real || item.expediente_number || ''),
-        fullContextText
-      );
-      lat = resolved.lat;
-      lng = resolved.lng;
-    }
+  // Validate stored coordinates against declared administrative area & landmarks.
+  // If stored coordinates are > 25km away from the declared canton/district (e.g. Quepos coordinates for a Jaco property),
+  // discard the inconsistent coordinates/polygon and re-resolve to the authentic location.
+  const isStoredCoordPlausible =
+    lat !== null &&
+    lng !== null &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    isLocationConsistentWithAdministrativeArea(
+      lat,
+      lng,
+      effectiveProvince,
+      effectiveCanton,
+      effectiveDistrict,
+      fullContextText
+    );
+
+  if (!isStoredCoordPlausible) {
+    // If coordinates were invalid or in the wrong canton, clear bad polygon and re-resolve
+    parcelPolygonObj = null;
+    const resolved = resolveTownCentroid(
+      effectiveProvince,
+      effectiveCanton,
+      effectiveDistrict,
+      String(item.id || item.folio_real || item.expediente_number || ''),
+      fullContextText
+    );
+    lat = resolved.lat;
+    lng = resolved.lng;
+  }
+
+  const hasOfficialPlano = Boolean(item.plano_catastrado && item.plano_catastrado.trim().length >= 6);
+  const isExactLocation = isExactCadastral || hasOfficialPlano || item.location_type === 'exact_cadastral';
+
+  if (!parcelPolygonObj && isExactLocation && lat !== null && lng !== null) {
+    parcelPolygonObj = generateCadastralPolygonFromCoordinates(
+      lat,
+      lng,
+      item.area_m2,
+      item.plano_catastrado,
+      item.folio_real
+    );
   }
 
   // Derive smart property category from text if column not present in table
@@ -466,7 +486,16 @@ function mapRowToAuction(item: any): Auction {
     canton: effectiveCanton,
     district: effectiveDistrict,
     address_description: item.address_description || null,
-    area_m2: Number(item.area_m2) || 100,
+    area_m2: (() => {
+      let area = Number(item.area_m2) || 0;
+      if (item.raw_edict_text && (area <= 0 || area === 250)) {
+        const extracted = extractLotSizeM2(item.raw_edict_text);
+        if (extracted > 0 && (area <= 0 || Math.abs(extracted - 250) > 0.01)) {
+          area = extracted;
+        }
+      }
+      return area > 0 ? area : 100;
+    })(),
     currency: (item.currency || 'USD') as Currency,
     property_category: category,
     property_type: propertyType,
@@ -501,7 +530,7 @@ function mapRowToAuction(item: any): Auction {
     raw_edict_text: item.raw_edict_text || '',
     latitude: lat,
     longitude: lng,
-    location_type: (item.location_type as any) || (parcelPolygonObj ? 'exact_cadastral' : 'approximate_town'),
+    location_type: isExactLocation ? 'exact_cadastral' : ((item.location_type as any) || 'approximate_town'),
     parcel_polygon: parcelPolygonObj,
     images: Array.isArray(item.images) && item.images.length > 0 ? item.images : uniqueGallery,
     created_at: item.created_at || new Date().toISOString(),

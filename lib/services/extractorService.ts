@@ -160,6 +160,87 @@ export function normalizeSpanishText(text: string): string {
  * - "tres mil quinientos" -> 3500
  * - "dieciseis millones novecientos mil" -> 16900000
  */
+export function parseSpanishYear(text: string): number | null {
+  if (!text) return null;
+  const norm = normalizeSpanishText(text);
+  const digitMatch = norm.match(/\b(20[123][0-9])\b/);
+  if (digitMatch) return parseInt(digitMatch[1], 10);
+
+  if (norm.includes('dos mil treinta y cinco')) return 2035;
+  if (norm.includes('dos mil treinta')) return 2030;
+  if (norm.includes('dos mil veintinueve')) return 2029;
+  if (norm.includes('dos mil veintiocho')) return 2028;
+  if (norm.includes('dos mil veintisiete')) return 2027;
+  if (norm.includes('dos mil veintiséis') || norm.includes('dos mil veintiseis')) return 2026;
+  if (norm.includes('dos mil veinticinco')) return 2025;
+  if (norm.includes('dos mil veinticuatro')) return 2024;
+  if (norm.includes('dos mil veintitrés') || norm.includes('dos mil veintitres')) return 2023;
+  if (norm.includes('dos mil veintidós') || norm.includes('dos mil veintidos')) return 2022;
+  if (norm.includes('dos mil veintiuno') || norm.includes('dos mil veintiún') || norm.includes('dos mil veintiun')) return 2021;
+  if (norm.includes('dos mil veinte')) return 2020;
+  if (norm.includes('dos mil diecinueve')) return 2019;
+  if (norm.includes('dos mil dieciocho')) return 2018;
+
+  return null;
+}
+
+const SPANISH_MONTHS: Record<string, number> = {
+  'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+  'julio': 7, 'agosto': 8, 'setiembre': 9, 'septiembre': 9, 'octubre': 10,
+  'noviembre': 11, 'diciembre': 12,
+};
+
+/**
+ * Robustly parses a Costa Rican court auction date from edict text into an ISO string.
+ * Strictly respects America/Costa_Rica timezone (-06:00).
+ */
+export function parseSpanishAuctionDate(text: string): string | null {
+  if (!text) return null;
+  const normalized = text.replace(/\s+/g, ' ');
+
+  // 1. Time extraction
+  let hour = 14;
+  let minute = 30;
+  const timeWordMatch = normalized.match(/(?:a\s+las|al\s+ser\s+las|las|se\s+señalan|señálanse)\s+([a-záéíóú0-9]+)\s+horas(?:\s+(?:con|y)\s+([a-záéíóú0-9]+)\s+minutos)?/i);
+  if (timeWordMatch) {
+    const hWord = normalizeSpanishText(timeWordMatch[1]);
+    const mWord = timeWordMatch[2] ? normalizeSpanishText(timeWordMatch[2]) : 'cero';
+    hour = /^\d+$/.test(hWord) ? parseInt(hWord, 10) : (SPANISH_WORD_NUMBERS[hWord] ?? 14);
+    minute = /^\d+$/.test(mWord) ? parseInt(mWord, 10) : (SPANISH_WORD_NUMBERS[mWord] ?? 0);
+  } else {
+    const digTime = normalized.match(/\b([0-2]?[0-9]):([0-5][0-9])\b/);
+    if (digTime) {
+      hour = parseInt(digTime[1], 10);
+      minute = parseInt(digTime[2], 10);
+    }
+  }
+
+  // 2. Date pattern match (e.g. "veinticuatro de noviembre del dos mil veintitrés", "15 de setiembre de 2026")
+  const dateRegex = /(?:(?:a\s+las|al\s+ser\s+las|se\s+señalan|señálanse|para\s+tal\s+efecto)\s+[a-záéíóú0-9:\s]+?\s+(?:del|de)\s+)?([0-9]{1,2}|[a-záéíóú\s]+?)\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|setiembre|septiembre|octubre|noviembre|diciembre)\s+(?:de|del|de\s+el)\s+(20[123][0-9]|dos\s+mil\s+[a-záéíóú\s]+?)(?=[,.;\n]|\s+con|\s+de\s+no|\s+y\s+de|$)/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = dateRegex.exec(normalized)) !== null) {
+    const dayStr = normalizeSpanishText(match[1].trim());
+    const monthStr = normalizeSpanishText(match[2].trim());
+    const yearStr = match[3].trim();
+
+    let day = parseInt(dayStr, 10);
+    if (isNaN(day)) {
+      day = SPANISH_WORD_NUMBERS[dayStr] || parseSpanishWordsToNumber(dayStr) || 0;
+    }
+
+    const month = SPANISH_MONTHS[monthStr];
+    const year = parseSpanishYear(yearStr);
+
+    if (day >= 1 && day <= 31 && month && year && year >= 2015 && year <= 2035) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00-06:00`;
+    }
+  }
+
+  return null;
+}
+
 export function parseSpanishWordsToNumber(text: string): number {
   if (!text) return 0;
   const norm = normalizeSpanishText(text);
@@ -210,6 +291,8 @@ export function parseSpanishWordsToNumber(text: string): number {
 /**
  * Extracts and converts area clauses starting with "MIDE:" or similar into numeric square meters.
  * Examples:
+ * - "MIDE: 1,400.00 metros cuadrados" -> 1400.00
+ * - "MIDE: 1.400,00 metros cuadrados" -> 1400.00
  * - "MIDE: DOSCIENTOS CINCUENTA METROS CUADRADOS" -> 250.00
  * - "MIDE: 1687 metros con noventa y seis, decímetros cuadrados" -> 1687.96
  * - "MIDE: TRES MIL QUINIENTOS METROS CON CINCUENTA DECÍMETROS CUADRADOS" -> 3500.50
@@ -220,10 +303,16 @@ export function extractLotSizeM2(text: string): number {
   if (!text) return 0;
   const normalizedText = text.replace(/\s+/g, ' ');
 
+  // Ignore legal procedural mentions of "medida" (e.g. "medida cautelar", "medida de tratamiento", "a medida que")
+  const sanitizedText = normalizedText
+    .replace(/medida\s+cautelar/gi, ' ')
+    .replace(/medida\s+de\s+tratamiento/gi, ' ')
+    .replace(/a\s+medida\s+que/gi, ' ');
+
   // 1. Check for compound hectare + meters pattern (e.g., "UNA HECTÁREA CON TRES MIL METROS", "2 hectáreas con 500 m2")
-  const haPlusMetersMatch = normalizedText.match(/(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^.,;\n]+?)(?:metros|m2|m²)/i);
+  const haPlusMetersMatch = sanitizedText.match(/(?:(?:una|[0-9]+(?:\.[0-9]+)?)\s+hect[áa]rea[s]?)\s+con\s+([^.,;\n]+?)(?:metros|m2|m²)/i);
   if (haPlusMetersMatch) {
-    const haCountMatch = normalizedText.match(/(una|[0-9]+)\s+hect[áa]rea/i);
+    const haCountMatch = sanitizedText.match(/(una|[0-9]+(?:\.[0-9]+)?)\s+hect[áa]rea/i);
     let haMultiplier = 1;
     if (haCountMatch) {
       if (haCountMatch[1].toLowerCase() === 'una') haMultiplier = 1;
@@ -236,24 +325,22 @@ export function extractLotSizeM2(text: string): number {
     return (haMultiplier * 10000) + (extraNum || 0);
   }
 
-  // 2. Extract the specific "MIDE:" or "CABIDA:" clause
-  const mideClauseMatch = normalizedText.match(/(?:mide|cabida|superficie|área|medida)\s*[:\s]*([^.]+?)(?=\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z]|$)|plano\s*:|\.|$)/i);
-  const clause = mideClauseMatch ? mideClauseMatch[1].trim() : normalizedText;
-
-  // 3. Check for standalone hectares (e.g. "12 hectáreas", "1.5 ha")
-  const haMatch = clause.match(/([0-9]+(?:[\.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)/i);
-  if (haMatch) {
-    const rawVal = haMatch[1].trim();
+  // 2. Check for standalone hectares (e.g. "12 hectáreas", "1.5 ha", "3 hectáreas")
+  const haStandaloneMatch = sanitizedText.match(/(?:mide|cabida|superficie|área|medida)[^.,;\n]*?[:\s]+([0-9]+(?:[.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)/i);
+  if (haStandaloneMatch) {
+    const rawVal = haStandaloneMatch[1].trim();
     const num = /^\d+/.test(rawVal)
       ? parseFloat(rawVal.replace(/\./g, '').replace(',', '.'))
       : parseSpanishWordsToNumber(rawVal);
     if (num > 0) return num * 10000;
   }
 
-  // 4. Check for digit numbers with meters/decimeters (e.g. "1687 metros con noventa y seis, decímetros cuadrados", "165.50 m2", "45.000,00 metros cuadrados")
-  const digitMatch = clause.match(/([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts)/i);
-  if (digitMatch) {
-    let clean = digitMatch[1].trim();
+  // 3. Formatted numeric measurement under "MIDE" / "CABIDA" / "SUPERFICIE" / "ÁREA"
+  // Example: "Mide: 1,400.00 metros cuadrados", "Mide: 2,450.00 m2", "MIDE: 1.400,00 metros", "Mide: 260.00 metros", "MIDE: 6246 METROS CUADRADOS"
+  const directNumericMatch = sanitizedText.match(/(?:mide|cabida|superficie|área|medida\s+superficial)[^.,;\n]*?[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?|[0-9]+(?:[.,][0-9]+)?)\s*(?:metros\s+cuadrados|metros|m2|m²|mts|mts2|dm2)\b/i);
+
+  if (directNumericMatch) {
+    let clean = directNumericMatch[1].trim();
     if (clean.includes(',') && clean.includes('.')) {
       if (clean.lastIndexOf(',') > clean.lastIndexOf('.')) {
         clean = clean.replace(/\./g, '').replace(',', '.');
@@ -274,9 +361,9 @@ export function extractLotSizeM2(text: string): number {
       }
     }
     const val = parseFloat(clean);
-    if (!isNaN(val) && val > 0) {
+    if (!isNaN(val) && val > 0 && val < 100000000) {
       // Check if there is an additional decimeters clause
-      const decMatch = clause.match(/con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)/i);
+      const decMatch = sanitizedText.match(/(?:mide|cabida)[^;.]+?con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)/i);
       if (decMatch) {
         const decVal = /^\d+/.test(decMatch[1].trim())
           ? parseFloat(decMatch[1].trim())
@@ -287,9 +374,33 @@ export function extractLotSizeM2(text: string): number {
     }
   }
 
-  // 5. Spelled-out Spanish words in the "MIDE:" clause
-  const areaNum = parseSpanishWordsToNumber(clause);
-  if (areaNum > 0) return areaNum;
+  // 4. Extract spelled-out Spanish numbers strictly between "MIDE:" and "METROS CUADRADOS"
+  // Example: "MIDE: seis mil doscientos cuarenta y seis METROS CUADRADOS" -> 6246
+  // Example: "MIDE: DOSCIENTOS CINCUENTA METROS CUADRADOS" -> 250
+  // Example: "MIDE: CUATRO MIL CUATROCIENTOS VEINTIÚN METROS CUADRADOS" -> 4421
+  const mideWordsMatch = sanitizedText.match(/(?:mide|cabida|superficie|área|medida\s+superficial)\s*[:\s]*([^;.]+?)\s*(?:metros\s+cuadrados|metros|m2|m²|mts|mts2)\b/i);
+  if (mideWordsMatch) {
+    const wordsClause = mideWordsMatch[1].trim();
+    const areaNum = parseSpanishWordsToNumber(wordsClause);
+    if (areaNum > 0 && areaNum < 100000000) {
+      // Check if there is a following decimeters clause
+      const decMatch = sanitizedText.match(/(?:mide|cabida)[^;.]+?con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)/i);
+      if (decMatch) {
+        const decVal = /^\d+/.test(decMatch[1].trim())
+          ? parseFloat(decMatch[1].trim())
+          : parseSpanishWordsToNumber(decMatch[1].trim());
+        return areaNum + (decVal * 0.01);
+      }
+      return areaNum;
+    }
+  }
+
+  // 5. Fallback full-text spelled-out area parser bounded strictly to units
+  const fullTextWordsMatch = sanitizedText.match(/(?:mide\s+|cabida\s+de\s+|superficie\s+de\s+)([a-záéíóú\s,]+?)(?:metros\s+cuadrados|metros|m2|m²)\b/i);
+  if (fullTextWordsMatch) {
+    const areaNum = parseSpanishWordsToNumber(fullTextWordsMatch[1].trim());
+    if (areaNum > 0 && areaNum < 100000000) return areaNum;
+  }
 
   return 0;
 }
@@ -297,9 +408,9 @@ export function extractLotSizeM2(text: string): number {
 /**
  * Disambiguates Costa Rican judicial NATURALEZA and classifies property_type & is_constructed.
  * Strict rules:
- * - "NATURALEZA: TERRENO PARA CONSTRUIR", "TERRENO DE SOLAR", "TERRENO DE AGRICULTURA", "LOTE PARA VIVIENDA"
- *   -> property_type = "lot" and is_constructed = false.
- *   -> NEVER mark constructed just because of "construir".
+ * - "NATURALEZA: TERRENO PARA CONSTRUIR", "TERRENO DE SOLAR", "TERRENO DE AGRICULTURA", "LOTE PARA VIVIENDA", "FINCA CON VISTA"
+ *   -> property_type = "lot" (or "farm") and is_constructed = false.
+ *   -> NEVER mark constructed just because of "construir" or "residencial" in zoning.
  * - Only mark is_constructed = true (and property_type = "house" | "commercial" | "condo") if explicitly states:
  *   "CON UNA CASA", "CON CASA DE HABITACION", "CON EDIFICIO", "CON CONSTRUCCIONES", "LOCAL COMERCIAL", "FINCA CON CASA", or "EDIFICACIÓN".
  * - "TERRENO PARA CONSTRUIR CON UNA CASA..." -> property_type = "house" and is_constructed = true.
@@ -310,24 +421,24 @@ export function classifyPropertyNaturaleza(naturalezaRaw: string, fullEdictText?
   naturaleza_raw: string;
 } {
   const raw = naturalezaRaw.trim();
-  const norm = normalizeSpanishText(`${raw} ${fullEdictText || ''}`);
+  const fullContext = `${raw} ${fullEdictText || ''}`;
+  const norm = normalizeSpanishText(fullContext);
   const normNat = normalizeSpanishText(raw);
 
   // 1. Explicit construction presence markers
   const explicitConstructionPatterns = [
-    /con\s+una\s+casa/i,
-    /con\s+casa\s+de\s+habitacion/i,
-    /con\s+casa/i,
-    /con\s+edificio/i,
-    /con\s+construcciones/i,
-    /con\s+edificacion/i,
-    /con\s+mejoras/i,
-    /finca\s+con\s+casa/i,
-    /edificacion\s+de/i,
-    /edificio\s+comercial/i,
-    /local\s+comercial/i,
-    /nave\s+industrial/i,
-    /bodega/i,
+    /\bcon\s+(?:una\s+|dos\s+|tres\s+)?casa\b/i,
+    /\bcon\s+casa\s+de\s+habitaci[oó]n\b/i,
+    /\bcon\s+(?:un\s+)?edificio\b/i,
+    /\bcon\s+construcci[oó]n(?:es)?\b/i,
+    /\bcon\s+edificaci[oó]n(?:es)?\b/i,
+    /\bcon\s+mejoras\b/i,
+    /\bfinca\s+con\s+casa\b/i,
+    /\bedificaci[oó]n\s+de\b/i,
+    /\bedificio\s+comercial\b/i,
+    /\blocal\s+comercial\b/i,
+    /\bnave\s+industrial\b/i,
+    /\bbodega(?:s)?\b/i,
   ];
 
   const hasExplicitConstruction = explicitConstructionPatterns.some(p => p.test(normNat) || p.test(norm));
@@ -344,11 +455,11 @@ export function classifyPropertyNaturaleza(naturalezaRaw: string, fullEdictText?
   // 3. Commercial check
   const isCommercial = (
     normNat.includes('local comercial') ||
-    normNat.includes('oficinas') ||
+    normNat.includes('oficinas corporativas') ||
     normNat.includes('oficentro') ||
     normNat.includes('bodega') ||
     normNat.includes('nave industrial') ||
-    normNat.includes('comercial')
+    (normNat.includes('comercial') && !normNat.includes('uso de suelo') && !normNat.includes('comercial-residencial'))
   );
 
   // 4. Agricultural / Farm check
@@ -359,7 +470,8 @@ export function classifyPropertyNaturaleza(naturalezaRaw: string, fullEdictText?
     normNat.includes('pastos') ||
     normNat.includes('cultivo') ||
     normNat.includes('repastos') ||
-    normNat.includes('cafetal')
+    normNat.includes('cafetal') ||
+    (normNat.includes('finca') && !normNat.includes('vista') && !normNat.includes('filial') && !hasExplicitConstruction)
   );
 
   // 5. Bare lot / Future-intent land phrases
@@ -371,6 +483,7 @@ export function classifyPropertyNaturaleza(naturalezaRaw: string, fullEdictText?
     normNat.includes('terreno apto para') ||
     normNat.includes('solar para construir') ||
     normNat.includes('terreno sin construir') ||
+    normNat.includes('finca con vista') ||
     normNat.includes('solar') ||
     normNat.includes('lote') ||
     normNat.includes('terreno')
@@ -412,7 +525,7 @@ export function classifyPropertyNaturaleza(naturalezaRaw: string, fullEdictText?
     return { property_type: 'lot', is_constructed: false, naturaleza_raw: raw };
   }
 
-  return { property_type: 'other', is_constructed: false, naturaleza_raw: raw };
+  return { property_type: 'lot', is_constructed: false, naturaleza_raw: raw };
 }
 
 /**
@@ -511,7 +624,7 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   const { property_type, is_constructed } = classifyPropertyNaturaleza(naturalezaRaw, normalizedText);
 
   // 6. Lot Size in m2
-  const lotSizeM2 = extractLotSizeM2(normalizedText) || 250.0;
+  const lotSizeM2 = extractLotSizeM2(normalizedText) || 0;
 
   // 7. Base Price & Currency
   let currency: "CRC" | "USD" = "CRC";
@@ -520,7 +633,7 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   }
 
   let basePrice = 0;
-  const baseMatch = normalizedText.match(/(?:con\s+la\s+base\s+de|base\s+de|precio\s+base\s+de|base\s*:)\s*([^,;\n]+)/i);
+  const baseMatch = normalizedText.match(/(?:con\s+la\s+base\s+de|base\s+de|precio\s+base\s+de|base\s*:)\s*([^;\n]+?)(?=\.\s*(?:de\s+no|para\s+el|se\s+remata|en\s+el\s+primer|[A-Z][a-z]+:)|;|\.\s*$|$)/i);
   if (baseMatch) {
     const rawPriceStr = baseMatch[1].trim();
     const numMatch = rawPriceStr.match(/([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]{2})?|[0-9]+(?:[\.,][0-9]+)?)/);
@@ -560,11 +673,7 @@ export function extractPropertyDeterministic(edictText: string): PropertyAuction
   const expediente = expMatch ? expMatch[1].trim() : null;
 
   // 9. Auction Date (Call 1)
-  let auctionDate: string | null = null;
-  const dateMatch = normalizedText.match(/(?:a\s+las|al\s+ser\s+las)\s+[^\.\n,;]+?(?:202[4-9]|dos\s+mil\s+veinti[a-z]+)/i);
-  if (dateMatch) {
-    auctionDate = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
-  }
+  let auctionDate: string | null = parseSpanishAuctionDate(normalizedText);
 
   const result: PropertyAuction = {
     finca_number: fincaNumber,

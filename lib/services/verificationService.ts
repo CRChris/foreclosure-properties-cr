@@ -18,9 +18,8 @@
  *      - 'approximate_town' (district or canton centroid fallback)
  *      - 'pending_mapping' (in-flight or unresolved)
  */
-
 import { Auction, CostaRicaProvince, PropertyType, LocationType } from '@/lib/types/auction';
-import { resolvePropertyLocation, resolveTownCentroid, parseFolioReal } from '@/lib/services/snitGeocodeService';
+import { resolvePropertyLocation, resolveTownCentroid, parseFolioReal, isLocationConsistentWithAdministrativeArea, extractLocationFromEdictText } from '@/lib/services/snitGeocodeService';
 import { extractPropertyDeterministic } from '@/lib/services/extractorService';
 import { detectPropertyCharacteristics, getLocalizedPropertyTitle, sanitizeLocationName, getProvinceFromFolioOrPlano } from '@/lib/utils';
 import { createClient, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -83,9 +82,18 @@ export function verifyPropertyTitleAndCharacteristics(auction: Partial<Auction>)
     extracted?.province || auction.province
   );
 
+  // Extract true canton and district for this specific finca from the legal text
+  const locFromEdict = extractLocationFromEdictText(
+    auction.raw_edict_text || auction.address_description,
+    verifiedProvince,
+    auction.canton,
+    auction.district,
+    auction.folio_real || extracted?.finca_number
+  );
+
   // Determine true canton & district
-  let verifiedCanton = sanitizeLocationName(extracted?.canton || auction.canton);
-  let verifiedDistrict = sanitizeLocationName(extracted?.district || auction.district);
+  let verifiedCanton = sanitizeLocationName(locFromEdict.canton || extracted?.canton || auction.canton);
+  let verifiedDistrict = sanitizeLocationName(locFromEdict.district || extracted?.district || auction.district);
 
   // If extraction gave better canton/district, use it
   if (!verifiedCanton && auction.canton) verifiedCanton = sanitizeLocationName(auction.canton);
@@ -173,8 +181,13 @@ export async function verifyPropertyMapPin(
   const canton = verifiedTitleCheck?.verifiedCanton || auction.canton || 'Central';
   const district = verifiedTitleCheck?.verifiedDistrict || auction.district || 'Central';
 
-  // If already has exact cadastral polygon and valid coords, verify they match
-  if (currentPolygon && hasValidCRCoords && auction.location_type === 'exact_cadastral') {
+  const fullContext = `${auction.address_description || ''} ${auction.raw_edict_text || ''} ${auction.legal_summary || ''}`.toLowerCase();
+  const isExistingConsistent =
+    hasValidCRCoords &&
+    isLocationConsistentWithAdministrativeArea(currentLat, currentLng, province, canton, district, fullContext);
+
+  // If already has exact cadastral polygon and valid coords in the correct administrative area, verify they match
+  if (currentPolygon && isExistingConsistent && auction.location_type === 'exact_cadastral') {
     return {
       isValid: true,
       latitude: currentLat!,
@@ -303,6 +316,9 @@ export async function verifyAndCorrectAuction(auction: Partial<Auction>): Promis
 
   if (mapPinCheck.polygonGeoJSON) {
     updatedPayload.parcel_polygon = mapPinCheck.polygonGeoJSON;
+    hasUpdates = true;
+  } else if (auction.parcel_polygon && !mapPinCheck.hasLotBoundaries) {
+    updatedPayload.parcel_polygon = null;
     hasUpdates = true;
   }
 

@@ -646,43 +646,43 @@ def split_into_expediente_blocks(text: str) -> List[str]:
     blocks = segment_document_blocks(text)
     return [b for b in blocks if is_real_estate_foreclosure_edict(b)]
 
-def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -> str:
+def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -> Optional[str]:
     """
     Parses complex written Spanish judicial auction dates with Costa Rica UTC-6 offset.
     Examples:
       'quince de setiembre de dos mil veintiséis' -> '2026-09-15T14:30:00-06:00'
+      'veinticuatro de noviembre del dos mil veintitrés' -> '2023-11-24T09:00:00-06:00'
       '18 de setiembre de 2026' -> '2026-09-18T09:00:00-06:00'
     """
-    base_fallback = default_date or (datetime.now() + timedelta(days=21))
-    fallback_iso = base_fallback.strftime("%Y-%m-%dT14:30:00-06:00")
-    
     if not date_str:
-        return fallback_iso
+        if default_date:
+            return default_date.strftime("%Y-%m-%dT14:30:00-06:00")
+        return None
 
-    d_lower = date_str.lower()
+    d_lower = normalize_text(date_str)
 
     # 1. Hour and minute extraction
     hour, minute = 14, 30
-    time_match = re.search(r"(?:a\s+las|al\s+ser\s+las|las)\s+(\w+)\s+horas(?:\s+y\s+(\w+)\s+minutos)?", d_lower)
+    time_match = re.search(r"(?:a\s+las|al\s+ser\s+las|las|se\s+señalan|señálanse)\s+([a-z0-9]+)\s+horas(?:\s+(?:con|y)\s+([a-z0-9]+)\s+minutos)?", d_lower)
     if time_match:
         h_word = time_match.group(1).strip()
         m_word = time_match.group(2).strip() if time_match.group(2) else "cero"
-        hour = SPANISH_WORD_NUMBERS.get(h_word, 14)
-        minute = SPANISH_WORD_NUMBERS.get(m_word, 0)
+        hour = int(h_word) if h_word.isdigit() else SPANISH_WORD_NUMBERS.get(h_word, 14)
+        minute = int(m_word) if m_word.isdigit() else SPANISH_WORD_NUMBERS.get(m_word, 0)
     else:
-        dig_time = re.search(r"(\d{1,2}):(\d{2})", d_lower)
+        dig_time = re.search(r"\b([0-2]?[0-9]):([0-5][0-9])\b", d_lower)
         if dig_time:
             hour = int(dig_time.group(1))
             minute = int(dig_time.group(2))
 
     # 2. Day extraction
     day = None
-    day_digit_match = re.search(r"(\d{1,2})\s+de\s+([a-záéíóú]+)", d_lower)
+    day_digit_match = re.search(r"\b(\d{1,2})\s+de\s+([a-z]+)", d_lower)
     if day_digit_match:
         day = int(day_digit_match.group(1))
         month_word = day_digit_match.group(2).strip()
     else:
-        day_word_match = re.search(r"del\s+([a-z\s]+?)\s+de\s+([a-záéíóú]+)", d_lower)
+        day_word_match = re.search(r"(?:del|de)\s+([a-z\s]+?)\s+de\s+([a-z]+)", d_lower)
         if day_word_match:
             d_word = day_word_match.group(1).strip()
             month_word = day_word_match.group(2).strip()
@@ -699,27 +699,57 @@ def parse_date_spanish(date_str: str, default_date: Optional[datetime] = None) -
                 break
 
     # 4. Year extraction
-    year = default_date.year if default_date else datetime.now().year
-    year_match = re.search(r"\b(20\d{2})\b", d_lower)
+    year = None
+    year_match = re.search(r"\b(20[123]\d)\b", d_lower)
     if year_match:
         year = int(year_match.group(1))
-    elif "dos mil veintiséis" in d_lower or "dos mil veintiseis" in d_lower:
-        year = 2026
-    elif "dos mil veintisiete" in d_lower or "dos mil veintisiete" in d_lower:
+    elif "dos mil treinta y cinco" in d_lower:
+        year = 2035
+    elif "dos mil treinta" in d_lower:
+        year = 2030
+    elif "dos mil veintinueve" in d_lower:
+        year = 2029
+    elif "dos mil veintiocho" in d_lower:
+        year = 2028
+    elif "dos mil veintisiete" in d_lower:
         year = 2027
-    elif "dos mil veinticinco" in d_lower or "dos mil veinticinco" in d_lower:
+    elif "dos mil veintiseis" in d_lower or "dos mil veintiséis" in d_lower:
+        year = 2026
+    elif "dos mil veinticinco" in d_lower:
         year = 2025
-    elif "dos mil veinticuatro" in d_lower or "dos mil veinticuatro" in d_lower:
+    elif "dos mil veinticuatro" in d_lower:
         year = 2024
+    elif "dos mil veintitres" in d_lower or "dos mil veintitrés" in d_lower:
+        year = 2023
+    elif "dos mil veintidos" in d_lower or "dos mil veintidós" in d_lower:
+        year = 2022
+    elif "dos mil veintiuno" in d_lower or "dos mil veintiun" in d_lower or "dos mil veintiún" in d_lower:
+        year = 2021
+    elif "dos mil veinte" in d_lower:
+        year = 2020
+    elif "dos mil diecinueve" in d_lower:
+        year = 2019
+    elif "dos mil dieciocho" in d_lower:
+        year = 2018
+    elif "dos mil diecisiete" in d_lower:
+        year = 2017
+    elif "dos mil dieciseis" in d_lower or "dos mil dieciséis" in d_lower:
+        year = 2016
+    elif "dos mil quince" in d_lower:
+        year = 2015
+    elif default_date:
+        year = default_date.year
 
-    if day and month:
+    if day and month and year and 2010 <= year <= 2040:
         try:
             parsed_dt = datetime(year, month, day, hour, minute)
             return parsed_dt.strftime("%Y-%m-%dT%H:%M:00-06:00")
         except Exception:
             pass
 
-    return fallback_iso
+    if default_date:
+        return default_date.strftime("%Y-%m-%dT14:30:00-06:00")
+    return None
 
 def fetch_from_nexuspj_api(target_date: Optional[datetime] = None) -> List[str]:
     """
@@ -1307,56 +1337,70 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         nat_norm = normalize_text(naturaleza)
 
         # Explicit construction check (Costa Rica Legal Semantics)
-        explicit_construction = any(k in norm for k in [
-            "con una casa", "con casa de habitacion", "con casa de habitación", "con casa",
-            "con edificio", "con construcciones", "con edificacion", "con edificación",
-            "con mejoras", "local comercial", "finca con casa", "edificacion"
+        explicit_construction = any(re.search(p, norm, re.I) for p in [
+            r"\bcon\s+(?:una\s+|dos\s+|tres\s+)?casa\b",
+            r"\bcon\s+casa\s+de\s+habitaci[oó]n\b",
+            r"\bcon\s+(?:un\s+)?edificio\b",
+            r"\bcon\s+construcci[oó]n(?:es)?\b",
+            r"\bcon\s+edificaci[oó]n(?:es)?\b",
+            r"\bcon\s+mejoras\b",
+            r"\bfinca\s+con\s+casa\b",
+            r"\blocal\s+comercial\b",
+            r"\bedificio\s+comercial\b",
+            r"\bnave\s+industrial\b",
+            r"\bbodega(?:s)?\b",
+            r"\bapartamento(?:s)?\b",
+            r"\bpenthouse\b",
         ])
         
         is_bare_land = (any(k in nat_norm for k in [
             "terreno para construir", "lote para construir", "terreno de solar", "lote para vivienda",
-            "terreno de agricultura", "terreno apto para", "terreno sin construir", "solar"
-        ]) or ("terreno" in nat_norm or "lote" in nat_norm)) and not explicit_construction
+            "terreno de agricultura", "terreno apto para", "terreno sin construir", "finca con vista",
+            "solar", "lote", "terreno", "finca"
+        ]) or any(k in norm for k in ["terreno", "lote", "finca con vista"])) and not explicit_construction
 
         has_construction = bool(explicit_construction)
 
         # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
-        # Check compound hectare phrase first (e.g. "una hectárea con tres mil metros")
-        # 8. Area in m2 (Digits or Spelled-Out Spanish Words)
         normalized_full = re.sub(r'\s+', ' ', edict_text)
-        ha_match = re.search(r"(?:(?:una|[0-9]+)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)", normalized_full, re.I)
-        area = 250.0
+        sanitized_for_area = re.sub(r'medida\s+cautelar|medida\s+de\s+tratamiento|a\s+medida\s+que', ' ', normalized_full, flags=re.I)
+        
+        area = 0.0
+        ha_match = re.search(r"(?:(?:una|[0-9]+(?:\.[0-9]+)?)\s+hect[áa]rea[s]?)\s+con\s+([^\.,;\n]+?)(?:metros|m2|m²)", sanitized_for_area, re.I)
         if ha_match:
             ha_count = 1 if "una" in ha_match.group(0).lower() else (float(re.search(r'\d+', ha_match.group(0)).group(0)) if re.search(r'\d+', ha_match.group(0)) else 1)
             extra_m = parse_spanish_words_to_number(ha_match.group(1))
             area = (ha_count * 10000.0) + extra_m
         else:
-            mide_m = re.search(r'(?:mide|cabida|medida|superficie|área)\s*[:\s]*([^\n;]+?)(?=(?:\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z])|plano\s*:|\n|$))', normalized_full, re.I)
-            mide_clause = mide_m.group(1).strip() if mide_m else normalized_full
-            
-            # Standalone hectares
-            ha_standalone = re.search(r'([0-9]+(?:[\.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)', mide_clause, re.I)
+            # Check standalone hectares
+            ha_standalone = re.search(r'(?:mide|cabida|superficie|área|medida)[^.,;\n]*?[:\s]+([0-9]+(?:[.,][0-9]+)?|[a-záéíóú\s]+?)\s*(?:hect[áa]reas|ha\b)', sanitized_for_area, re.I)
             if ha_standalone:
                 raw_val = ha_standalone.group(1).strip()
                 num = parse_cr_price_string(raw_val) if re.search(r'\d', raw_val) else parse_spanish_words_to_number(raw_val)
                 if num and num > 0:
                     area = num * 10000.0
             else:
-                digit_area = re.search(r"([0-9]{1,3}(?:[\.,][0-9]{3})*(?:[\.,][0-9]+)?|[0-9]+(?:[\.,][0-9]+)?)\s*(?:metros|m2|m²|mts)", mide_clause, re.I)
-                if digit_area:
-                    val_str = digit_area.group(1).strip()
-                    parsed_val = parse_cr_price_string(val_str) or 250.0
-                    # Check decimeters (support words with trailing comma or digits)
-                    dec_m = re.search(r"con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)", mide_clause, re.I)
-                    if dec_m:
-                        dec_val = parse_spanish_words_to_number(dec_m.group(1))
-                        area = parsed_val + (dec_val * 0.01)
-                    else:
+                # Check formatted numeric measurement
+                direct_num = re.search(r'(?:mide|cabida|superficie|área|medida|finca)[^.,;\n]*?[:\s]+([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?|[0-9]+(?:[.,][0-9]+)?)\s*(?:metros\s+cuadrados|metros|m2|m²|mts|mts2|dm2)\b', sanitized_for_area, re.I)
+                if direct_num:
+                    val_str = direct_num.group(1).strip()
+                    parsed_val = parse_cr_price_string(val_str)
+                    if parsed_val:
                         area = parsed_val
-                else:
-                    word_val = parse_spanish_words_to_number(mide_clause)
-                    if 5.0 <= word_val <= 100000000.0:
-                        area = word_val
+                        dec_m = re.search(r"(?:mide|cabida)[^;.]+?con\s+([0-9]+|[a-záéíóú\s,]+?)\s*(?:dec[íi]metros)", sanitized_for_area, re.I)
+                        if dec_m:
+                            dec_val = parse_spanish_words_to_number(dec_m.group(1))
+                            area = parsed_val + (dec_val * 0.01)
+                
+                if area <= 0:
+                    mide_m = re.search(r'(?:mide|cabida|medida\s+superficial|superficie|área)\s*[:\s]*([^;\n]+?)(?=(?:\.\s*(?:plano|linderos|situada|ubicada|segundo|con\s+la\s+base|[A-Z][a-z]+:)|plano\s*:|;|\.\s*$|$))', sanitized_for_area, re.I)
+                    if mide_m:
+                        word_val = parse_spanish_words_to_number(mide_m.group(1))
+                        if 5.0 <= word_val <= 100000000.0:
+                            area = word_val
+
+        if area <= 0:
+            area = 250.0  # Fallback only when completely absent
 
         # 9. Plaintiff & Defendant
         plaintiff_match = re.search(r"(?:promovido\s+por|proceso\s+(?:de\s+)?[\w\s]+\s+de|actor\s*:?|ejecutante\s*:?)\s+([\w\s,.-]+?)\s+(?:contra|demandad)", edict_text, re.I)
@@ -1366,26 +1410,63 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         defendant = defendant_match.group(1).strip() if defendant_match else None
 
         # 10. Dates (1st, 2nd, 3rd remates)
-        date_1_str = None
-        d1_match = re.search(r"(?:a\s+las\s+[\w\s]+del\s+[\w\s]+(?:dos\s+mil|202\d)|al\s+ser\s+las\s+[\w\s]+del\s+[\w\s]+(?:dos\s+mil|202\d))", edict_text, re.I)
-        if d1_match:
-            date_1_str = d1_match.group(0)
-        auction_date_1 = parse_date_spanish(date_1_str or "", default_date=datetime.now() + timedelta(days=21))
+        d1_match = re.search(r"(?:(?:a\s+las|al\s+ser\s+las|se\s+señalan|señálanse|para\s+tal\s+efecto)\s+[^\.\n;]+?(?:dos\s+mil|20[123]\d)[^\.\n;]*)", edict_text, re.I)
+        d1_text = d1_match.group(0) if d1_match else ""
+        auction_date_1 = parse_date_spanish(d1_text)
 
         d2_match = re.search(r"(?:segundo\s+remate[^\.\n;]+)", edict_text, re.I)
-        auction_date_2 = parse_date_spanish(d2_match.group(0) if d2_match else "", default_date=datetime.now() + timedelta(days=35))
+        d2_text = d2_match.group(0) if d2_match else ""
+        auction_date_2 = parse_date_spanish(d2_text)
 
         d3_match = re.search(r"(?:tercer\s+remate[^\.\n;]+)", edict_text, re.I)
-        auction_date_3 = parse_date_spanish(d3_match.group(0) if d3_match else "", default_date=datetime.now() + timedelta(days=49))
+        d3_text = d3_match.group(0) if d3_match else ""
+        auction_date_3 = parse_date_spanish(d3_text)
 
-        # 11. Property Category & Property Type Classification
-        is_agri = bool(re.search(r"\b(agricultura|ganadera|ganadero|agricola|agrícola|pasto|pastos|cultivo|cultivos|frutales|cafetal|finca\s+(?:agricola|agrícola|ganadera|forestal|lechera))\b", norm))
-        
-        if explicit_construction:
-            if any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
+        # Fallback date progression (14-day statutory interval) anchored to authentic 1st call date
+        if auction_date_1:
+            try:
+                d1_dt = datetime.fromisoformat(auction_date_1)
+                if not auction_date_2:
+                    auction_date_2 = (d1_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+                if not auction_date_3:
+                    d2_dt = datetime.fromisoformat(auction_date_2)
+                    auction_date_3 = (d2_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+            except Exception:
+                pass
+        else:
+            # If no call date could be parsed, check if edict has any date
+            gen_date_match = re.search(r"(?:[0-9]{1,2}|[a-záéíóú\s]+?)\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|setiembre|septiembre|octubre|noviembre|diciembre)\s+(?:de|del|de\s+el)\s+(?:20[123][0-9]|dos\s+mil\s+[a-záéíóú\s]+)", edict_text, re.I)
+            if gen_date_match:
+                auction_date_1 = parse_date_spanish(gen_date_match.group(0))
+                if auction_date_1:
+                    try:
+                        d1_dt = datetime.fromisoformat(auction_date_1)
+                        auction_date_2 = (d1_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+                        auction_date_3 = (d1_dt + timedelta(days=28)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+                    except Exception:
+                        pass
+
+        if not auction_date_1:
+            return None  # Discard notices without valid verifiable auction dates
+
+        # Expiration Filter: Discard historical/expired notices
+        now_dt = datetime.now()
+        latest_date_str = auction_date_3 or auction_date_2 or auction_date_1
+        try:
+            latest_dt = datetime.fromisoformat(latest_date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            if latest_dt < now_dt:
+                # Edict has already concluded all scheduled calls
+                return None
+        except Exception:
+            pass
+
+        # 11. Property Category and Typology
+        is_agri = any(k in norm for k in ["agricola", "ganader", "cafetal", "pastos", "repastos", "cultivo"])
+        if has_construction:
+            if any(w in text_lower for w in ["condominio", "apartamento", "filial"]):
                 category = "Condo"
                 prop_type = "condo_apartment"
-            elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina"]):
+            elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina", "nave industrial"]):
                 category = "Commercial"
                 prop_type = "commercial_industrial"
             elif any(w in text_lower for w in ["playa", "lujo", "villa", "piscina"]):
@@ -1397,18 +1478,17 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         elif is_agri:
             category = "Agricultural"
             prop_type = "agricultural_land"
-        elif any(w in text_lower for w in ["condominio", "filial", "apartamento"]):
+        elif any(w in text_lower for w in ["condominio", "filial"]) and not is_bare_land:
             category = "Condo"
             prop_type = "condo_apartment"
-        elif any(w in text_lower for w in ["local", "comercial", "bodega", "oficina"]):
+        elif any(w in text_lower for w in ["local comercial", "bodega", "nave industrial"]):
             category = "Commercial"
             prop_type = "commercial_industrial"
-        elif is_bare_land or any(w in text_lower for w in ["terreno", "lote", "solar"]):
+        elif is_bare_land or any(w in text_lower for w in ["terreno", "lote", "solar", "finca"]):
             category = "Land/Development"
             prop_type = "building_lot"
         else:
             category = "Residential"
-            prop_type = "single_family_home"
 
         return ForeclosureAuction(
             expediente_number=expediente,

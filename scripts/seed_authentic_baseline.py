@@ -166,7 +166,7 @@ AUTHENTIC_PROPERTIES = [
         "canton": "Quepos",
         "district": "Manuel Antonio",
         "address_description": "Finca con vista panorámica al mar en la colina de Manuel Antonio, 500m del Parque Nacional.",
-        "area_m2": 1200.00,
+        "area_m2": 1400.00,
         "currency": "USD",
         "base_price_call_1": 340000.00,
         "auction_date_call_1": (datetime.now() + timedelta(days=26)).strftime("%Y-%m-%dT14:00:00-06:00"),

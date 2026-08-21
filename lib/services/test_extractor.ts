@@ -31,7 +31,19 @@ function runTypeScriptExtractorTests() {
   const testArea4 = extractLotSizeM2('MIDE: DOSCIENTOS OCHENTA Y OCHO METROS CUADRADOS');
   console.assert(testArea4 === 288, `Expected 288, got ${testArea4}`);
 
-  console.log('   ✓ Area unit conversions passed (including decimeters and hectares).\n');
+  const testArea5 = extractLotSizeM2('Mide: 1,400.00 metros cuadrados.');
+  console.assert(testArea5 === 1400, `Expected 1400, got ${testArea5}`);
+
+  const testArea6 = extractLotSizeM2('Mide: 2,450.00 metros cuadrados. Plano catastrado número A-448192-2021.');
+  console.assert(testArea6 === 2450, `Expected 2450, got ${testArea6}`);
+
+  const testArea7 = extractLotSizeM2('Mide: 260.00 metros cuadrados. Plano catastrado número SJ-291834-2022.');
+  console.assert(testArea7 === 260, `Expected 260, got ${testArea7}`);
+
+  const testArea8 = extractLotSizeM2('MIDE: 1.400,00 metros cuadrados');
+  console.assert(testArea8 === 1400, `Expected 1400, got ${testArea8}`);
+
+  console.log('   ✓ Area unit conversions passed (including formatted decimal numbers, decimeters, and hectares).\n');
 
   // 2. Test Property Classification (Vacant Lot vs. Constructed House)
   console.log('2. Testing Property Classification & Construction Status...');
@@ -55,6 +67,11 @@ function runTypeScriptExtractorTests() {
   const class4 = classifyPropertyNaturaleza('LOCAL COMERCIAL');
   console.assert(class4.property_type === 'commercial', `Expected commercial, got ${class4.property_type}`);
   console.assert(class4.is_constructed === true, `Expected is_constructed=true for LOCAL COMERCIAL, got ${class4.is_constructed}`);
+
+  // 2.5 "Finca con vista panorámica al mar... uso de suelo comercial-residencial" -> lot, is_constructed = false
+  const class5 = classifyPropertyNaturaleza('Finca con vista panorámica al mar en la colina de Manuel Antonio, 500m del Parque Nacional', 'Excelente lote con uso de suelo comercial-residencial en Manuel Antonio. Vista directa al Parque Nacional y al mar.');
+  console.assert(class5.property_type === 'lot', `Expected lot, got ${class5.property_type}`);
+  console.assert(class5.is_constructed === false, `Expected is_constructed=false for Manuel Antonio parcel, got ${class5.is_constructed}`);
 
   console.log('   ✓ Classification correctly handles vacant lot future-intent vs built improvements.\n');
 
@@ -88,8 +105,27 @@ function runTypeScriptExtractorTests() {
     console.log('     ', JSON.stringify(validated, null, 2));
   }
 
-  // 4. Test Verbatim Notary Foreclosure Edict (IN202601106505)
-  console.log('\n4. Testing Verbatim Notary Foreclosure Edict (IN202601106505 - Tárcoles Condominium Lot)...');
+  // 4. Test Manuel Antonio Full Edict
+  console.log('\n4. Testing Manuel Antonio Full Notice Parsing...');
+  const manuelAntonioNotice = `JUZGADO CIVIL Y DE TRABAJO DE MAYOR CUANTÍA DE QUEPOS. En la puerta exterior de este Despacho; libre de gravámenes hipotecarios soportando servidumbres y afectaciones de ley; se subasta al mejor postor la finca del partido de Puntarenas, matrícula de folio real número 6-339281-000, situada en el distrito Manuel Antonio, cantón Quepos de la provincia de Puntarenas. Naturaleza: Finca con vista panorámica al mar en la colina de Manuel Antonio, 500m del Parque Nacional.. Linderos: norte: calle pública de acceso, sur: propiedad colindante privada, este: servidumbre de paso, oeste: finca vecina. Mide: 1,400.00 metros cuadrados. Plano catastrado número P-718294-2022. Con la base de USD 340,000.00 en el primer remate que se efectuará a las 14:30 horas del primer señalamiento. De no haber postores, para el segundo remate se señalan las 14:30 horas del segundo señalamiento con la base de USD 255,000.00 (rebajada en un 25% de la base original); y para el tercer remate se señalan las 14:30 horas del tercer señalamiento con la base de USD 85,000.00 (25% de la base original). Se remata por ordenarse así en proceso de ejecución hipotecaria de BANCO NACIONAL DE COSTA RICA contra MANUEL ANTONIO OCEAN VIEW RESORTS S.A.. Expediente judicial número 23-006240-1090-CJ.`;
+
+  const parsedMA = extractPropertyDeterministic(manuelAntonioNotice);
+  console.assert(parsedMA !== null, 'Manuel Antonio parsed should not be null');
+  if (parsedMA) {
+    const valMA = PropertyAuctionSchema.parse(parsedMA);
+    console.assert(valMA.lot_size_m2 === 1400, `Expected 1400 m2, got ${valMA.lot_size_m2}`);
+    console.assert(valMA.is_constructed === false, `Expected is_constructed=false for Manuel Antonio parcel, got ${valMA.is_constructed}`);
+    console.assert(valMA.property_type === 'lot', `Expected lot, got ${valMA.property_type}`);
+    console.assert(valMA.finca_number === '6-339281-000', `Expected 6-339281-000, got ${valMA.finca_number}`);
+    console.assert(valMA.plano_number === 'P-718294-2022', `Expected P-718294-2022, got ${valMA.plano_number}`);
+    console.assert(valMA.currency === 'USD', `Expected USD, got ${valMA.currency}`);
+    console.assert(valMA.base_price === 340000, `Expected 340000, got ${valMA.base_price}`);
+    console.log('   ✓ Manuel Antonio notice parsed & validated:');
+    console.log('     ', JSON.stringify(valMA, null, 2));
+  }
+
+  // 5. Test Verbatim Notary Foreclosure Edict (IN202601106505)
+  console.log('\n5. Testing Verbatim Notary Foreclosure Edict (IN202601106505 - Tárcoles Condominium Lot)...');
   const verbatimNotice = `2 v. 2.
 Ante esta notaría: Rodolfo Espinoza Zamora, con oficina 
 abierta en San José, avenida primera, calles 25 y 27 N° 
@@ -126,7 +162,7 @@ $12.500.00. ( IN202601106505 ).`;
     console.assert(valVerbatim.currency === 'USD', `currency must be USD, got ${valVerbatim.currency}`);
     console.assert(valVerbatim.base_price === 50000, `base_price must be 50000, got ${valVerbatim.base_price}`);
     console.assert(valVerbatim.canton === 'Garabito', `canton mismatch: expected Garabito, got ${valVerbatim.canton}`);
-    console.assert(valVerbatim.district === 'Tarcoles', `district mismatch: expected Tarcoles, got ${valVerbatim.district}`);
+    console.assert(valVerbatim.district === 'Tárcoles', `district mismatch: expected Tárcoles, got ${valVerbatim.district}`);
     console.assert(valVerbatim.province === 'Puntarenas', `province mismatch: expected Puntarenas, got ${valVerbatim.province}`);
     console.log('   ✓ Verbatim IN202601106505 notice parsed & validated with Zod:');
     console.log('     ', JSON.stringify(valVerbatim, null, 2));
