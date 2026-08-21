@@ -1426,9 +1426,27 @@ def extract_single_edict_regex_fallback(edict_text: str) -> Optional[Foreclosure
         if auction_date_1:
             try:
                 d1_dt = datetime.fromisoformat(auction_date_1)
-                if not auction_date_2:
+                if auction_date_2:
+                    d2_dt = datetime.fromisoformat(auction_date_2)
+                    if d2_dt <= d1_dt:
+                        if d2_dt.month >= d1_dt.month and d2_dt.year < d1_dt.year:
+                            d2_dt = d2_dt.replace(year=d1_dt.year)
+                            auction_date_2 = d2_dt.strftime("%Y-%m-%dT%H:%M:00-06:00")
+                        else:
+                            auction_date_2 = (d1_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+                else:
                     auction_date_2 = (d1_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
-                if not auction_date_3:
+
+                if auction_date_3:
+                    d2_dt = datetime.fromisoformat(auction_date_2)
+                    d3_dt = datetime.fromisoformat(auction_date_3)
+                    if d3_dt <= d2_dt:
+                        if d3_dt.month >= d2_dt.month and d3_dt.year < d2_dt.year:
+                            d3_dt = d3_dt.replace(year=d2_dt.year)
+                            auction_date_3 = d3_dt.strftime("%Y-%m-%dT%H:%M:00-06:00")
+                        else:
+                            auction_date_3 = (d2_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
+                else:
                     d2_dt = datetime.fromisoformat(auction_date_2)
                     auction_date_3 = (d2_dt + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:00-06:00")
             except Exception:

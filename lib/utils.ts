@@ -104,10 +104,10 @@ export function getLiveAuctionProgressionState(
   const SIXTY_MINS_MS = 60 * 60 * 1000;
 
   const d2Date = parseCostaRicaDate(auction.auction_date_call_2);
-  const d2Ms = d2Date ? d2Date.getTime() : d1Ms + FOURTEEN_DAYS_MS;
+  const d2Ms = d2Date && d2Date.getTime() > d1Ms ? d2Date.getTime() : d1Ms + FOURTEEN_DAYS_MS;
 
   const d3Date = parseCostaRicaDate(auction.auction_date_call_3);
-  const d3Ms = d3Date ? d3Date.getTime() : d2Ms + FOURTEEN_DAYS_MS;
+  const d3Ms = d3Date && d3Date.getTime() > d2Ms ? d3Date.getTime() : d2Ms + FOURTEEN_DAYS_MS;
 
   const p1 = auction.base_price_call_1;
   const p2 = auction.base_price_call_2 || Math.round(p1 * 0.75);
