@@ -19,11 +19,14 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
+import { COSTA_RICA_BOUNDS, COSTA_RICA_CENTER, COSTA_RICA_DEFAULT_ZOOM } from './mapConstants';
+
+export { COSTA_RICA_BOUNDS, COSTA_RICA_CENTER, COSTA_RICA_DEFAULT_ZOOM };
 
 export interface PropertyMapProps {
   auctions: Auction[];
   selectedAuctionId?: string | null;
-  onSelectAuction?: (auction: Auction) => void;
+  onSelectAuction?: (auction: Auction | null) => void;
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -33,8 +36,8 @@ export interface PropertyMapProps {
 
 // Controller to smoothly pan & zoom map to parcel polygon bounds or point coordinates
 function MapController({
-  center,
-  zoom,
+  center = COSTA_RICA_CENTER,
+  zoom = COSTA_RICA_DEFAULT_ZOOM,
   selectedAuction,
   resetTrigger,
 }: {
@@ -48,13 +51,18 @@ function MapController({
   const prevResetTrigger = React.useRef<number>(0);
 
   useEffect(() => {
+    // 1. Reset button triggered ("Full CR")
     if (resetTrigger && resetTrigger !== prevResetTrigger.current) {
       prevResetTrigger.current = resetTrigger;
       prevSelectedId.current = null;
-      map.flyTo(center || [9.7489, -84.05], zoom || 7.5, { duration: 0.9 });
+      map.flyToBounds(COSTA_RICA_BOUNDS, {
+        padding: [24, 24],
+        duration: 0.9,
+      });
       return;
     }
 
+    // 2. Selected auction with valid lat/lng coordinates
     if (selectedAuction && selectedAuction.latitude && selectedAuction.longitude) {
       if (prevSelectedId.current !== selectedAuction.id) {
         prevSelectedId.current = selectedAuction.id;
@@ -79,15 +87,19 @@ function MapController({
         }
 
         // Fallback point zoom
-        const targetZoom = selectedAuction.location_type === 'exact_cadastral' ? 16 : Math.max(map.getZoom(), 12);
+        const targetZoom = selectedAuction.location_type === 'exact_cadastral' ? 16 : 14;
         map.flyTo([selectedAuction.latitude, selectedAuction.longitude], targetZoom, {
           duration: 0.9,
           easeLinearity: 0.25,
         });
       }
-    } else if (center) {
+    } else if (!selectedAuction && prevSelectedId.current !== null) {
+      // 3. Deselected auction
       prevSelectedId.current = null;
-      map.flyTo(center, zoom || 7.5, { duration: 1.0 });
+      map.flyToBounds(COSTA_RICA_BOUNDS, {
+        padding: [24, 24],
+        duration: 0.9,
+      });
     }
   }, [center, zoom, selectedAuction, resetTrigger, map]);
 
@@ -98,8 +110,8 @@ export function PropertyMap({
   auctions,
   selectedAuctionId,
   onSelectAuction,
-  center = [9.7489, -84.05], // Whole country Costa Rica center
-  zoom = 7.5, // Zoomed out to view entire country
+  center = COSTA_RICA_CENTER, // Whole country Costa Rica center
+  zoom = COSTA_RICA_DEFAULT_ZOOM, // Zoomed out to view entire country
   height = '100%',
   className = '',
 }: PropertyMapProps) {
@@ -227,8 +239,11 @@ export function PropertyMap({
 
         <button
           type="button"
-          onClick={() => setResetTrigger((prev) => prev + 1)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-all"
+          onClick={() => {
+            if (onSelectAuction) onSelectAuction(null);
+            setResetTrigger((prev) => prev + 1);
+          }}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-all active:scale-95 shadow-sm"
           title={language === 'es' ? 'Ver todo Costa Rica' : 'Reset view to all Costa Rica'}
         >
           <Compass className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -236,28 +251,10 @@ export function PropertyMap({
         </button>
       </div>
 
-      {/* Cadastral / Approximate / In-Process Status Banner */}
+      {/* Town Center / Approximate / In-Process Status Banner (Only shown when exact location is unknown) */}
       {selectedAuction && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] max-w-xs sm:max-w-md pointer-events-auto hidden sm:block">
-          {selectedAuction.parcel_polygon ? (
-            <div className="bg-emerald-950/95 text-emerald-100 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
-              <Target className="w-4 h-4 text-emerald-400 shrink-0 animate-pulse" />
-              <p className="leading-tight font-medium">
-                {language === 'en'
-                  ? `🎯 Official Cadastral Survey (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`
-                  : `🎯 Plano Catastrado Oficial (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`}
-              </p>
-            </div>
-          ) : selectedAuction.location_type === 'exact_cadastral' ? (
-            <div className="bg-emerald-950/95 text-emerald-100 backdrop-blur-md border border-emerald-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
-              <Target className="w-4 h-4 text-emerald-400 shrink-0" />
-              <p className="leading-tight font-medium">
-                {language === 'en'
-                  ? '🎯 Exact Georeferenced Location'
-                  : '🎯 Ubicación Exacta Georreferenciada'}
-              </p>
-            </div>
-          ) : selectedAuction.location_type === 'pending_mapping' ? (
+          {selectedAuction.location_type === 'pending_mapping' ? (
             <div className="bg-sky-950/95 text-sky-100 backdrop-blur-md border border-sky-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
               <Loader2 className="w-4 h-4 text-sky-400 shrink-0 animate-spin" />
               <p className="leading-tight font-medium">
@@ -266,16 +263,16 @@ export function PropertyMap({
                   : '⏳ Georreferenciación en proceso...'}
               </p>
             </div>
-          ) : (
-            <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-amber-500/40 rounded-xl px-3.5 py-2 text-[11px] text-amber-900 dark:text-amber-200/95 shadow-xl flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <p className="leading-tight">
+          ) : (!selectedAuction.parcel_polygon && selectedAuction.location_type !== 'exact_cadastral') ? (
+            <div className="bg-amber-950/95 dark:bg-amber-950/95 backdrop-blur-md border border-amber-500/60 rounded-xl px-3.5 py-2 text-[11px] text-amber-100 shadow-xl flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="leading-tight font-medium">
                 {language === 'en'
-                  ? '📍 Approximate location by district center. Verify Plano Catastrado.'
-                  : '📍 Ubicación aproximada por centroide distrital. Verifique el plano catastrado.'}
+                  ? '📍 General vicinity — exact location is unknown (Town center fallback).'
+                  : '📍 Zona general — ubicación exacta desconocida (Centroide de la localidad).'}
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -322,13 +319,13 @@ export function PropertyMap({
                 ✓
               </span>
               <span className="leading-tight text-slate-900 dark:text-slate-200 font-medium">
-                {language === 'es' ? 'Plano Oficial (Exacto)' : 'Verified Survey (Exact)'}
+                {language === 'es' ? 'Ubicación / Polígono Exacto' : 'Exact Location / Parcel'}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-400 dark:border-slate-500 shrink-0 inline-block" />
-              <span className="leading-tight text-slate-500 dark:text-slate-400">
-                {language === 'es' ? 'Centroide Distrital' : 'District Centroid'}
+              <span className="w-3 h-3 rounded-full bg-amber-200 dark:bg-amber-800 border border-amber-400 dark:border-amber-600 shrink-0 inline-block" />
+              <span className="leading-tight text-amber-700 dark:text-amber-400 font-medium">
+                {language === 'es' ? 'Zona General (Desconocida)' : 'General Vicinity (Unknown)'}
               </span>
             </div>
           </div>
@@ -340,6 +337,9 @@ export function PropertyMap({
         zoom={zoom}
         scrollWheelZoom={true}
         className="w-full h-full"
+        zoomSnap={0.25}
+        zoomDelta={0.5}
+        minZoom={5.5}
       >
         <MapController center={center} zoom={zoom} selectedAuction={selectedAuction} resetTrigger={resetTrigger} />
         

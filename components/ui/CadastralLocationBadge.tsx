@@ -57,59 +57,18 @@ export function CadastralLocationBadge({
     );
   }
 
-  // 2. Exact Cadastral Lot Boundary (Polygon)
-  if (hasPolygon) {
-    return (
-      <span
-        title={
-          language === 'es'
-            ? 'Linderos y polígono exacto del Catastro Nacional (SNIT)'
-            : 'Exact parcel boundary polygon from National Cadastre (SNIT)'
-        }
-        className={`inline-flex items-center font-bold rounded-lg border transition-all shadow-sm ${
-          sizeClasses[size]
-        } bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:border-emerald-500/50 dark:text-emerald-300 ${className}`}
-      >
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-        </span>
-        <Target className={`${iconSizes[size]} text-emerald-600 dark:text-emerald-400 shrink-0`} />
-        <span>
-          {language === 'es' ? 'Polígono Catastrado (SNIT)' : 'Cadastral Parcel (SNIT)'}
-        </span>
-      </span>
-    );
-  }
-
-  // 3. Exact Pin Location (GPS / Cadastral Point without polygon boundary)
+  // 2. Exact Cadastral Lot Boundary or Exact Pin Location -> No accuracy tag necessary
   if (isExact) {
-    return (
-      <span
-        title={
-          language === 'es'
-            ? 'Coordenadas GPS exactas verificadas'
-            : 'Exact verified GPS pin coordinates'
-        }
-        className={`inline-flex items-center font-bold rounded-lg border transition-all shadow-sm ${
-          sizeClasses[size]
-        } bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/80 dark:border-emerald-500/50 dark:text-emerald-300 ${className}`}
-      >
-        <Target className={`${iconSizes[size]} text-emerald-600 dark:text-emerald-400 shrink-0`} />
-        <span>
-          {language === 'es' ? 'Ubicación Exacta' : 'Exact Location'}
-        </span>
-      </span>
-    );
+    return null;
   }
 
-  // 4. Approximate Town / District Centroid
+  // 3. Approximate Town / District Centroid -> Tag that it is in the general vicinity and exact location is unknown
   return (
     <span
       title={
         language === 'es'
-          ? 'Ubicación aproximada basada en el centroide del distrito o cantón'
-          : 'Approximate location based on district or canton centroid'
+          ? 'Zona general: La ubicación exacta del inmueble es desconocida (centroide distrital/cantonal)'
+          : 'General vicinity: The exact location is unknown (district/canton centroid)'
       }
       className={`inline-flex items-center font-medium rounded-lg border transition-all ${
         sizeClasses[size]
@@ -117,7 +76,7 @@ export function CadastralLocationBadge({
     >
       <MapPin className={`${iconSizes[size]} text-amber-600 dark:text-amber-400 shrink-0`} />
       <span>
-        {language === 'es' ? 'Centroide Aproximado' : 'Approx. Town Center'}
+        {language === 'es' ? 'Zona General (Ubicación exacta desconocida)' : 'General Vicinity (Exact location unknown)'}
       </span>
     </span>
   );

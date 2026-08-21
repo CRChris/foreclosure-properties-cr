@@ -1,12 +1,15 @@
 /**
  * Cadastral Location Backfill Script
  * 
- * Iterates through all properties in Supabase that have a plano number,
- * queries the SNIT GeoServer WFS endpoint, and updates records from approximate
- * town centroids to exact cadastral polygons and reprojected coordinates.
+ * Iterates through all properties in Supabase,
+ * executes the full Costa Rican cadastral resolution hierarchy:
+ * 1. SNIT Plano lookup (SIRI service for exact 12-digit cadastral survey boundary polygon).
+ * 2. SNIT Folio Real lookup (SIRI service for 7-digit zero-padded finca boundary polygon).
+ * 3. High-precision landmark / development coordinates.
+ * 4. Fallback to town/district center centroid (tagged as general vicinity).
  * 
  * Run with:
- *   npx tsx scripts/backfill-locations.ts
+ *   npx tsx scripts/backfill-locations.ts --force
  *   or
  *   pnpm dlx tsx scripts/backfill-locations.ts --dry-run
  */
@@ -14,7 +17,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
-import { lookupCadastralPlano } from '../lib/services/snitGeocodeService';
+import { resolvePropertyLocation } from '../lib/services/snitGeocodeService';
 
 function loadEnv() {
   const envPaths = [
@@ -51,23 +54,18 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function main() {
   const isDryRun = process.argv.includes('--dry-run');
-  const forceAll = process.argv.includes('--force');
+  const forceAll = process.argv.includes('--force') || !process.argv.includes('--only-missing');
 
   console.log('================================================================');
   console.log('📍 Costa Rica Foreclosures: SNIT Cadastral Backfill Engine');
   console.log(`🔧 Mode: ${isDryRun ? 'DRY-RUN (Simulated)' : 'PRODUCTION (Database Updates Active)'}`);
-  console.log(`🎯 Scope: ${forceAll ? 'All records with plano' : 'Only unindexed / approximate records'}`);
+  console.log(`🎯 Scope: ${forceAll ? 'All records in database' : 'Only unindexed / approximate records'}`);
   console.log('================================================================\n');
 
   let query = supabase
     .from('auctions')
-    .select('id, expediente_number, folio_real, plano_catastrado, province, canton, district, location_type, parcel_polygon')
-    .not('plano_catastrado', 'is', null)
-    .neq('plano_catastrado', '');
-
-  if (!forceAll) {
-    query = query.or('location_type.is.null,location_type.neq.exact_cadastral,parcel_polygon.is.null');
-  }
+    .select('id, expediente_number, folio_real, plano_catastrado, province, canton, district, address_description, raw_edict_text, legal_summary, location_type, parcel_polygon')
+    .order('created_at', { ascending: false });
 
   const { data: properties, error } = await query;
 
@@ -77,88 +75,91 @@ async function main() {
   }
 
   if (!properties || properties.length === 0) {
-    console.log('✓ No properties found requiring cadastral geocoding backfill. All up to date!');
+    console.log('✓ No properties found. Database is empty!');
     return;
   }
 
   console.log(`📋 Found ${properties.length} properties to inspect...\n`);
 
-  let updatedExact = 0;
-  let unindexed = 0;
-  let skipped = 0;
+  let updatedPolygons = 0;
+  let updatedExactPins = 0;
+  let townCenterFallbacks = 0;
   let errors = 0;
 
   for (let i = 0; i < properties.length; i++) {
     const prop = properties[i];
-    const plano = prop.plano_catastrado?.trim();
     const progress = `[${i + 1}/${properties.length}]`;
 
-    if (!plano) {
-      console.log(`${progress} ⏭️ Skipped ${prop.expediente_number}: Empty plano`);
-      skipped++;
-      continue;
-    }
-
     try {
-      console.log(`${progress} 🔍 Querying SNIT for Plano "${plano}" (${prop.expediente_number} - ${prop.canton})...`);
-      const geocode = await lookupCadastralPlano(plano);
+      console.log(`${progress} 🔍 Checking ${prop.expediente_number} (Folio: ${prop.folio_real || 'N/A'}, Plano: ${prop.plano_catastrado || 'N/A'}, ${prop.canton}, ${prop.province})...`);
+      
+      const geocode = await resolvePropertyLocation({
+        id: prop.id,
+        plano: prop.plano_catastrado,
+        folioReal: prop.folio_real,
+        province: prop.province,
+        canton: prop.canton,
+        district: prop.district,
+        raw_edict_text: prop.raw_edict_text,
+        address_description: prop.address_description,
+        legal_summary: prop.legal_summary,
+      }, { timeoutMs: 8000 });
 
-      if (geocode.success && geocode.isExact) {
-        const { lat, lng } = geocode;
-        const locationWkt = `SRID=4326;POINT(${lng} ${lat})`;
+      const { lat, lng } = geocode;
+      const locationWkt = `SRID=4326;POINT(${lng} ${lat})`;
+      const hasPolygon = Boolean(geocode.polygonGeoJSON);
 
-        if (!isDryRun) {
-          const { error: updateErr } = await supabase
-            .from('auctions')
-            .update({
-              location: locationWkt,
-              location_type: 'exact_cadastral',
-              parcel_polygon: geocode.polygonGeoJSON,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', prop.id);
+      if (!isDryRun) {
+        const updatePayload: Record<string, any> = {
+          location: locationWkt,
+          location_type: geocode.location_type,
+          parcel_polygon: geocode.polygonGeoJSON || null,
+          province: geocode.province || prop.province,
+          canton: geocode.canton || prop.canton,
+          district: geocode.district || prop.district,
+          updated_at: new Date().toISOString(),
+        };
 
-          if (updateErr) {
-            console.error(`  ❌ Update error for ${prop.expediente_number}: ${updateErr.message}`);
-            errors++;
-            continue;
-          }
+        const { error: updateErr } = await supabase
+          .from('auctions')
+          .update(updatePayload)
+          .eq('id', prop.id);
+
+        if (updateErr) {
+          console.error(`  ❌ Update error for ${prop.expediente_number}: ${updateErr.message}`);
+          errors++;
+          continue;
         }
+      }
 
-        console.log(`  ✅ Exact cadastral polygon found! GPS: [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
-        updatedExact++;
+      if (hasPolygon) {
+        console.log(`  ✅ SNIT Cadastral Polygon resolved! Source: ${geocode.resolutionSource} | GPS: [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
+        updatedPolygons++;
+      } else if (geocode.isExact) {
+        console.log(`  🎯 Exact location resolved (${geocode.resolutionSource}) | GPS: [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
+        updatedExactPins++;
       } else {
-        console.log(`  ⚠️ Not indexed in SNIT cadastral layer: ${geocode.error || 'No polygon'}`);
-        unindexed++;
-
-        if (!isDryRun && (!prop.location_type || prop.location_type !== 'approximate_town')) {
-          await supabase
-            .from('auctions')
-            .update({
-              location_type: 'approximate_town',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', prop.id);
-        }
+        console.log(`  📍 Town center fallback (General vicinity) | GPS: [${lat.toFixed(6)}, ${lng.toFixed(6)}]`);
+        townCenterFallbacks++;
       }
     } catch (err: any) {
       console.error(`  ❌ Exception processing ${prop.expediente_number}: ${err.message}`);
       errors++;
     }
 
-    // Rate-limiting delay to respect SNIT server
+    // Small delay between queries to avoid SNIT rate limiting
     if (i < properties.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
 
   console.log('\n================================================================');
   console.log('🎯 Backfill Summary:');
   console.log(`   - Total properties evaluated: ${properties.length}`);
-  console.log(`   - Exact Cadastral Polygons:   ${updatedExact} (${Math.round((updatedExact / properties.length) * 100)}%)`);
-  console.log(`   - Unindexed in SNIT:          ${unindexed}`);
+  console.log(`   - SNIT Cadastral Polygons:    ${updatedPolygons} (${Math.round((updatedPolygons / properties.length) * 100)}%)`);
+  console.log(`   - Exact Pin Locations:        ${updatedExactPins}`);
+  console.log(`   - Town Center Fallbacks:      ${townCenterFallbacks}`);
   console.log(`   - Errors encountered:         ${errors}`);
-  console.log(`   - Skipped:                    ${skipped}`);
   console.log('================================================================\n');
 }
 

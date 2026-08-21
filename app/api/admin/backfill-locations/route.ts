@@ -127,12 +127,12 @@ async function handleBackfill(request: NextRequest) {
           const updatePayload: Record<string, any> = {
             location: locationWkt,
             location_type: geocode.location_type,
+            parcel_polygon: geocode.polygonGeoJSON || null,
+            province: geocode.province || prop.province,
+            canton: geocode.canton || prop.canton,
+            district: geocode.district || prop.district,
             updated_at: new Date().toISOString(),
           };
-
-          if (geocode.polygonGeoJSON) {
-            updatePayload.parcel_polygon = geocode.polygonGeoJSON;
-          }
 
           const { error: updateErr } = await supabase
             .from('auctions')

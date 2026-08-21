@@ -357,8 +357,6 @@ function mapRowToAuction(item: any): Auction {
     }
   }
 
-  const isExactCadastral = item.location_type === 'exact_cadastral' || (parcelPolygonObj !== null);
-
   // Extract authoritative Costa Rican province from Folio Real / Plano
   const authoritativeProvince = getProvinceFromFolioOrPlano(
     item.folio_real,
@@ -381,26 +379,10 @@ function mapRowToAuction(item: any): Auction {
   const effectiveDistrict = (cleanDbDistrict && !cleanDbDistrict.toLowerCase().startsWith('distrito') && cleanDbDistrict.toLowerCase() !== 'central' ? cleanDbDistrict : (extractedLoc.district || cleanDbDistrict || '')).trim();
   const fullContextText = `${item.address_description || ''} ${item.raw_edict_text || ''} ${item.legal_summary || ''} ${item.naturaleza_raw || ''}`.toLowerCase();
 
-  // Validate stored coordinates against declared administrative area & landmarks.
-  // If stored coordinates are > 25km away from the declared canton/district (e.g. Quepos coordinates for a Jaco property),
-  // discard the inconsistent coordinates/polygon and re-resolve to the authentic location.
-  const isStoredCoordPlausible =
-    lat !== null &&
-    lng !== null &&
-    !isNaN(lat) &&
-    !isNaN(lng) &&
-    isLocationConsistentWithAdministrativeArea(
-      lat,
-      lng,
-      effectiveProvince,
-      effectiveCanton,
-      effectiveDistrict,
-      fullContextText
-    );
+  // If coordinates are missing or not in Costa Rica bounds, resolve fallback centroid
+  const hasValidCRCoords = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat >= 8.0 && lat <= 11.4 && lng >= -86.0 && lng <= -82.4;
 
-  if (!isStoredCoordPlausible) {
-    // If coordinates were invalid or in the wrong canton, clear bad polygon and re-resolve
-    parcelPolygonObj = null;
+  if (!hasValidCRCoords) {
     const resolved = resolveTownCentroid(
       effectiveProvince,
       effectiveCanton,
@@ -412,18 +394,8 @@ function mapRowToAuction(item: any): Auction {
     lng = resolved.lng;
   }
 
-  const hasOfficialPlano = Boolean(item.plano_catastrado && item.plano_catastrado.trim().length >= 6);
-  const isExactLocation = isExactCadastral || hasOfficialPlano || item.location_type === 'exact_cadastral';
-
-  // Only retain parcelPolygonObj if it contains authentic government survey geometry (filter out synthetic square boxes)
-  if (parcelPolygonObj) {
-    const isSyntheticBox =
-      (parcelPolygonObj as any)?.features?.[0]?.properties?.isExactCadastral === true ||
-      (parcelPolygonObj as any)?.properties?.isExactCadastral === true;
-    if (isSyntheticBox) {
-      parcelPolygonObj = null;
-    }
-  }
+  const isExactCadastral = Boolean(parcelPolygonObj) || item.location_type === 'exact_cadastral';
+  const finalLocationType: LocationType = isExactCadastral ? 'exact_cadastral' : (item.location_type === 'pending_mapping' ? 'pending_mapping' : 'approximate_town');
 
   // Derive smart property category from text if column not present in table
   let category: PropertyCategory = (item.property_category as PropertyCategory) || 'Residential';
@@ -529,7 +501,7 @@ function mapRowToAuction(item: any): Auction {
     raw_edict_text: item.raw_edict_text || '',
     latitude: lat,
     longitude: lng,
-    location_type: isExactLocation ? 'exact_cadastral' : ((item.location_type as any) || 'approximate_town'),
+    location_type: finalLocationType,
     parcel_polygon: parcelPolygonObj,
     images: Array.isArray(item.images) && item.images.length > 0 ? item.images : uniqueGallery,
     created_at: item.created_at || new Date().toISOString(),

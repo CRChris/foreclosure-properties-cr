@@ -466,7 +466,7 @@ export async function lookupCadastralPlano(
   }
 
   const { provincia, numero, anio, plano12Digits } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 3000;
+  const timeoutMs = options?.timeoutMs ?? 7000;
   const customFetch = options?.fetchFn ?? fetch;
 
   // 1. Query official SNIT SIRI service (Visor Fincas / Planos backend)
@@ -480,7 +480,7 @@ export async function lookupCadastralPlano(
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       const res = await customFetch(siriUrl, {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0' },
         signal: controller.signal,
       }).finally(() => clearTimeout(timer));
 
@@ -515,6 +515,7 @@ export async function lookupCadastralPlano(
                 },
                 isExact: true,
                 normalizedPlano: normalized,
+                resolutionSource: 'plano',
                 properties: primaryFeature.properties,
               };
             }
@@ -551,7 +552,7 @@ export async function lookupByFolioReal(
   }
 
   const { provincia, finca, finca7Digits, duplicado } = normalized;
-  const timeoutMs = options?.timeoutMs ?? 3500;
+  const timeoutMs = options?.timeoutMs ?? 7000;
   const customFetch = options?.fetchFn ?? fetch;
 
   // 1. Query official SNIT SIRI service by finca number (requires 7-digit zero padded finca for exact match)
@@ -1070,8 +1071,8 @@ export function isLocationConsistentWithAdministrativeArea(
       if (lm.pattern.test(contextText)) {
         const [targetLat, targetLng] = lm.coords;
         const dist = calculateHaversineDistanceKm(lat, lng, targetLat, targetLng);
-        // If coordinate is within 15km of the specific landmark, it's consistent
-        return dist <= 15.0;
+        // If coordinate is within 25km of the specific landmark, it's consistent
+        return dist <= 25.0;
       }
     }
   }
@@ -1092,12 +1093,12 @@ export function isLocationConsistentWithAdministrativeArea(
 
   if (expectedCoord) {
     const dist = calculateHaversineDistanceKm(lat, lng, expectedCoord[0], expectedCoord[1]);
-    // Max allowed distance: 25 km from declared canton/district centroid (e.g. Jaco vs Quepos is ~69km)
+    // Costa Rican cantons can be geographically expansive (e.g. Buenos Aires, San Carlos, Talamanca > 60km across)
     if (normCant && normCant !== 'central' && normCant !== 'san jose') {
-      return dist <= 25.0;
+      return dist <= 75.0;
     }
-    // For province-only fallback: max 60 km
-    return dist <= 60.0;
+    // For province-only fallback: max 110 km
+    return dist <= 110.0;
   }
 
   return true;
@@ -1271,8 +1272,8 @@ Return this exact JSON shape:
  * Executes the full Costa Rican geolocation hierarchy:
  * 1. If property.plano is present -> lookupCadastralPlano(property.plano).
  * 2. If plano fails or is missing AND property.folioReal / finca is present -> lookupByFolioReal(property.folioReal).
- * 2.5 If Gemini API key is configured -> lookupByGeminiGeocoding (AI neighborhood/development resolution).
- * 3. Fallback to high-precision landmark / neighborhood / district center.
+ * 3. If exact landmark / development is identified -> high-precision exact pin.
+ * 4. Fallback to town/district center centroid (tagged as general vicinity, exact location unknown).
  */
 export async function resolvePropertyLocation(
   property: PropertyGeocodeInput,
@@ -1294,12 +1295,13 @@ export async function resolvePropertyLocation(
   const effectiveDistrict = extracted.district || property.district || 'Central';
   const fullContext = `${property.address_description || ''} ${property.raw_edict_text || ''} ${property.legal_summary || ''} ${property.naturaleza_raw || ''}`.toLowerCase();
 
-  // 1. Try plano cadastral lookup first
+  // 1. Try plano cadastral lookup with SNIT first
   if (rawPlano && rawPlano.trim()) {
     const planoResult = await lookupCadastralPlano(rawPlano.trim(), options);
     if (
       planoResult.success &&
       planoResult.isExact &&
+      planoResult.polygonGeoJSON &&
       isLocationConsistentWithAdministrativeArea(
         planoResult.lat,
         planoResult.lng,
@@ -1324,7 +1326,7 @@ export async function resolvePropertyLocation(
     }
   }
 
-  // 2. If plano fails or is missing, try Folio Real / Finca lookup
+  // 2. If plano fails or is missing, try Folio Real / Finca lookup with SNIT
   if (rawFolio && rawFolio.trim()) {
     const folioResult = await lookupByFolioReal(rawFolio.trim(), {
       ...options,
@@ -1333,6 +1335,7 @@ export async function resolvePropertyLocation(
     if (
       folioResult.success &&
       folioResult.isExact &&
+      folioResult.polygonGeoJSON &&
       isLocationConsistentWithAdministrativeArea(
         folioResult.lat,
         folioResult.lng,
@@ -1357,7 +1360,37 @@ export async function resolvePropertyLocation(
     }
   }
 
-  // 2.5 Try Gemini AI high-precision geocoding
+  // 3. Try high-precision landmark / gated community / beach check
+  const matchedLandmark = HIGH_PRECISION_LANDMARKS.find((lm) => lm.pattern.test(fullContext));
+  if (matchedLandmark) {
+    let [lLat, lLng] = matchedLandmark.coords;
+    const seedId = String(property.id || rawFolio || rawPlano || '');
+    if (seedId) {
+      const hash = Math.abs(
+        seedId.split('').reduce((acc, char, idx) => acc + char.charCodeAt(0) * (idx + 1), 0)
+      );
+      const angle = (hash % 360) * (Math.PI / 180);
+      const radiusMeters = 30 + (hash % 50);
+      const deltaLat = (radiusMeters / 111111) * Math.cos(angle);
+      const deltaLng = (radiusMeters / (111111 * Math.cos(lLat * (Math.PI / 180)))) * Math.sin(angle);
+      lLat = Number((lLat + deltaLat).toFixed(6));
+      lLng = Number((lLng + deltaLng).toFixed(6));
+    }
+    return {
+      lat: lLat,
+      lng: lLng,
+      location_type: 'exact_cadastral',
+      resolutionSource: 'gemini_ai',
+      polygonGeoJSON: null,
+      isExact: true,
+      geminiResolvedAs: matchedLandmark.name,
+      province: effectiveProvince,
+      canton: effectiveCanton,
+      district: effectiveDistrict,
+    };
+  }
+
+  // 3.5 Try Gemini AI high-precision geocoding if enabled
   if (!options?.skipGemini) {
     const geminiResult = await lookupByGeminiGeocoding({
       folio_real: rawFolio,
@@ -1374,6 +1407,7 @@ export async function resolvePropertyLocation(
       geminiResult &&
       geminiResult.lat &&
       geminiResult.lng &&
+      geminiResult.confidence === 'high' &&
       isLocationConsistentWithAdministrativeArea(
         geminiResult.lat,
         geminiResult.lng,
@@ -1386,10 +1420,10 @@ export async function resolvePropertyLocation(
       return {
         lat: geminiResult.lat,
         lng: geminiResult.lng,
-        location_type: 'approximate_town',
+        location_type: 'exact_cadastral',
         resolutionSource: 'gemini_ai',
         polygonGeoJSON: null,
-        isExact: geminiResult.confidence === 'high',
+        isExact: true,
         geminiResolvedAs: geminiResult.resolved_as,
         geminiReasoning: geminiResult.reasoning,
         province: effectiveProvince,
@@ -1399,7 +1433,7 @@ export async function resolvePropertyLocation(
     }
   }
 
-  // 3. High-precision landmark / neighborhood / district center fallback
+  // 4. Fallback to Town / District Centroid (General vicinity, exact location unknown)
   const fallback = resolveTownCentroid(
     effectiveProvince,
     effectiveCanton,
@@ -1408,16 +1442,13 @@ export async function resolvePropertyLocation(
     fullContext
   );
 
-  const isLandmarkMatched = HIGH_PRECISION_LANDMARKS.some((lm) => lm.pattern.test(fullContext));
-  const hasOfficialPlano = Boolean(rawPlano && rawPlano.trim().length >= 6);
-
   return {
     lat: fallback.lat,
     lng: fallback.lng,
-    location_type: (isLandmarkMatched || hasOfficialPlano) ? 'exact_cadastral' : 'approximate_town',
-    resolutionSource: isLandmarkMatched ? 'gemini_ai' : (hasOfficialPlano ? 'plano' : 'town_fallback'),
+    location_type: 'approximate_town',
+    resolutionSource: 'town_fallback',
     polygonGeoJSON: null,
-    isExact: isLandmarkMatched || hasOfficialPlano,
+    isExact: false,
     province: effectiveProvince,
     canton: effectiveCanton,
     district: effectiveDistrict,

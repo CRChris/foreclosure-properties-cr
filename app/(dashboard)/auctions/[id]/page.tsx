@@ -14,6 +14,7 @@ import { ParticipateAuctionModal } from '@/components/dossier/ParticipateAuction
 import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
 import { CadastralLocationBadge } from '@/components/ui/CadastralLocationBadge';
 import { MapWrapper } from '@/components/map/MapWrapper';
+import { COSTA_RICA_CENTER } from '@/components/map/mapConstants';
 import {
   formatCurrency,
   formatArea,
@@ -652,40 +653,8 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           </div>
         </div>
 
-        {/* Dynamic Cadastral Banner (Lot Boundaries vs Exact Pin vs In Process vs Approximate) */}
-        {auction.parcel_polygon ? (
-          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200 text-xs">
-            <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <p className="font-bold">
-                {language === 'en'
-                  ? '🎯 Official Cadastral Survey Overlaid (SNIT National Cadastre)'
-                  : '🎯 Lote Catastrado Oficial Vinculado (Catastro Nacional SNIT)'}
-              </p>
-              <p className="text-emerald-800/90 dark:text-emerald-300/90 leading-tight">
-                {language === 'en'
-                  ? `Exact property lot boundary displayed for Plano Catastrado ${auction.plano_catastrado || 'registrado'}. Coordinates: [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`
-                  : `El polígono y las coordenadas GPS corresponden al plano catastrado oficial ${auction.plano_catastrado || 'registrado'}. Coordenadas: [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`}
-              </p>
-            </div>
-          </div>
-        ) : auction.location_type === 'exact_cadastral' ? (
-          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-200 text-xs">
-            <Target className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <p className="font-bold">
-                {language === 'en'
-                  ? '🎯 Exact GPS Geolocation Verified'
-                  : '🎯 Ubicación Exacta Georreferenciada'}
-              </p>
-              <p className="text-emerald-800/90 dark:text-emerald-300/90 leading-tight">
-                {language === 'en'
-                  ? `Pin is placed at the exact verified location coordinates [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`
-                  : `El marcador se encuentra en la ubicación exacta verificada [${auction.latitude?.toFixed(6)}, ${auction.longitude?.toFixed(6)}].`}
-              </p>
-            </div>
-          </div>
-        ) : auction.location_type === 'pending_mapping' ? (
+        {/* Dynamic Cadastral Banner (Only displayed when in general vicinity or in-process) */}
+        {auction.location_type === 'pending_mapping' ? (
           <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-500/40 text-sky-900 dark:text-sky-200 text-xs">
             <Loader2 className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5 animate-spin" />
             <div className="space-y-0.5">
@@ -699,21 +668,21 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               </p>
             </div>
           </div>
-        ) : (
-          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-900 dark:text-amber-200/90 text-xs">
+        ) : (!auction.parcel_polygon && auction.location_type !== 'exact_cadastral') ? (
+          <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/40 text-amber-950 dark:text-amber-200 text-xs">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <p className="font-bold">
-                {language === 'en' ? '📍 Approximate District Location' : '📍 Ubicación Distrital Aproximada'}
+                {language === 'en' ? '📍 General Vicinity — Exact Location Unknown' : '📍 Zona General — Ubicación Exacta Desconocida'}
               </p>
-              <p className="leading-tight">
+              <p className="leading-tight text-amber-900/90 dark:text-amber-300/90">
                 {language === 'en'
-                  ? 'The marker represents the district/canton center. Consult the registered survey (Plano Catastrado) for physical boundaries.'
-                  : 'El marcador representa el centroide distrital. Consulte el plano catastrado para linderos físicos exactos.'}
+                  ? 'This marker corresponds to the town/district center. The exact property boundary is unknown in the cadastre.'
+                  : 'Este marcador corresponde al centroide de la localidad. Los linderos y ubicación física exacta no están disponibles en el catastro.'}
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
         <div className="h-80 w-full rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
           <MapWrapper
@@ -722,7 +691,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             center={
               auction.latitude && auction.longitude
                 ? [auction.latitude, auction.longitude]
-                : [9.7489, -83.7534]
+                : COSTA_RICA_CENTER
             }
             zoom={auction.location_type === 'exact_cadastral' ? 16 : 14}
             height="100%"

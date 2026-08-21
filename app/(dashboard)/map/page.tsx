@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Auction, CostaRicaProvince } from '@/lib/types/auction';
 import { MapWrapper } from '@/components/map/MapWrapper';
+import { COSTA_RICA_CENTER, COSTA_RICA_DEFAULT_ZOOM } from '@/components/map/mapConstants';
 import { 
   formatCurrency, 
   formatArea, 
@@ -76,7 +77,7 @@ export default function MapExplorerPage() {
 
   const centerCoordinates: [number, number] = selectedAuction?.latitude && selectedAuction?.longitude
     ? [selectedAuction.latitude, selectedAuction.longitude]
-    : [9.7489, -84.05];
+    : COSTA_RICA_CENTER;
 
   return (
     <div className="space-y-4">
@@ -231,7 +232,7 @@ export default function MapExplorerPage() {
             selectedAuctionId={selectedAuction?.id}
             onSelectAuction={(auction) => setSelectedAuction(auction)}
             center={centerCoordinates}
-            zoom={selectedAuction ? 14 : 7.5}
+            zoom={selectedAuction ? 14 : COSTA_RICA_DEFAULT_ZOOM}
             height="100%"
           />
 
