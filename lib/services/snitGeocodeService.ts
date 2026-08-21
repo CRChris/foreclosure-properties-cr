@@ -1266,46 +1266,6 @@ Return this exact JSON shape:
   return null;
 }
 
-export function generateCadastralPolygonFromCoordinates(
-  lat: number,
-  lng: number,
-  areaM2?: number | null,
-  plano?: string | null,
-  folio?: string | null
-): GeoJSON.FeatureCollection {
-  const area = areaM2 && areaM2 > 40 && areaM2 < 1000000 ? areaM2 : 500;
-  const sideMeters = Math.sqrt(area);
-  const halfLatMeters = sideMeters * 0.45;
-  const halfLngMeters = sideMeters * 0.55;
-
-  const dLat = halfLatMeters / 111111;
-  const dLng = halfLngMeters / (111111 * Math.cos((lat * Math.PI) / 180));
-
-  const p1 = [Number((lng - dLng).toFixed(6)), Number((lat - dLat).toFixed(6))];
-  const p2 = [Number((lng + dLng).toFixed(6)), Number((lat - dLat).toFixed(6))];
-  const p3 = [Number((lng + dLng).toFixed(6)), Number((lat + dLat).toFixed(6))];
-  const p4 = [Number((lng - dLng).toFixed(6)), Number((lat + dLat).toFixed(6))];
-
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [[p1, p2, p3, p4, p1]],
-        },
-        properties: {
-          plano: plano || 'Plano Catastrado Oficial',
-          folio: folio || '',
-          area_m2: area,
-          isExactCadastral: true,
-        },
-      },
-    ],
-  };
-}
-
 /**
  * Master Geolocation Orchestrator:
  * Executes the full Costa Rican geolocation hierarchy:
@@ -1451,35 +1411,13 @@ export async function resolvePropertyLocation(
   const isLandmarkMatched = HIGH_PRECISION_LANDMARKS.some((lm) => lm.pattern.test(fullContext));
   const hasOfficialPlano = Boolean(rawPlano && rawPlano.trim().length >= 6);
 
-  if (isLandmarkMatched || hasOfficialPlano) {
-    const polygon = generateCadastralPolygonFromCoordinates(
-      fallback.lat,
-      fallback.lng,
-      (property as any).area_m2,
-      rawPlano,
-      rawFolio
-    );
-
-    return {
-      lat: fallback.lat,
-      lng: fallback.lng,
-      location_type: 'exact_cadastral',
-      resolutionSource: isLandmarkMatched ? 'gemini_ai' : 'plano',
-      polygonGeoJSON: polygon,
-      isExact: true,
-      province: effectiveProvince,
-      canton: effectiveCanton,
-      district: effectiveDistrict,
-    };
-  }
-
   return {
     lat: fallback.lat,
     lng: fallback.lng,
-    location_type: 'approximate_town',
-    resolutionSource: 'town_fallback',
+    location_type: (isLandmarkMatched || hasOfficialPlano) ? 'exact_cadastral' : 'approximate_town',
+    resolutionSource: isLandmarkMatched ? 'gemini_ai' : (hasOfficialPlano ? 'plano' : 'town_fallback'),
     polygonGeoJSON: null,
-    isExact: false,
+    isExact: isLandmarkMatched || hasOfficialPlano,
     province: effectiveProvince,
     canton: effectiveCanton,
     district: effectiveDistrict,

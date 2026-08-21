@@ -20,7 +20,6 @@ import {
   extractLocationFromEdictText,
   resolveTownCentroid,
   isLocationConsistentWithAdministrativeArea,
-  generateCadastralPolygonFromCoordinates,
 } from '@/lib/services/snitGeocodeService';
 import { extractLotSizeM2 } from '@/lib/services/extractorService';
 import { MOCK_AUCTIONS } from '@/lib/mock-data';
@@ -416,14 +415,14 @@ function mapRowToAuction(item: any): Auction {
   const hasOfficialPlano = Boolean(item.plano_catastrado && item.plano_catastrado.trim().length >= 6);
   const isExactLocation = isExactCadastral || hasOfficialPlano || item.location_type === 'exact_cadastral';
 
-  if (!parcelPolygonObj && isExactLocation && lat !== null && lng !== null) {
-    parcelPolygonObj = generateCadastralPolygonFromCoordinates(
-      lat,
-      lng,
-      item.area_m2,
-      item.plano_catastrado,
-      item.folio_real
-    );
+  // Only retain parcelPolygonObj if it contains authentic government survey geometry (filter out synthetic square boxes)
+  if (parcelPolygonObj) {
+    const isSyntheticBox =
+      (parcelPolygonObj as any)?.features?.[0]?.properties?.isExactCadastral === true ||
+      (parcelPolygonObj as any)?.properties?.isExactCadastral === true;
+    if (isSyntheticBox) {
+      parcelPolygonObj = null;
+    }
   }
 
   // Derive smart property category from text if column not present in table
