@@ -1,40 +1,24 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction } from '@/lib/types/auction';
 import { 
-  formatCurrency, 
-  formatArea, 
-  getDaysUntilAuction, 
-  detectPropertyCharacteristics,
   getLiveAuctionProgressionState,
-  getCallStageConfig,
-  getLocalizedPropertyTitle,
 } from '@/lib/utils';
 import Link from 'next/link';
 import { 
-  ArrowRight, 
-  MapPin, 
-  Calendar, 
-  Maximize2, 
-  Scale, 
-  TrendingUp, 
-  Sparkles, 
   AlertTriangle, 
   Layers,
-  ExternalLink,
-  Navigation,
   Globe,
   Satellite,
   Target,
-  Loader2
+  Loader2,
+  Compass
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
-import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
-import { CadastralLocationBadge } from '@/components/ui/CadastralLocationBadge';
 
 export interface PropertyMapProps {
   auctions: Auction[];
@@ -52,15 +36,25 @@ function MapController({
   center,
   zoom,
   selectedAuction,
+  resetTrigger,
 }: {
   center?: [number, number];
   zoom?: number;
   selectedAuction?: Auction | null;
+  resetTrigger?: number;
 }) {
   const map = useMap();
   const prevSelectedId = React.useRef<string | null>(null);
+  const prevResetTrigger = React.useRef<number>(0);
 
   useEffect(() => {
+    if (resetTrigger && resetTrigger !== prevResetTrigger.current) {
+      prevResetTrigger.current = resetTrigger;
+      prevSelectedId.current = null;
+      map.flyTo(center || [9.7489, -84.05], zoom || 7.5, { duration: 0.9 });
+      return;
+    }
+
     if (selectedAuction && selectedAuction.latitude && selectedAuction.longitude) {
       if (prevSelectedId.current !== selectedAuction.id) {
         prevSelectedId.current = selectedAuction.id;
@@ -95,7 +89,7 @@ function MapController({
       prevSelectedId.current = null;
       map.flyTo(center, zoom || 7.5, { duration: 1.0 });
     }
-  }, [center, zoom, selectedAuction, map]);
+  }, [center, zoom, selectedAuction, resetTrigger, map]);
 
   return null;
 }
@@ -113,6 +107,7 @@ export function PropertyMap({
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [mapLayer, setMapLayer] = useState<'streets' | 'satellite'>('streets');
+  const [resetTrigger, setResetTrigger] = useState(0);
 
   // Color-coded marker generator based on Call Stage & Cadastral Exactness:
   const createColorCodedIcon = (auction: Auction, isSelected: boolean) => {
@@ -201,7 +196,7 @@ export function PropertyMap({
 
   return (
     <div style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 shadow-inner ${className}`}>
-      {/* Map Layer Switcher (Streets vs Satellite) */}
+      {/* Map Layer Switcher (Streets vs Satellite) & Full CR Reset */}
       <div className="absolute bottom-3 left-3 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-xl flex items-center gap-1 pointer-events-auto">
         <button
           type="button"
@@ -227,6 +222,18 @@ export function PropertyMap({
           <Satellite className="w-3.5 h-3.5" />
           <span>{language === 'es' ? 'Satélite' : 'Satellite'}</span>
         </button>
+
+        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+        <button
+          type="button"
+          onClick={() => setResetTrigger((prev) => prev + 1)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 transition-all"
+          title={language === 'es' ? 'Ver todo Costa Rica' : 'Reset view to all Costa Rica'}
+        >
+          <Compass className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>{language === 'es' ? '🇨🇷 Todo CR' : '🇨🇷 Full CR'}</span>
+        </button>
       </div>
 
       {/* Cadastral / Approximate / In-Process Status Banner */}
@@ -237,8 +244,8 @@ export function PropertyMap({
               <Target className="w-4 h-4 text-emerald-400 shrink-0 animate-pulse" />
               <p className="leading-tight font-medium">
                 {language === 'en'
-                  ? `🎯 Exact Cadastral Lot Displayed (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`
-                  : `🎯 Polígono Catastral Exacto en Pantalla (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`}
+                  ? `🎯 Official Cadastral Survey (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`
+                  : `🎯 Plano Catastrado Oficial (Plano ${selectedAuction.plano_catastrado || 'SNIT'})`}
               </p>
             </div>
           ) : selectedAuction.location_type === 'exact_cadastral' ? (
@@ -246,7 +253,7 @@ export function PropertyMap({
               <Target className="w-4 h-4 text-emerald-400 shrink-0" />
               <p className="leading-tight font-medium">
                 {language === 'en'
-                  ? '🎯 Exact Pin Location Georeferenced'
+                  ? '🎯 Exact Georeferenced Location'
                   : '🎯 Ubicación Exacta Georreferenciada'}
               </p>
             </div>
@@ -315,7 +322,7 @@ export function PropertyMap({
                 ✓
               </span>
               <span className="leading-tight text-slate-900 dark:text-slate-200 font-medium">
-                {language === 'es' ? 'Linderos SNIT (Exacto)' : 'SNIT Parcel (Exact)'}
+                {language === 'es' ? 'Plano Oficial (Exacto)' : 'Verified Survey (Exact)'}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -334,7 +341,7 @@ export function PropertyMap({
         scrollWheelZoom={true}
         className="w-full h-full"
       >
-        <MapController center={center} zoom={zoom} selectedAuction={selectedAuction} />
+        <MapController center={center} zoom={zoom} selectedAuction={selectedAuction} resetTrigger={resetTrigger} />
         
         <TileLayer
           key={`${theme}-${mapLayer}`}
@@ -356,32 +363,13 @@ export function PropertyMap({
               fillOpacity: mapLayer === 'satellite' ? 0.35 : 0.25,
               dashArray: '2, 4',
             }}
-            onEachFeature={(_feature, layer) => {
-              layer.bindPopup(`
-                <div style="font-family: sans-serif; font-size: 12px; line-height: 1.4; padding: 4px;">
-                  <strong style="color: #059669; font-size: 13px;">🎯 ${language === 'es' ? 'Lote Catastrado Oficial (SNIT)' : 'Official Cadastral Parcel (SNIT)'}</strong><br/>
-                  <strong>${language === 'es' ? 'Plano' : 'Survey'}:</strong> ${selectedAuction.plano_catastrado || 'N/A'}<br/>
-                  <strong>${language === 'es' ? 'Área' : 'Area'}:</strong> ${formatArea(selectedAuction.area_m2)}<br/>
-                  <strong>${language === 'es' ? 'Folio Real' : 'Property ID'}:</strong> ${selectedAuction.folio_real}
-                </div>
-              `);
-            }}
           />
         )}
 
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
-          const liveState = getLiveAuctionProgressionState(auction);
-          const stageConfig = getCallStageConfig(liveState);
-          const activeDate = liveState.currentAuctionDate || auction.auction_date_call_1;
-          const countdown = getDaysUntilAuction(activeDate, language);
-          const { propertyType } = detectPropertyCharacteristics(auction);
-          const isExact = auction.location_type === 'exact_cadastral';
           const lat = auction.latitude!;
           const lng = auction.longitude!;
-
-          const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-          const wazeUrl = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
 
           return (
             <Marker
@@ -393,110 +381,7 @@ export function PropertyMap({
                   if (onSelectAuction) onSelectAuction(auction);
                 },
               }}
-            >
-              <Popup className="custom-auction-popup">
-                <div className="w-72 space-y-2.5 p-1">
-                  {/* Category Pill & Cadastral Status Header */}
-                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${stageConfig.tagClass}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${stageConfig.dotClass}`} />
-                          <span>{language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}</span>
-                        </span>
-                        <PropertyTypeBadge type={propertyType} language={language} size="sm" />
-                      </div>
-                      {auction.estimated_margin_pct && (
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 text-[10.5px] font-extrabold">
-                          +{Math.round(auction.estimated_margin_pct)}%
-                        </span>
-                      )}
-                    </div>
-                    
-                    <CadastralLocationBadge
-                      locationType={auction.location_type}
-                      hasPolygon={!!auction.parcel_polygon}
-                      language={language}
-                      size="xs"
-                    />
-                  </div>
-
-                  {/* Title & Expediente */}
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
-                      {getLocalizedPropertyTitle(auction, language)} • Folio {auction.folio_real}
-                    </p>
-                    <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate flex items-center gap-1">
-                      <Scale className="w-2.5 h-2.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                      {auction.expediente_number}
-                    </p>
-                  </div>
-
-                  {/* Price breakdown */}
-                  <div className="bg-slate-100 dark:bg-slate-950/80 p-2 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1">
-                    <div className="flex justify-between items-baseline text-xs">
-                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">
-                        {language === 'es' ? stageConfig.shortLabelEs : stageConfig.shortLabelEn}:
-                      </span>
-                      <span className="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
-                        {formatCurrency(liveState.currentBasePrice, auction.currency)}
-                      </span>
-                    </div>
-                    {auction.estimated_market_value && (
-                      <div className="flex justify-between items-baseline text-[11px]">
-                        <span className="text-slate-500">{language === 'es' ? 'Valor Estimado:' : 'Est. Market Value:'}</span>
-                        <span className="text-slate-400 line-through">
-                          {formatCurrency(auction.estimated_market_value, auction.currency)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Area & Countdown */}
-                  <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300 pt-0.5">
-                    <span className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                      <Maximize2 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                      {formatArea(auction.area_m2)}
-                    </span>
-                    <span className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
-                      <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                      {countdown.label}
-                    </span>
-                  </div>
-
-                  {/* Direct GPS Navigation Buttons (Google Maps & Waze) */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <a
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10.5px] font-bold py-1.5 px-2 rounded-lg transition-colors shadow-sm"
-                    >
-                      <MapPin className="w-3 h-3 text-blue-500" />
-                      <span>Google Maps</span>
-                    </a>
-                    <a
-                      href={wazeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10.5px] font-bold py-1.5 px-2 rounded-lg transition-colors shadow-sm"
-                    >
-                      <Navigation className="w-3 h-3 text-sky-500" />
-                      <span>Waze</span>
-                    </a>
-                  </div>
-
-                  {/* Link to Dossier */}
-                  <Link
-                    href={`/auctions/${auction.id}`}
-                    className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 !text-white text-white font-bold text-xs py-2 rounded-lg transition-colors shadow-md shadow-emerald-600/20"
-                  >
-                    <span className="!text-white text-white">{language === 'es' ? 'Ver Expediente y Avalúo' : 'View Legal Dossier'}</span>
-                    <ArrowRight className="w-3.5 h-3.5 !text-white text-white" />
-                  </Link>
-                </div>
-              </Popup>
-            </Marker>
+            />
           );
         })}
       </MapContainer>
