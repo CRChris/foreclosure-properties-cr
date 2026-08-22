@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, GeoJSON, useMap } from 'react-leaflet';
+import React, { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, GeoJSON, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction } from '@/lib/types/auction';
 import { 
@@ -15,7 +15,9 @@ import {
   Satellite,
   Target,
   Loader2,
-  Compass
+  Compass,
+  Eye,
+  Maximize2
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -32,6 +34,8 @@ export interface PropertyMapProps {
   height?: string;
   className?: string;
   autoFocusPolygon?: boolean;
+  minimizedPinId?: string | null;
+  onToggleMinimizePin?: (minimized: boolean) => void;
 }
 
 // Controller to smoothly pan & zoom map to parcel polygon bounds or point coordinates
@@ -114,12 +118,93 @@ export function PropertyMap({
   zoom = COSTA_RICA_DEFAULT_ZOOM, // Zoomed out to view entire country
   height = '100%',
   className = '',
+  minimizedPinId: controlledMinimizedPinId,
+  onToggleMinimizePin,
 }: PropertyMapProps) {
   const { t, language } = useLanguage();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const containerRef = useRef<HTMLDivElement>(null);
   const [mapLayer, setMapLayer] = useState<'streets' | 'satellite'>('streets');
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [internalMinimizedPinId, setInternalMinimizedPinId] = useState<string | null>(null);
+
+  const activeMinimizedPinId = controlledMinimizedPinId !== undefined 
+    ? controlledMinimizedPinId 
+    : internalMinimizedPinId;
+
+  const setMinimizedPinId = (val: string | null) => {
+    setInternalMinimizedPinId(val);
+    if (onToggleMinimizePin) {
+      onToggleMinimizePin(val !== null);
+    }
+  };
+
+  // Reset minimized state whenever selected auction changes
+  useEffect(() => {
+    setInternalMinimizedPinId(null);
+  }, [selectedAuctionId]);
+
+  // Capture phase listener to handle the 'x' close button click on the marker
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleCaptureClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const closeBtn = target.closest<HTMLElement>('.pin-close-btn');
+      if (closeBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        const auctionId = closeBtn.getAttribute('data-auction-id');
+        if (auctionId) {
+          setMinimizedPinId(activeMinimizedPinId === auctionId ? null : auctionId);
+        }
+      }
+    };
+
+    container.addEventListener('click', handleCaptureClick, true);
+    return () => {
+      container.removeEventListener('click', handleCaptureClick, true);
+    };
+  }, [activeMinimizedPinId]);
+
+  // Helper to compute side position for minimized pin (outside property polygon / parcel boundary)
+  const getMinimizedPosition = (auction: Auction): [number, number] => {
+    if (auction.parcel_polygon) {
+      try {
+        const geoJsonLayer = L.geoJSON(auction.parcel_polygon as any);
+        const bounds = geoJsonLayer.getBounds();
+        if (bounds.isValid()) {
+          const northEast = bounds.getNorthEast();
+          const southWest = bounds.getSouthWest();
+          const polyCenter = bounds.getCenter();
+          const lngSpan = Math.abs(northEast.lng - southWest.lng);
+          const latSpan = Math.abs(northEast.lat - southWest.lat);
+
+          // Shift to the East / North-East of the polygon boundary so boundary is 100% visible
+          const offsetLng = Math.max(lngSpan * 0.45, 0.0004);
+          const offsetLat = Math.max(latSpan * 0.25, 0.0002);
+
+          return [polyCenter.lat + offsetLat, northEast.lng + offsetLng];
+        }
+      } catch (e) {
+        console.warn('Could not compute polygon bounds for minimized pin:', e);
+      }
+    }
+
+    // Default point offset if no polygon
+    return [auction.latitude! + 0.0002, auction.longitude! + 0.00045];
+  };
+
+  const getLeaderColor = (auction: Auction) => {
+    const liveState = getLiveAuctionProgressionState(auction);
+    if (liveState.saleStatus === 'in_progress' || liveState.isHearing) return '#f43f5e';
+    if (liveState.callStage === 'call_3' || liveState.currentCallNumber === 3) return '#f97316';
+    if (liveState.callStage === 'call_2' || liveState.currentCallNumber === 2) return '#eab308';
+    return '#10b981';
+  };
 
   // Color-coded marker generator based on Call Stage & Cadastral Exactness:
   const createColorCodedIcon = (auction: Auction, isSelected: boolean) => {
@@ -169,11 +254,16 @@ export function PropertyMap({
     }
 
     const exactBadgeDot = isExact 
-      ? `<span class="absolute -top-1 -right-1 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 text-[8px] items-center justify-center font-black text-white">✓</span></span>`
+      ? `<span class="absolute -top-1.5 -left-1.5 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 text-[8px] items-center justify-center font-black text-white">✓</span></span>`
+      : '';
+
+    const closeButtonHtml = isSelected
+      ? `<button type="button" class="pin-close-btn absolute -top-3 -right-3 w-5 h-5 bg-slate-900/95 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-white dark:border-slate-800 transition-transform duration-200 hover:scale-125 active:scale-90 cursor-pointer z-30 pointer-events-auto" data-auction-id="${auction.id}" title="${language === 'es' ? 'Cerrar marcador para ver linderos' : 'Close pin to view property borders'}">✕</button>`
       : '';
 
     const iconHtml = `
       <div class="relative flex items-center justify-center cursor-pointer transition-all duration-300 ${ringClass}">
+        ${closeButtonHtml}
         <div class="flex items-center justify-center w-10 h-10 rounded-full border-2 shadow-xl ${colorClass} text-[11px] font-black tracking-tight">
           ${badgeText}
         </div>
@@ -188,6 +278,46 @@ export function PropertyMap({
       iconSize: [40, 44],
       iconAnchor: [20, 42],
       popupAnchor: [0, -42],
+    });
+  };
+
+  // Minimized compact circular marker positioned to the side of the property
+  const createMinimizedIcon = (auction: Auction) => {
+    const liveState = getLiveAuctionProgressionState(auction);
+    let colorClass = 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-950/70';
+    let badgeText = language === 'es' ? '1°' : '1st';
+    let glowColor = 'rgba(16, 185, 129, 0.7)';
+
+    if (liveState.saleStatus === 'in_progress' || liveState.isHearing) {
+      colorClass = 'bg-rose-600 border-rose-300 text-white shadow-rose-950/70 animate-pulse';
+      badgeText = '🔴';
+      glowColor = 'rgba(244, 63, 94, 0.7)';
+    } else if (liveState.callStage === 'call_3' || liveState.currentCallNumber === 3) {
+      colorClass = 'bg-orange-500 border-orange-200 text-white shadow-orange-950/70';
+      badgeText = language === 'es' ? '3°' : '3rd';
+      glowColor = 'rgba(249, 115, 22, 0.7)';
+    } else if (liveState.callStage === 'call_2' || liveState.currentCallNumber === 2) {
+      colorClass = 'bg-yellow-500 border-yellow-200 text-slate-950 shadow-yellow-950/70';
+      badgeText = language === 'es' ? '2°' : '2nd';
+      glowColor = 'rgba(234, 179, 8, 0.7)';
+    }
+
+    const iconHtml = `
+      <div class="relative flex items-center justify-center group cursor-pointer" title="${language === 'es' ? 'Clic para abrir marcador sobre la propiedad' : 'Click to open pin over property'}">
+        <span class="animate-ping absolute inline-flex h-7 w-7 rounded-full opacity-60" style="background-color: ${glowColor};"></span>
+        <div class="relative flex items-center justify-center w-7 h-7 rounded-full border-2 shadow-2xl ${colorClass} text-[9.5px] font-black tracking-tight ring-2 ring-white dark:ring-slate-900 transition-transform duration-200 group-hover:scale-125">
+          ${badgeText}
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-slate-900 text-white rounded-full flex items-center justify-center text-[7px] font-black border border-white/80 shadow">⤢</span>
+        </div>
+      </div>
+    `;
+
+    return L.divIcon({
+      className: 'custom-leaflet-minimized-pin',
+      html: iconHtml,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
     });
   };
 
@@ -207,7 +337,7 @@ export function PropertyMap({
     : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
   return (
-    <div style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 shadow-inner ${className}`}>
+    <div ref={containerRef} style={{ height }} className={`w-full h-full relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 shadow-inner ${className}`}>
       {/* Map Layer Switcher (Streets vs Satellite) & Full CR Reset */}
       <div className="absolute bottom-3 left-3 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-xl flex items-center gap-1 pointer-events-auto">
         <button
@@ -250,6 +380,38 @@ export function PropertyMap({
           <span>{language === 'es' ? '🇨🇷 Todo CR' : '🇨🇷 Full CR'}</span>
         </button>
       </div>
+
+      {/* Quick Toggle to View Borders (Hide/Show Pin) for selected auction */}
+      {selectedAuction && (
+        <div className="absolute top-3 left-3 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-xl flex items-center gap-1 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => setMinimizedPinId(activeMinimizedPinId === selectedAuction.id ? null : selectedAuction.id)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+              activeMinimizedPinId === selectedAuction.id
+                ? 'bg-yellow-500 text-slate-950 shadow-sm'
+                : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+            }`}
+            title={
+              activeMinimizedPinId === selectedAuction.id
+                ? (language === 'es' ? 'Mostrar marcador sobre la propiedad' : 'Show pin over property')
+                : (language === 'es' ? 'Ocultar marcador para ver linderos' : 'Hide pin to inspect property borders')
+            }
+          >
+            {activeMinimizedPinId === selectedAuction.id ? (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>{language === 'es' ? '📌 Mostrar Pin' : '📌 Show Pin'}</span>
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>{language === 'es' ? '🔍 Ver Linderos' : '🔍 View Borders'}</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Town Center / Approximate / In-Process Status Banner (Only shown when exact location is unknown) */}
       {selectedAuction && (
@@ -368,8 +530,53 @@ export function PropertyMap({
 
         {validAuctions.map((auction) => {
           const isSelected = selectedAuctionId === auction.id;
+          const isMinimized = isSelected && activeMinimizedPinId === auction.id;
           const lat = auction.latitude!;
           const lng = auction.longitude!;
+
+          if (isMinimized) {
+            const minimizedPos = getMinimizedPosition(auction);
+            const leaderColor = getLeaderColor(auction);
+
+            return (
+              <React.Fragment key={`minimized-${auction.id}`}>
+                {/* Connecting Dashed Leader Line from Property Center to Minimized Side Pin */}
+                <Polyline
+                  positions={[
+                    [lat, lng],
+                    minimizedPos,
+                  ]}
+                  pathOptions={{
+                    color: leaderColor,
+                    dashArray: '3, 4',
+                    weight: 2,
+                    opacity: 0.85,
+                  }}
+                />
+                {/* Center Anchor Dot */}
+                <CircleMarker
+                  center={[lat, lng]}
+                  radius={4}
+                  pathOptions={{
+                    color: '#ffffff',
+                    fillColor: leaderColor,
+                    fillOpacity: 1,
+                    weight: 2,
+                  }}
+                />
+                {/* Minimized Small Circle Pin on the Side */}
+                <Marker
+                  position={minimizedPos}
+                  icon={createMinimizedIcon(auction)}
+                  eventHandlers={{
+                    click: () => {
+                      setMinimizedPinId(null);
+                    },
+                  }}
+                />
+              </React.Fragment>
+            );
+          }
 
           return (
             <Marker
