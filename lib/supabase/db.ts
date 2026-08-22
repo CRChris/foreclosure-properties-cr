@@ -543,7 +543,7 @@ function mapRowToAuction(item: any): Auction {
         parcel_index: 2,
         title: 'Quinta #46 Haciendas Don Fernando (Río Camarón)',
         folio_real: '1-588642-000',
-        plano_catastrado: 'SJ-391820-2021',
+        plano_catastrado: 'SJ-1179417-2007',
         province: 'San José',
         canton: 'Turrubares',
         district: 'San Pedro',
@@ -559,9 +559,30 @@ function mapRowToAuction(item: any): Auction {
         lindero_este: 'Quinta cuarenta y cinco del Proyecto Quintas Haciendas Don Fernando S.A.',
         lindero_oeste: 'Quinta cuarenta y siete del Proyecto Quintas Haciendas Don Fernando S.A.',
         servidumbres_notes: 'Servidumbre trasladada citas: 250-00834-010002-001; Servidumbres de paso citas: 573-87031-01-0638-001, 573-87031-01-1677-001; Servidumbre de acueducto citas: 573-87031-01-1499-001.',
-        latitude: 9.8000,
-        longitude: -84.4833,
-        location_type: 'approximate_town',
+        latitude: 9.8770866,
+        longitude: -84.4538867,
+        location_type: 'exact_cadastral',
+        parcel_polygon: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              id: 'catastro_detallado.778747',
+              geometry: {
+                type: 'MultiPolygon',
+                coordinates: [[[[ -84.45345530181785, 9.877708281550753 ], [ -84.4539309193427, 9.876356485327774 ], [ -84.45400827563435, 9.876382330637053 ], [ -84.45413961490094, 9.876411266829967 ], [ -84.45431918162204, 9.876501622107524 ], [ -84.45384612209679, 9.877812732421276 ], [ -84.45345530181785, 9.877708281550753 ]]]]
+              },
+              properties: {
+                provincia: '1',
+                canton: '16',
+                distrito: '02',
+                finca: '0588642',
+                plano: '111794172007',
+                shape_area: 7056.85912895
+              }
+            }
+          ]
+        },
         images: [
           'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
           'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
@@ -572,7 +593,7 @@ function mapRowToAuction(item: any): Auction {
         parcel_index: 3,
         title: 'Lote Cuarto Terreno de Pastos La Fortuna',
         folio_real: '2-378907-000',
-        plano_catastrado: 'A-881923-2020',
+        plano_catastrado: 'A-0683777-2001',
         province: 'Alajuela',
         canton: 'San Carlos',
         district: 'La Fortuna',
@@ -588,9 +609,30 @@ function mapRowToAuction(item: any): Auction {
         lindero_este: 'Humberto Chacón Leiva',
         lindero_oeste: 'Gerardo Arguedas González',
         servidumbres_notes: 'Reservas y restricciones citas: 35014129-01-0415-001.',
-        latitude: 10.4678,
-        longitude: -84.6427,
-        location_type: 'approximate_town',
+        latitude: 10.4623739,
+        longitude: -84.6616668,
+        location_type: 'exact_cadastral',
+        parcel_polygon: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              id: 'catastro_detallado.1974706',
+              geometry: {
+                type: 'MultiPolygon',
+                coordinates: [[[[ -84.66162227584891, 10.4625841145127 ], [ -84.66150357825593, 10.462242090673916 ], [ -84.66172818921704, 10.462165724072046 ], [ -84.66184688702036, 10.462507749623715 ], [ -84.66162227584891, 10.4625841145127 ]]]]
+              },
+              properties: {
+                provincia: '2',
+                canton: '10',
+                distrito: '07',
+                finca: '0378907',
+                plano: '206837772001',
+                shape_area: 1039.99858898
+              }
+            }
+          ]
+        },
         images: [
           'https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80'
         ],
@@ -600,7 +642,7 @@ function mapRowToAuction(item: any): Auction {
         parcel_index: 4,
         title: 'Área para Protección de Naciente La Fortuna',
         folio_real: '2-409489-000',
-        plano_catastrado: 'A-991823-2021',
+        plano_catastrado: 'A-0998226-2005',
         province: 'Alajuela',
         canton: 'San Carlos',
         district: 'La Fortuna',
@@ -616,9 +658,30 @@ function mapRowToAuction(item: any): Auction {
         lindero_este: 'Fernando Rojas Quesada',
         lindero_oeste: 'Humberto Chacón Leiva',
         servidumbres_notes: 'Reservas y restricciones citas: 35014129-01-0415-001; Servidumbre de paso citas: 507-10737-01-0002-001.',
-        latitude: 10.4695,
-        longitude: -84.6410,
-        location_type: 'approximate_town',
+        latitude: 10.4616829,
+        longitude: -84.6602277,
+        location_type: 'exact_cadastral',
+        parcel_polygon: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              id: 'catastro_detallado.1977782',
+              geometry: {
+                type: 'MultiPolygon',
+                coordinates: [[[[ -84.66012629757435, 10.461534976396585 ], [ -84.6603536507591, 10.461555904768131 ], [ -84.66036128377588, 10.461556940429682 ], [ -84.66047004584111, 10.461567065296993 ], [ -84.66048433863854, 10.461606941931555 ], [ -84.66018653037924, 10.461922603810892 ], [ -84.66017537038041, 10.4619344363299 ], [ -84.66012522678749, 10.46179069359956 ], [ -84.66011146757845, 10.461727963707911 ], [ -84.66010792895959, 10.461691242711792 ], [ -84.66011117745671, 10.461616632933818 ], [ -84.66012629757435, 10.461534976396585 ]]]]
+              },
+              properties: {
+                provincia: '2',
+                canton: '10',
+                distrito: '07',
+                finca: '0409489',
+                plano: '209982262005',
+                shape_area: 1038.08694292
+              }
+            }
+          ]
+        },
         images: [
           'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80'
         ],

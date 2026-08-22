@@ -44,22 +44,24 @@ function MapController({
   center = COSTA_RICA_CENTER,
   zoom = COSTA_RICA_DEFAULT_ZOOM,
   selectedAuction,
+  selectedSubParcelIndex,
   resetTrigger,
 }: {
   center?: [number, number];
   zoom?: number;
   selectedAuction?: Auction | null;
+  selectedSubParcelIndex?: number | null;
   resetTrigger?: number;
 }) {
   const map = useMap();
-  const prevSelectedId = React.useRef<string | null>(null);
+  const prevSelectionKey = React.useRef<string | null>(null);
   const prevResetTrigger = React.useRef<number>(0);
 
   useEffect(() => {
     // 1. Reset button triggered ("Full CR")
     if (resetTrigger && resetTrigger !== prevResetTrigger.current) {
       prevResetTrigger.current = resetTrigger;
-      prevSelectedId.current = null;
+      prevSelectionKey.current = null;
       map.flyToBounds(COSTA_RICA_BOUNDS, {
         padding: [24, 24],
         duration: 0.9,
@@ -67,13 +69,60 @@ function MapController({
       return;
     }
 
-    // 2. Selected auction with valid lat/lng coordinates
-    if (selectedAuction && selectedAuction.latitude && selectedAuction.longitude) {
-      if (prevSelectedId.current !== selectedAuction.id) {
-        prevSelectedId.current = selectedAuction.id;
+    const currentKey = selectedAuction
+      ? `${selectedAuction.id}_sub_${selectedSubParcelIndex ?? 'all'}`
+      : null;
 
-        // If portfolio auction with multiple sub-properties across country, frame all parcels
-        if (selectedAuction.is_portfolio_auction && selectedAuction.sub_properties && selectedAuction.sub_properties.length > 1) {
+    if (selectedAuction) {
+      if (prevSelectionKey.current !== currentKey) {
+        prevSelectionKey.current = currentKey;
+
+        // A. If a specific sub-property is selected in a portfolio auction:
+        if (
+          selectedAuction.is_portfolio_auction &&
+          selectedAuction.sub_properties &&
+          selectedSubParcelIndex !== null &&
+          selectedSubParcelIndex !== undefined
+        ) {
+          const subProp = selectedAuction.sub_properties.find(
+            (sp) => sp.parcel_index === selectedSubParcelIndex
+          );
+          if (subProp && subProp.latitude && subProp.longitude) {
+            // Zoom directly into the exact parcel polygon if available
+            if (subProp.parcel_polygon) {
+              try {
+                const geoJsonLayer = L.geoJSON(subProp.parcel_polygon as any);
+                const bounds = geoJsonLayer.getBounds();
+                if (bounds.isValid()) {
+                  map.fitBounds(bounds, {
+                    padding: [50, 50],
+                    maxZoom: 18,
+                    animate: true,
+                    duration: 1.0,
+                  });
+                  return;
+                }
+              } catch (e) {
+                console.warn('Could not compute sub-property polygon bounds:', e);
+              }
+            }
+
+            // High-resolution property level point zoom
+            const targetZoom = subProp.location_type === 'exact_cadastral' ? 17 : 15;
+            map.flyTo([subProp.latitude, subProp.longitude], targetZoom, {
+              duration: 1.0,
+              easeLinearity: 0.25,
+            });
+            return;
+          }
+        }
+
+        // B. If portfolio auction is selected without a specific sub-parcel, frame all 4 across the country
+        if (
+          selectedAuction.is_portfolio_auction &&
+          selectedAuction.sub_properties &&
+          selectedAuction.sub_properties.length > 1
+        ) {
           const validPoints: [number, number][] = selectedAuction.sub_properties
             .filter((sp): sp is SubPropertyParcel & { latitude: number; longitude: number } =>
               typeof sp.latitude === 'number' && typeof sp.longitude === 'number' && !isNaN(sp.latitude) && !isNaN(sp.longitude)
@@ -91,41 +140,42 @@ function MapController({
           }
         }
 
-        // If parcel polygon exists, fit map directly to the polygon bounding box
-        if (selectedAuction.parcel_polygon) {
-          try {
-            const geoJsonLayer = L.geoJSON(selectedAuction.parcel_polygon as any);
-            const bounds = geoJsonLayer.getBounds();
-            if (bounds.isValid()) {
-              map.fitBounds(bounds, {
-                padding: [50, 50],
-                maxZoom: 18,
-                animate: true,
-                duration: 1.0,
-              });
-              return;
+        // C. Standard single property auction: zoom in directly to property level
+        if (selectedAuction.latitude && selectedAuction.longitude) {
+          if (selectedAuction.parcel_polygon) {
+            try {
+              const geoJsonLayer = L.geoJSON(selectedAuction.parcel_polygon as any);
+              const bounds = geoJsonLayer.getBounds();
+              if (bounds.isValid()) {
+                map.fitBounds(bounds, {
+                  padding: [50, 50],
+                  maxZoom: 18,
+                  animate: true,
+                  duration: 1.0,
+                });
+                return;
+              }
+            } catch (e) {
+              console.warn('Could not compute polygon bounds:', e);
             }
-          } catch (e) {
-            console.warn('Could not compute polygon bounds:', e);
           }
-        }
 
-        // Fallback point zoom
-        const targetZoom = selectedAuction.location_type === 'exact_cadastral' ? 16 : 14;
-        map.flyTo([selectedAuction.latitude, selectedAuction.longitude], targetZoom, {
-          duration: 0.9,
-          easeLinearity: 0.25,
-        });
+          // Fallback property-level zoom
+          const targetZoom = selectedAuction.location_type === 'exact_cadastral' ? 17 : 15;
+          map.flyTo([selectedAuction.latitude, selectedAuction.longitude], targetZoom, {
+            duration: 1.0,
+            easeLinearity: 0.25,
+          });
+        }
       }
-    } else if (!selectedAuction && prevSelectedId.current !== null) {
-      // 3. Deselected auction
-      prevSelectedId.current = null;
+    } else if (!selectedAuction && prevSelectionKey.current !== null) {
+      prevSelectionKey.current = null;
       map.flyToBounds(COSTA_RICA_BOUNDS, {
         padding: [24, 24],
         duration: 0.9,
       });
     }
-  }, [center, zoom, selectedAuction, resetTrigger, map]);
+  }, [center, zoom, selectedAuction, selectedSubParcelIndex, resetTrigger, map]);
 
   return null;
 }
@@ -179,9 +229,9 @@ export function PropertyMap({
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        const auctionId = closeBtn.getAttribute('data-auction-id');
-        if (auctionId) {
-          setMinimizedPinId(activeMinimizedPinId === auctionId ? null : auctionId);
+        const pinKey = closeBtn.getAttribute('data-pin-key') || closeBtn.getAttribute('data-auction-id');
+        if (pinKey) {
+          setMinimizedPinId(activeMinimizedPinId === pinKey ? null : pinKey);
         }
       }
     };
@@ -218,6 +268,34 @@ export function PropertyMap({
 
     // Default point offset if no polygon
     return [auction.latitude! + 0.0002, auction.longitude! + 0.00045];
+  };
+
+  // Helper to compute side position for minimized sub-property pin
+  const getSubPropertyMinimizedPosition = (subProperty: SubPropertyParcel): [number, number] => {
+    if (subProperty.parcel_polygon) {
+      try {
+        const geoJsonLayer = L.geoJSON(subProperty.parcel_polygon as any);
+        const bounds = geoJsonLayer.getBounds();
+        if (bounds.isValid()) {
+          const northEast = bounds.getNorthEast();
+          const southWest = bounds.getSouthWest();
+          const polyCenter = bounds.getCenter();
+          const lngSpan = Math.abs(northEast.lng - southWest.lng);
+          const latSpan = Math.abs(northEast.lat - southWest.lat);
+
+          // Shift to the East / North-East of the polygon boundary so boundary is 100% visible
+          const offsetLng = Math.max(lngSpan * 0.5, 0.00035);
+          const offsetLat = Math.max(latSpan * 0.3, 0.0002);
+
+          return [polyCenter.lat + offsetLat, northEast.lng + offsetLng];
+        }
+      } catch (e) {
+        console.warn('Could not compute polygon bounds for sub-property minimized pin:', e);
+      }
+    }
+
+    // Default point offset if no polygon
+    return [(subProperty.latitude || 0) + 0.0002, (subProperty.longitude || 0) + 0.00045];
   };
 
   const getLeaderColor = (auction: Auction) => {
@@ -369,6 +447,39 @@ export function PropertyMap({
     });
   };
 
+  // Minimized compact circular marker for sub-properties positioned to the side of the parcel
+  const createSubPropertyMinimizedIcon = (auction: Auction, subProperty: SubPropertyParcel) => {
+    const liveState = getLiveAuctionProgressionState(auction);
+    let colorClass = 'bg-emerald-700 border-emerald-300 text-white shadow-emerald-950/70';
+    let glowColor = 'rgba(16, 185, 129, 0.7)';
+
+    if (liveState.callStage === 'call_3') {
+      colorClass = 'bg-orange-600 border-orange-200 text-white shadow-orange-950/70';
+      glowColor = 'rgba(249, 115, 22, 0.7)';
+    } else if (liveState.callStage === 'call_2') {
+      colorClass = 'bg-amber-600 border-amber-200 text-white shadow-amber-950/70';
+      glowColor = 'rgba(245, 158, 11, 0.7)';
+    }
+
+    const iconHtml = `
+      <div class="relative flex items-center justify-center group cursor-pointer" title="${language === 'es' ? `Clic para restaurar marcador #${subProperty.parcel_index} (${subProperty.canton})` : `Click to restore pin #${subProperty.parcel_index} (${subProperty.canton})`}">
+        <span class="animate-ping absolute inline-flex h-7 w-7 rounded-full opacity-60" style="background-color: ${glowColor};"></span>
+        <div class="relative flex items-center justify-center w-7 h-7 rounded-full border-2 shadow-2xl ${colorClass} text-[8.5px] font-black tracking-tight ring-2 ring-white dark:ring-slate-900 transition-transform duration-200 group-hover:scale-125">
+          #${subProperty.parcel_index}
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-slate-900 text-white rounded-full flex items-center justify-center text-[7px] font-black border border-white/80 shadow">⤢</span>
+        </div>
+      </div>
+    `;
+
+    return L.divIcon({
+      className: 'custom-leaflet-minimized-pin',
+      html: iconHtml,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -14],
+    });
+  };
+
   // Distinct Color-Coded Marker for Sub-Properties within a Portfolio Auction
   const createSubPropertyIcon = (
     auction: Auction,
@@ -379,6 +490,7 @@ export function PropertyMap({
     const liveState = getLiveAuctionProgressionState(auction);
     const isExact = subProperty.location_type === 'exact_cadastral';
     const parcelIdx = subProperty.parcel_index;
+    const pinKey = `${auction.id}_sub_${subProperty.parcel_index}`;
 
     let colorClass = 'bg-emerald-700 border-emerald-300 text-white shadow-emerald-950/70';
     let ringClass = isSubParcelSelected
@@ -401,8 +513,13 @@ export function PropertyMap({
       ? `<span class="absolute -top-1.5 -left-1.5 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 text-[8px] items-center justify-center font-black text-white">✓</span></span>`
       : '';
 
+    const closeButtonHtml = (isParentSelected || isSubParcelSelected)
+      ? `<button type="button" class="pin-close-btn absolute -top-3 -right-3 w-5 h-5 bg-slate-900/95 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-white dark:border-slate-800 transition-transform duration-200 hover:scale-125 active:scale-90 cursor-pointer z-30 pointer-events-auto" data-pin-key="${pinKey}" data-auction-id="${auction.id}" title="${language === 'es' ? 'Mover marcador a un lado para ver linderos' : 'Move pin aside to view property borders'}">✕</button>`
+      : '';
+
     const iconHtml = `
       <div class="relative flex items-center justify-center cursor-pointer transition-all duration-300 ${ringClass}">
+        ${closeButtonHtml}
         <div class="flex flex-col items-center justify-center w-11 h-11 rounded-full border-2 shadow-xl ${colorClass} text-[10px] font-black tracking-tight leading-tight">
           <span class="text-[7.5px] opacity-85 leading-none">📦 #${parcelIdx}</span>
           <span class="text-[9px] leading-none">${subProperty.canton.slice(0, 5)}</span>
@@ -572,7 +689,13 @@ export function PropertyMap({
         zoomDelta={0.5}
         minZoom={5.5}
       >
-        <MapController center={center} zoom={zoom} selectedAuction={selectedAuction} resetTrigger={resetTrigger} />
+        <MapController
+          center={center}
+          zoom={zoom}
+          selectedAuction={selectedAuction}
+          selectedSubParcelIndex={selectedSubParcelIndex}
+          resetTrigger={resetTrigger}
+        />
         
         <TileLayer
           key={`${theme}-${mapLayer}`}
@@ -630,25 +753,73 @@ export function PropertyMap({
                 {/* Sub-property parcel polygons if available */}
                 {subPropsWithCoords.map((sp) => {
                   if (!sp.parcel_polygon) return null;
+                  const isThisSubSelected = selectedSubParcelIndex === sp.parcel_index;
                   return (
                     <GeoJSON
                       key={`polygon-${auction.id}-sub-${sp.parcel_index}`}
                       data={sp.parcel_polygon as any}
                       style={{
-                        color: '#0d9488',
-                        weight: 2.5,
-                        opacity: 0.9,
-                        fillColor: '#0d9488',
-                        fillOpacity: 0.25,
+                        color: isThisSubSelected ? '#10b981' : '#0d9488',
+                        weight: isThisSubSelected ? 3.5 : 2.5,
+                        opacity: isThisSubSelected ? 1 : 0.9,
+                        fillColor: isThisSubSelected ? '#10b981' : '#0d9488',
+                        fillOpacity: isThisSubSelected ? 0.35 : 0.25,
                         dashArray: '2, 4',
                       }}
                     />
                   );
                 })}
 
-                {/* 4 Distinct Sub-Property Pins with Select Callbacks */}
+                {/* 4 Distinct Sub-Property Pins with Select & Move Aside ('x') options */}
                 {subPropsWithCoords.map((sp) => {
                   const isSubSelected = selectedSubParcelIndex === sp.parcel_index;
+                  const pinKey = `${auction.id}_sub_${sp.parcel_index}`;
+                  const isSubMinimized = activeMinimizedPinId === pinKey || (activeMinimizedPinId === auction.id && isSubSelected);
+
+                  if (isSubMinimized) {
+                    const minimizedPos = getSubPropertyMinimizedPosition(sp);
+                    const leaderColor = getLeaderColor(auction);
+
+                    return (
+                      <React.Fragment key={`minimized-${pinKey}`}>
+                        {/* Connecting Dashed Leader Line from Parcel Center to Minimized Side Pin */}
+                        <Polyline
+                          positions={[
+                            [sp.latitude, sp.longitude],
+                            minimizedPos,
+                          ]}
+                          pathOptions={{
+                            color: leaderColor,
+                            dashArray: '3, 4',
+                            weight: 2,
+                            opacity: 0.85,
+                          }}
+                        />
+                        {/* Center Anchor Dot */}
+                        <CircleMarker
+                          center={[sp.latitude, sp.longitude]}
+                          radius={4}
+                          pathOptions={{
+                            color: '#ffffff',
+                            fillColor: leaderColor,
+                            fillOpacity: 1,
+                            weight: 2,
+                          }}
+                        />
+                        {/* Minimized Small Circle Pin on the Side */}
+                        <Marker
+                          position={minimizedPos}
+                          icon={createSubPropertyMinimizedIcon(auction, sp)}
+                          eventHandlers={{
+                            click: () => {
+                              setMinimizedPinId(null);
+                            },
+                          }}
+                        />
+                      </React.Fragment>
+                    );
+                  }
+
                   return (
                     <Marker
                       key={`portfolio-pin-${auction.id}-sub-${sp.parcel_index}`}
