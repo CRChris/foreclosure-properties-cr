@@ -15,9 +15,7 @@ import {
   Satellite,
   Target,
   Loader2,
-  Compass,
-  Eye,
-  Maximize2
+  Compass
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -381,37 +379,6 @@ export function PropertyMap({
         </button>
       </div>
 
-      {/* Quick Toggle to View Borders (Hide/Show Pin) for selected auction */}
-      {selectedAuction && (
-        <div className="absolute top-3 left-3 z-[400] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-xl p-1 shadow-xl flex items-center gap-1 pointer-events-auto">
-          <button
-            type="button"
-            onClick={() => setMinimizedPinId(activeMinimizedPinId === selectedAuction.id ? null : selectedAuction.id)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeMinimizedPinId === selectedAuction.id
-                ? 'bg-yellow-500 text-slate-950 shadow-sm'
-                : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
-            }`}
-            title={
-              activeMinimizedPinId === selectedAuction.id
-                ? (language === 'es' ? 'Mostrar marcador sobre la propiedad' : 'Show pin over property')
-                : (language === 'es' ? 'Ocultar marcador para ver linderos' : 'Hide pin to inspect property borders')
-            }
-          >
-            {activeMinimizedPinId === selectedAuction.id ? (
-              <>
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span>{language === 'es' ? '📌 Mostrar Pin' : '📌 Show Pin'}</span>
-              </>
-            ) : (
-              <>
-                <Eye className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>{language === 'es' ? '🔍 Ver Linderos' : '🔍 View Borders'}</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* Town Center / Approximate / In-Process Status Banner (Only shown when exact location is unknown) */}
       {selectedAuction && (
