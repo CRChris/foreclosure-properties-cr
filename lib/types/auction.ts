@@ -109,6 +109,35 @@ export interface TitleSecurityRating {
 
 export type LocationType = 'exact_cadastral' | 'approximate_town' | 'pending_mapping';
 
+export interface SubPropertyParcel {
+  id: string;
+  parcel_index: number; // 1, 2, 3, 4
+  title?: string;
+  folio_real: string;
+  plano_catastrado?: string | null;
+  province: CostaRicaProvince;
+  canton: string;
+  district: string;
+  address_description?: string | null;
+  property_type: PropertyType;
+  property_category?: PropertyCategory;
+  area_m2: number;
+  naturaleza_raw?: string | null;
+  has_construction?: boolean;
+  has_public_road_frontage?: boolean;
+  is_condominio?: boolean;
+  lindero_norte?: string | null;
+  lindero_sur?: string | null;
+  lindero_este?: string | null;
+  lindero_oeste?: string | null;
+  servidumbres_notes?: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_type?: LocationType;
+  parcel_polygon?: GeoJSON.FeatureCollection | GeoJSON.Feature | GeoJSON.Geometry | Record<string, any> | null;
+  images?: string[];
+}
+
 export interface Auction {
   id: string;
   expediente_number: string;
@@ -121,6 +150,11 @@ export interface Auction {
   address_description?: string | null;
   area_m2: number;
   currency: Currency;
+  
+  // Multi-Property Portfolio (En-Bloc Foreclosure Auction)
+  is_portfolio_auction?: boolean;
+  portfolio_count?: number;
+  sub_properties?: SubPropertyParcel[];
   
   // 3-Call Judicial Auction Schedule (Costa Rica Law)
   base_price_call_1: number;

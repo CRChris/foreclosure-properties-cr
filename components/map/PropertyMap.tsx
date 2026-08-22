@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, GeoJSON, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Auction } from '@/lib/types/auction';
+import { Auction, SubPropertyParcel } from '@/lib/types/auction';
 import { 
   getLiveAuctionProgressionState,
 } from '@/lib/utils';
@@ -15,7 +15,8 @@ import {
   Satellite,
   Target,
   Loader2,
-  Compass
+  Compass,
+  Package,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -68,6 +69,25 @@ function MapController({
     if (selectedAuction && selectedAuction.latitude && selectedAuction.longitude) {
       if (prevSelectedId.current !== selectedAuction.id) {
         prevSelectedId.current = selectedAuction.id;
+
+        // If portfolio auction with multiple sub-properties across country, frame all parcels
+        if (selectedAuction.is_portfolio_auction && selectedAuction.sub_properties && selectedAuction.sub_properties.length > 1) {
+          const validPoints: [number, number][] = selectedAuction.sub_properties
+            .filter((sp): sp is SubPropertyParcel & { latitude: number; longitude: number } =>
+              typeof sp.latitude === 'number' && typeof sp.longitude === 'number' && !isNaN(sp.latitude) && !isNaN(sp.longitude)
+            )
+            .map((sp) => [sp.latitude, sp.longitude]);
+          if (validPoints.length > 0) {
+            const bounds = L.latLngBounds(validPoints);
+            map.fitBounds(bounds, {
+              padding: [60, 60],
+              maxZoom: 14,
+              animate: true,
+              duration: 1.0,
+            });
+            return;
+          }
+        }
 
         // If parcel polygon exists, fit map directly to the polygon bounding box
         if (selectedAuction.parcel_polygon) {
@@ -345,6 +365,53 @@ export function PropertyMap({
     });
   };
 
+  // Distinct Color-Coded Marker for Sub-Properties within a Portfolio Auction
+  const createSubPropertyIcon = (
+    auction: Auction,
+    subProperty: SubPropertyParcel,
+    isSelected: boolean
+  ) => {
+    const liveState = getLiveAuctionProgressionState(auction);
+    const isExact = subProperty.location_type === 'exact_cadastral';
+    const parcelIdx = subProperty.parcel_index;
+
+    let colorClass = 'bg-emerald-700 border-emerald-300 text-white shadow-emerald-950/70';
+    let ringClass = isSelected
+      ? isDark
+        ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50'
+        : 'ring-4 ring-emerald-500 ring-offset-2 ring-offset-white scale-125 z-50'
+      : 'hover:scale-115';
+
+    if (liveState.callStage === 'call_3') {
+      colorClass = 'bg-orange-600 border-orange-200 text-white shadow-orange-950/70';
+    } else if (liveState.callStage === 'call_2') {
+      colorClass = 'bg-amber-600 border-amber-200 text-white shadow-amber-950/70';
+    }
+
+    const exactBadgeDot = isExact
+      ? `<span class="absolute -top-1.5 -left-1.5 flex h-3.5 w-3.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 text-[8px] items-center justify-center font-black text-white">✓</span></span>`
+      : '';
+
+    const iconHtml = `
+      <div class="relative flex items-center justify-center cursor-pointer transition-all duration-300 ${ringClass}">
+        <div class="flex flex-col items-center justify-center w-11 h-11 rounded-full border-2 shadow-xl ${colorClass} text-[10px] font-black tracking-tight leading-tight">
+          <span class="text-[7.5px] opacity-80 leading-none">📦 #${parcelIdx}</span>
+          <span class="text-[9px] leading-none">${subProperty.canton.slice(0, 5)}</span>
+        </div>
+        ${exactBadgeDot}
+        <div class="absolute -bottom-1 w-2 h-2 rotate-45 ${colorClass.split(' ')[0]}"></div>
+      </div>
+    `;
+
+    return L.divIcon({
+      className: 'custom-leaflet-marker-pin',
+      html: iconHtml,
+      iconSize: [44, 48],
+      iconAnchor: [22, 46],
+      popupAnchor: [0, -46],
+    });
+  };
+
   const validAuctions = auctions.filter(
     (a) => a.latitude !== null && a.longitude !== null && !isNaN(a.latitude) && !isNaN(a.longitude)
   );
@@ -525,6 +592,67 @@ export function PropertyMap({
           const isSelected = selectedAuctionId === auction.id;
           const isSelectedMinimized = selectedAuction && activeMinimizedPinId === selectedAuction.id;
           const isCoLocated = selectedAuction ? isAuctionCoLocatedWithSelected(auction, selectedAuction) : false;
+
+          // If this is a portfolio auction with multiple sub-properties across Costa Rica:
+          if (auction.is_portfolio_auction && auction.sub_properties && auction.sub_properties.length > 0) {
+            const subPropsWithCoords = auction.sub_properties.filter(
+              (sp): sp is SubPropertyParcel & { latitude: number; longitude: number } =>
+                typeof sp.latitude === 'number' && typeof sp.longitude === 'number' && !isNaN(sp.latitude) && !isNaN(sp.longitude)
+            );
+
+            // Connect portfolio parcels with dashed route
+            const linePositions: [number, number][] = subPropsWithCoords.map((sp) => [sp.latitude, sp.longitude]);
+
+            return (
+              <React.Fragment key={`portfolio-group-${auction.id}`}>
+                {/* Connecting portfolio dashed flight path line */}
+                {linePositions.length > 1 && (
+                  <Polyline
+                    positions={linePositions}
+                    pathOptions={{
+                      color: isSelected ? '#10b981' : '#0d9488',
+                      dashArray: '4, 6',
+                      weight: isSelected ? 3 : 1.75,
+                      opacity: isSelected ? 0.9 : 0.45,
+                    }}
+                  />
+                )}
+
+                {/* Sub-property parcel polygons if available */}
+                {subPropsWithCoords.map((sp) => {
+                  if (!sp.parcel_polygon) return null;
+                  return (
+                    <GeoJSON
+                      key={`polygon-${auction.id}-sub-${sp.parcel_index}`}
+                      data={sp.parcel_polygon as any}
+                      style={{
+                        color: '#0d9488',
+                        weight: 2.5,
+                        opacity: 0.9,
+                        fillColor: '#0d9488',
+                        fillOpacity: 0.25,
+                        dashArray: '2, 4',
+                      }}
+                    />
+                  );
+                })}
+
+                {/* 4 Distinct Sub-Property Pins */}
+                {subPropsWithCoords.map((sp) => (
+                  <Marker
+                    key={`portfolio-pin-${auction.id}-sub-${sp.parcel_index}`}
+                    position={[sp.latitude, sp.longitude]}
+                    icon={createSubPropertyIcon(auction, sp, isSelected)}
+                    eventHandlers={{
+                      click: () => {
+                        if (onSelectAuction) onSelectAuction(auction);
+                      },
+                    }}
+                  />
+                ))}
+              </React.Fragment>
+            );
+          }
 
           // When the selected property pin is minimized:
           if (isSelectedMinimized) {

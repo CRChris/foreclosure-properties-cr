@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { Auction } from '@/lib/types/auction';
+import { Auction, SubPropertyParcel } from '@/lib/types/auction';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PropertyTypeBadge } from '@/components/ui/PropertyTypeIcon';
 import { detectPropertyCharacteristics, localizeRealEstateText, formatDateAdded, sanitizeLocationName } from '@/lib/utils';
@@ -20,23 +19,24 @@ import {
   Building,
   TreePine,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 
 interface PropertySpecsGridProps {
   auction: Auction;
+  selectedSubProperty?: SubPropertyParcel | null;
 }
 
-export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
+export function PropertySpecsGrid({ auction, selectedSubProperty }: PropertySpecsGridProps) {
   const { language } = useLanguage();
 
-  // Determine or fallback property characteristics using robust detector
-  const {
-    propertyType,
-    hasConstruction,
-    hasPublicRoad,
-    isCondominio,
-    mortgagePriority: priority,
-  } = detectPropertyCharacteristics(auction);
+  // Determine base property characteristics
+  const baseChars = detectPropertyCharacteristics(auction);
+  
+  const propertyType = selectedSubProperty ? selectedSubProperty.property_type : baseChars.propertyType;
+  const hasConstruction = selectedSubProperty ? (selectedSubProperty.has_construction ?? false) : baseChars.hasConstruction;
+  const hasPublicRoad = selectedSubProperty ? (selectedSubProperty.has_public_road_frontage ?? false) : baseChars.hasPublicRoad;
+  const priority = baseChars.mortgagePriority;
 
   const priorityLabels = {
     '1st_mortgage': {
@@ -68,13 +68,13 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
   const priorityConfig = priorityLabels[priority] || priorityLabels['1st_mortgage'];
   const PriorityIcon = priorityConfig.icon;
 
-  // Linderos default parsers if not in structured columns
-  let norte = auction.lindero_norte;
-  let sur = auction.lindero_sur;
-  let este = auction.lindero_este;
-  let oeste = auction.lindero_oeste;
+  // Linderos: prioritize selectedSubProperty if available
+  let norte = selectedSubProperty?.lindero_norte || auction.lindero_norte;
+  let sur = selectedSubProperty?.lindero_sur || auction.lindero_sur;
+  let este = selectedSubProperty?.lindero_este || auction.lindero_este;
+  let oeste = selectedSubProperty?.lindero_oeste || auction.lindero_oeste;
 
-  if (!norte && auction.raw_edict_text) {
+  if (!norte && auction.raw_edict_text && !selectedSubProperty) {
     const mNorte = auction.raw_edict_text.match(/norte[:\s]+([^;,.\n]+)/i);
     if (mNorte) norte = mNorte[1].trim();
     const mSur = auction.raw_edict_text.match(/sur[:\s]+([^;,.\n]+)/i);
@@ -92,25 +92,30 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
   oeste = oeste || (language === 'en' ? 'Registered parcel boundary' : 'Límite predial según plano catastrado');
 
   // Naturaleza text
-  const rawNaturaleza = auction.naturaleza_raw || auction.address_description;
-  const cleanDist = sanitizeLocationName(auction.district);
-  const cleanCant = sanitizeLocationName(auction.canton);
+  const rawNaturaleza = selectedSubProperty?.naturaleza_raw || auction.naturaleza_raw || auction.address_description;
+  const targetProv = selectedSubProperty?.province || auction.province;
+  const targetCant = selectedSubProperty?.canton || auction.canton;
+  const targetDist = selectedSubProperty?.district || auction.district;
+  const targetFolio = selectedSubProperty?.folio_real || auction.folio_real;
+
+  const cleanDist = sanitizeLocationName(targetDist);
+  const cleanCant = sanitizeLocationName(targetCant);
   const locStr = cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central'
-    ? `${cleanDist}, ${cleanCant}, ${auction.province}`
+    ? `${cleanDist}, ${cleanCant}, ${targetProv}`
     : cleanDist && cleanDist.toLowerCase() !== 'central'
-    ? `${cleanDist}, ${auction.province}`
+    ? `${cleanDist}, ${targetProv}`
     : cleanCant && cleanCant.toLowerCase() !== 'central'
-    ? `${cleanCant}, ${auction.province}`
-    : `${auction.province}, Costa Rica`;
+    ? `${cleanCant}, ${targetProv}`
+    : `${targetProv}, Costa Rica`;
 
   const naturaleza = rawNaturaleza
     ? localizeRealEstateText(rawNaturaleza, language)
     : (language === 'en'
-        ? `Real estate registered under Folio Real ${auction.folio_real}, located in ${locStr}.`
-        : `Terreno inscrito bajo matrícula ${auction.folio_real}, ubicado en ${locStr}.`);
+        ? `Real estate registered under Folio Real ${targetFolio}, located in ${locStr}.`
+        : `Terreno inscrito bajo matrícula ${targetFolio}, ubicado en ${locStr}.`);
 
   // Servidumbres text
-  const servidumbres = auction.servidumbres_notes || (
+  const servidumbres = selectedSubProperty?.servidumbres_notes || auction.servidumbres_notes || (
     (auction.raw_edict_text || '').toLowerCase().includes('servidumbre')
       ? language === 'en'
         ? 'Active registered easements (Right of way / Water & utility transit) noted in legal edict. Verify in National Registry certifications.'
@@ -129,15 +134,24 @@ export function PropertySpecsGrid({ auction }: PropertySpecsGridProps) {
             <FileText className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-              {language === 'en'
-                ? 'Registered Legal Characteristics & Encumbrances'
-                : 'Características Registrales y Gravámenes'}
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <span>
+                {language === 'en'
+                  ? 'Registered Legal Characteristics & Encumbrances'
+                  : 'Características Registrales y Gravámenes'}
+              </span>
+              {selectedSubProperty && (
+                <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
+                  Folio: {selectedSubProperty.folio_real}
+                </span>
+              )}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {language === 'en'
-                ? 'Extracted directly from the official court edict & National Registry'
-                : 'Datos extraídos del edicto judicial y del Registro Nacional de Costa Rica'}
+              {selectedSubProperty 
+                ? (language === 'en' ? `Inspecting ${selectedSubProperty.title || selectedSubProperty.folio_real}` : `Inspeccionando ${selectedSubProperty.title || selectedSubProperty.folio_real}`)
+                : (language === 'en'
+                    ? 'Extracted directly from the official court edict & National Registry'
+                    : 'Datos extraídos del edicto judicial y del Registro Nacional de Costa Rica')}
             </p>
           </div>
         </div>

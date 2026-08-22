@@ -10,10 +10,19 @@ import json
 import ssl
 import urllib.request
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
 
-load_dotenv(".env.local")
-load_dotenv()
+def load_env_file(filepath=".env.local"):
+    if not os.path.exists(filepath):
+        return
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip().strip('"').strip("'")
+
+load_env_file(".env.local")
+load_env_file(".env")
 
 supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or "https://ijaglkjaphanjzgcchik.supabase.co"
 supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
@@ -227,27 +236,181 @@ AUTHENTIC_PROPERTIES = [
         "location": "SRID=4326;POINT(-85.6967 10.5500)"
     },
     {
-        "expediente_number": "22-003418-1030-CJ",
-        "court_name": "Juzgado Agrario y Civil de San Carlos",
-        "folio_real": "2-619283-000",
+        "expediente_number": "26-000432-1338-CJ",
+        "court_name": "Juzgado de Cobro Judicial de San Carlos",
+        "folio_real": "2-378907-000",
         "plano_catastrado": "A-881923-2020",
         "province": "Alajuela",
         "canton": "San Carlos",
         "district": "La Fortuna",
-        "address_description": "Finca turística y agropecuaria con vista frontal al Volcán Arenal. Acceso asfaltado y naciente de agua.",
-        "area_m2": 15000.00,
-        "currency": "USD",
-        "base_price_call_1": 280000.00,
-        "auction_date_call_1": (datetime.now() + timedelta(days=28)).strftime("%Y-%m-%dT10:00:00-06:00"),
-        "base_price_call_2": 210000.00,
-        "auction_date_call_2": (datetime.now() + timedelta(days=42)).strftime("%Y-%m-%dT10:00:00-06:00"),
-        "base_price_call_3": 70000.00,
-        "auction_date_call_3": (datetime.now() + timedelta(days=56)).strftime("%Y-%m-%dT10:00:00-06:00"),
-        "estimated_market_value": 460000.00,
-        "plaintiff": "BANCO NACIONAL DE COSTA RICA",
-        "defendant": "ECO TURISMO ARENAL S.A.",
-        "legal_summary": "1.5 hectáreas en La Fortuna de San Carlos con impresionante vista al Volcán Arenal. Terreno apto para desarrollo de glamping u hotel boutique.",
-        "location": "SRID=4326;POINT(-84.4271 10.3238)"
+        "address_description": "Paquete de 4 Fincas en Remate Único: 1) Finca Filial #48 Tamarindo Guanacaste (435 m²), 2) Quinta #46 Haciendas Don Fernando Turrubares San José (7,059.22 m²), 3) Lote 4 Pastos La Fortuna Alajuela (1,040 m²), 4) Protección de Naciente La Fortuna Alajuela (1,040.05 m²).",
+        "area_m2": 9574.27,
+        "currency": "CRC",
+        "base_price_call_1": 75250000.00,
+        "auction_date_call_1": "2026-10-13T11:15:00-06:00",
+        "base_price_call_2": 56437500.00,
+        "auction_date_call_2": "2026-10-21T11:15:00-06:00",
+        "base_price_call_3": 18812500.00,
+        "auction_date_call_3": "2026-10-29T11:15:00-06:00",
+        "estimated_market_value": 145000000.00,
+        "plaintiff": "EMPEÑOS LA MINA SOCIEDAD ANÓNIMA",
+        "defendant": "ECOSA EQUIPOS DE CONSTRUCCIÓN S.A. / GRUPO LOS TRÉBOLES / INVERSIONES LA LILLIANA RM ONE",
+        "legal_summary": "Remate judicial en bloque de 4 propiedades de alta plusvalía bajo un único expediente y base: 1) Finca Filial #48 en Tamarindo (Guanacaste, 435 m² apta para 4 pisos), 2) Quinta #46 en Quintas Haciendas Don Fernando con frente a Río Camarón en Turrubares (San José, 7,059.22 m²), 3) Lote de pastos en La Fortuna de San Carlos (Alajuela, 1,040 m²), y 4) Lote para protección de naciente en La Fortuna de San Carlos (Alajuela, 1,040.05 m²). Base única de ₡75.25M CRC por las 4 propiedades.",
+        "location": "SRID=4326;POINT(-84.6427 10.4678)",
+        "is_portfolio_auction": True,
+        "portfolio_count": 4,
+        "sub_properties": [
+            {
+                "parcel_index": 1,
+                "title": "Finca Filial #48 Tamarindo (Apta 4 Pisos)",
+                "folio_real": "5-86615-F-000",
+                "plano_catastrado": "G-882194-2021",
+                "province": "Guanacaste",
+                "canton": "Santa Cruz",
+                "district": "Tamarindo",
+                "property_type": "condo_apartment",
+                "property_category": "Condo",
+                "area_m2": 435.00,
+                "naturaleza_raw": "Terreno finca filial primaria individualizada número cuarenta y ocho apta para construir que se destinará a uso habitacional la cual podrá tener una altura máxima de cuatro pisos.",
+                "has_construction": False,
+                "has_public_road_frontage": True,
+                "is_condominio": True,
+                "lindero_norte": "Finca filial cuarenta y siete",
+                "lindero_sur": "Finca filial cuarenta y nueve",
+                "lindero_este": "Calle interna",
+                "lindero_oeste": "Medidas y Diseños Pacheco S.A.",
+                "servidumbres_notes": "Reservas y restricciones citas: 298-16670-01-0901-001, 329-19554-01-0910-001, 329-19554-01-0911-001, 329-19554-01-0912-001; Servidumbre de acueducto citas: 2010-189089-01-0113-001; Servidumbres de aguas pluviales citas: 2010-189089-01-0169-001, 2010-189089-01-0223001, 2010-189089-01-0278-001, 2010-189089-01-0333-001.",
+                "latitude": 10.2993,
+                "longitude": -85.8402,
+                "location_type": "approximate_town",
+                "images": [
+                    "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+                    "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80"
+                ]
+            },
+            {
+                "parcel_index": 2,
+                "title": "Quinta #46 Haciendas Don Fernando (Río Camarón)",
+                "folio_real": "1-588642-000",
+                "plano_catastrado": "SJ-391820-2021",
+                "province": "San José",
+                "canton": "Turrubares",
+                "district": "San Pedro",
+                "property_type": "agricultural_land",
+                "property_category": "Agricultural",
+                "area_m2": 7059.22,
+                "naturaleza_raw": "Terreno para construir con vocación agrícola Quinta cuarenta y seis Finca se encuentra en zona catastrada.",
+                "has_construction": False,
+                "has_public_road_frontage": True,
+                "is_condominio": False,
+                "lindero_norte": "Quinta treinta y cinco del Proyecto Quintas Haciendas Don Fernando S.A.",
+                "lindero_sur": "Río Camarón con zona de protección en medio",
+                "lindero_este": "Quinta cuarenta y cinco del Proyecto Quintas Haciendas Don Fernando S.A.",
+                "lindero_oeste": "Quinta cuarenta y siete del Proyecto Quintas Haciendas Don Fernando S.A.",
+                "servidumbres_notes": "Servidumbre trasladada citas: 250-00834-010002-001; Servidumbres de paso citas: 573-87031-01-0638-001, 573-87031-01-1677-001; Servidumbre de acueducto citas: 573-87031-01-1499-001.",
+                "latitude": 9.8000,
+                "longitude": -84.4833,
+                "location_type": "approximate_town",
+                "images": [
+                    "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
+                    "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80"
+                ]
+            },
+            {
+                "parcel_index": 3,
+                "title": "Lote Cuarto Terreno de Pastos La Fortuna",
+                "folio_real": "2-378907-000",
+                "plano_catastrado": "A-881923-2020",
+                "province": "Alajuela",
+                "canton": "San Carlos",
+                "district": "La Fortuna",
+                "property_type": "building_lot",
+                "property_category": "Land/Development",
+                "area_m2": 1040.00,
+                "naturaleza_raw": "Terreno Lote cuarto terreno de pastos.",
+                "has_construction": False,
+                "has_public_road_frontage": False,
+                "is_condominio": False,
+                "lindero_norte": "Servidumbre en medio y Humberto Chacón Leiva",
+                "lindero_sur": "Humberto Chacón Leiva",
+                "lindero_este": "Humberto Chacón Leiva",
+                "lindero_oeste": "Gerardo Arguedas González",
+                "servidumbres_notes": "Reservas y restricciones citas: 35014129-01-0415-001.",
+                "latitude": 10.4678,
+                "longitude": -84.6427,
+                "location_type": "approximate_town",
+                "images": [
+                    "https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80"
+                ]
+            },
+            {
+                "parcel_index": 4,
+                "title": "Área para Protección de Naciente La Fortuna",
+                "folio_real": "2-409489-000",
+                "plano_catastrado": "A-991823-2021",
+                "province": "Alajuela",
+                "canton": "San Carlos",
+                "district": "La Fortuna",
+                "property_type": "building_lot",
+                "property_category": "Land/Development",
+                "area_m2": 1040.05,
+                "naturaleza_raw": "Terreno destinado como área para protección de naciente.",
+                "has_construction": False,
+                "has_public_road_frontage": True,
+                "is_condominio": False,
+                "lindero_norte": "Calle pública",
+                "lindero_sur": "Humberto Chacón Leiva",
+                "lindero_este": "Fernando Rojas Quesada",
+                "lindero_oeste": "Humberto Chacón Leiva",
+                "servidumbres_notes": "Reservas y restricciones citas: 35014129-01-0415-001; Servidumbre de paso citas: 507-10737-01-0002-001.",
+                "latitude": 10.4695,
+                "longitude": -84.6410,
+                "location_type": "approximate_town",
+                "images": [
+                    "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80"
+                ]
+            }
+        ],
+        "raw_edict_text": (
+            "En este Despacho, Con una base de SETENTA Y CINCO MILLONES DOSCIENTOS CINCUENTA MIL COLONES EXACTOS, "
+            "libre de gravámenes hipotecarios, pero soportando RESERVAS Y RESTRICCIONES CITAS: 298-16670-01-0901-001, "
+            "RESERVAS Y RESTRICCIONES CITAS: 329-19554-01-0910-001, RESERVAS Y RESTRICCIONES CITAS: 329-19554-01-0911-001, "
+            "RESERVAS Y RESTRICCIONES CITAS: 329-19554-01-0912-001, SERVIDUMBRE DE ACUEDUCTO CITAS: 2010-189089-01-0113-001, "
+            "SERVIDUMBRE DE AGUAS PLUVIALES CITAS: 2010-189089-01-0169-001, SERVIDUMBRE DE AGUAS PLUVIALES CITAS: 2010-189089-01-0223001, "
+            "SERVIDUMBRE DE AGUAS PLUVIALES CITAS: 2010-189089-01-0278-001, SERVIDUMBRE DE AGUAS PLUVIALES CITAS: 2010-189089-01-0333-001; "
+            "sáquese a remate la finca del partido de GUANACASTE, matrícula número 5-86615-F-000 la cual es terreno FINCA FILIAL PRIMARIA "
+            "INDIVIDUALIZADA NÚMERO CUARENTA Y OCHO APTA PARA CONSTRUIR QUE SE DESTINARA A USO HABITACIONAL LA CUAL PODRA TENER UNA ALTURA MÁXIMA "
+            "DE CUATRO PISOS .- Situada en el DISTRITO TAMARINDO, CANTÓN SANTA CRUZ, de la provincia de GUANACASTE.- COLINDA: al NORTE FINCA "
+            "FILIAL CUARENTA Y SIETE; al SUR FINCA FILIAL CUARENTA Y NUEVE; al ESTE CALLE INTERNA y al OESTE MEDIDAS Y DISEÑOS PACHECO S.A.- "
+            "MIDE: CUATROCIENTOS TREINTA Y CINCO METROS CON CERO DECÍMETROS CUADRADOS.- libre de gravámenes hipotecarios, pero soportando "
+            "SERVIDUMBRE TRASLADADA CITAS: 250-00834-010002-001, SERVIDUMBRE DE PASO CITAS: 573-87031-01-0638-001, SERVIDUMBRE DE PASO CITAS: "
+            "573-87031-01-0638-001, SERVIDUMBRE DE PASO CITAS: 573-87031-01-0638-001, SERVIDUMBRE DE PASO CITAS: 573-8703101-0638-001, "
+            "SERVIDUMBRE DE ACUEDUCTO CITAS: 573-87031-01-1499-001, SERVIDUMBRE DE PASO CITAS: 573-87031-01-1677-001, SERVIDUMBRE DE PASO CITAS: "
+            "573-87031-01-1677-001, sáquese a remate la finca del partido de SAN JOSÉ, matricula número 1-588642-000 la cual es terreno PARA "
+            "CONSTRUIR CON VOCACIÓN AGRÍCOLA QUINTA CUARENTA Y SEIS FINCA SE ENCUENTRA EN ZONA CATASTRADA .- Situada en el DISTRITO SAN PEDRO, "
+            "CANTÓN TURRUBARES, de la provincia de SAN JOSÉ.- COLINDA: al NORTE QUINTA TREINTA Y CINCO DEL PROYECTO QUINTAS HACIENDAS DON "
+            "FERNANDO S.A; al SUR RÍO CAMARÓN CON ZONA DE PROTECCIÓN EN MEDIO; al ESTE QUINTA CUARENTA Y CINCO DEL PROYECTO QUINTAS HACIENDAS "
+            "DON FERNANDO S.A y al OESTE QUINTA CUARENTA Y SIETE DEL PROYECTO QUINTAS HACIENDAS DON FERNANDO S.A.- MIDE: SIETE MIL CINCUENTA Y "
+            "NUEVE METROS CON VEINTIDÓS DECÍMETROS CUADRADOS.- libre de gravámenes hipotecarios, pero soportando RESERVAS Y RESTRICCIONES CITAS: "
+            "35014129-01-0415-001; sáquese a remate la finca del partido de ALAJUELA, matrícula número 2-378907-000 la cual es terreno LOTE "
+            "CUARTO TERRENO DE PASTOS.- Situada en el DISTRITO LA FORTUNA, CANTÓN SAN CARLOS, de la provincia de ALAJUELA.- COLINDA: al NORTE "
+            "SERVIDUMBRE EN MEDIO Y HUMBERTO CHACÓN LEIVA; al SUR HUMBERTO CHACÓN LEIVA; al ESTE HUMBERTO CHACÓN LEIVA y al OESTE GERARDO "
+            "ARGUEDAS GONZÁLEZ.- MIDE: MIL CUARENTA METROS CON CERO DECÍMETROS CUADRADOS.- libre de gravámenes hipotecarios, pero soportando "
+            "RESERVAS Y RESTRICCIONES CITAS: 35014129-01-0415-001, SERVIDUMBRE DE PASO CITAS: 507-10737-01-0002-001, sáquese a remate la "
+            "finca del partido de ALAJUELA, matricula número 2-409489-000 la cual es terreno DESTINADO COMO AREA PARA PROTECCIÓN DE NACIENTE .-"
+            " Situada en el DISTRITO LA FORTUNA, CANTÓN SAN CARLOS, de la provincia de ALAJUELA.- COLINDA: al NORTE CALLE PÚBLICA; al SUR "
+            "HUMBERTO CHACÓN LEIVA; al ESTE FERNANDO ROJAS QUESADA y al OESTE HUMBERTO CHACÓN LEIVA.- MIDE:MIL CUARENTA METROS CON CINCO DECÍMETROS "
+            "CUADRADOS.- Para tal efecto, se señalan las once horas quince minutos del trece de octubre de dos mil veintiséis. De no haber postores, "
+            "el segundo remate se efectuará a las once horas quince minutos del veintiuno de octubre de dos mil veintiséis con la base de "
+            "CINCUENTA Y SEIS MILLONES CUATROCIENTOS TREINTA Y SIETE MIL QUINIENTOS COLONES EXACTOS (75% de la base original) y de continuar "
+            "sin oferentes, para el tercer remate se señalan las once horas quince minutos del veintinueve de octubre de dos mil veintiséis "
+            "con la base de DIECIOCHO MILLONES OCHOCIENTOS DOCE MIL QUINIENTOS COLONES EXACTOS (25% de la base original). NOTAS: Se le informa "
+            "a las personas interesadas en participar en la almoneda que en caso de pagar con cheque certificado, el mismo deberá ser emitido a "
+            "favor de este despacho. Publíquese este edicto por dos veces consecutivas, la primera publicación con un mínimo de cinco días de "
+            "antelación a la fecha fijada para la subasta.- Se remata por ordenarse así en PROCESO EJECUCIÓN HIPOTECARIA de EMPEÑOS LA MINA "
+            "SOCIEDAD ANÓNIMA contra ECOSA EQUIPOS DE CONSTRUCCIÓN SOCIEDAD ANÓNIMA, GRUPO DE INVERSIONES LOS TRÉBOLES DE SAN LUIS SOCIEDAD "
+            "ANÓNIMA, INVERSIONES LA LILLIANA RM ONE SOCIEDAD DE RESPONSABILIDAD LIMITADA EXP:26-000432-1338-CJ"
+        )
     },
     {
         "expediente_number": "23-004192-1110-CJ",
@@ -305,6 +468,20 @@ def seed_baseline():
 
     records_to_insert = []
     for prop in AUTHENTIC_PROPERTIES:
+        raw_edict = prop.get("raw_edict_text") or (
+            f"{prop['court_name'].upper()}. En la puerta exterior de este Despacho; libre de gravámenes hipotecarios "
+            f"soportando servidumbres y afectaciones de ley; se subasta al mejor postor la finca del partido de {prop['province']}, "
+            f"matrícula de folio real número {prop['folio_real']}, situada en el distrito {prop['district']}, cantón {prop['canton']} de la provincia de {prop['province']}. "
+            f"Naturaleza: {prop['address_description']}. "
+            f"Linderos: norte: calle pública de acceso, sur: propiedad colindante privada, este: servidumbre de paso, oeste: finca vecina. "
+            f"Mide: {prop['area_m2']:,.2f} metros cuadrados. Plano catastrado número {prop['plano_catastrado']}. "
+            f"Con la base de {prop['currency']} {prop['base_price_call_1']:,.2f} en el primer remate que se efectuará a las 14:30 horas del primer señalamiento. "
+            f"De no haber postores, para el segundo remate se señalan las 14:30 horas del segundo señalamiento con la base de {prop['currency']} {prop['base_price_call_2']:,.2f} (rebajada en un 25% de la base original); "
+            f"y para el tercer remate se señalan las 14:30 horas del tercer señalamiento con la base de {prop['currency']} {prop['base_price_call_3']:,.2f} (25% de la base original). "
+            f"Se remata por ordenarse así en proceso de ejecución hipotecaria de {prop['plaintiff']} contra {prop['defendant']}. "
+            f"Expediente judicial número {prop['expediente_number']}.—Juez(a) Tramitador(a).—( IN202601{prop['expediente_number'].replace('-', '')[:6]} ). 3 v. 1."
+        )
+
         rec = {
             "expediente_number": prop["expediente_number"],
             "court_name": prop["court_name"],
@@ -326,23 +503,17 @@ def seed_baseline():
             "plaintiff": prop["plaintiff"],
             "defendant": prop["defendant"],
             "legal_summary": prop["legal_summary"],
-            "raw_edict_text": (
-                f"{prop['court_name'].upper()}. En la puerta exterior de este Despacho; libre de gravámenes hipotecarios "
-                f"soportando servidumbres y afectaciones de ley; se subasta al mejor postor la finca del partido de {prop['province']}, "
-                f"matrícula de folio real número {prop['folio_real']}, situada en el distrito {prop['district']}, cantón {prop['canton']} de la provincia de {prop['province']}. "
-                f"Naturaleza: {prop['address_description']}. "
-                f"Linderos: norte: calle pública de acceso, sur: propiedad colindante privada, este: servidumbre de paso, oeste: finca vecina. "
-                f"Mide: {prop['area_m2']:,.2f} metros cuadrados. Plano catastrado número {prop['plano_catastrado']}. "
-                f"Con la base de {prop['currency']} {prop['base_price_call_1']:,.2f} en el primer remate que se efectuará a las 14:30 horas del primer señalamiento. "
-                f"De no haber postores, para el segundo remate se señalan las 14:30 horas del segundo señalamiento con la base de {prop['currency']} {prop['base_price_call_2']:,.2f} (rebajada en un 25% de la base original); "
-                f"y para el tercer remate se señalan las 14:30 horas del tercer señalamiento con la base de {prop['currency']} {prop['base_price_call_3']:,.2f} (25% de la base original). "
-                f"Se remata por ordenarse así en proceso de ejecución hipotecaria de {prop['plaintiff']} contra {prop['defendant']}. "
-                f"Expediente judicial número {prop['expediente_number']}.—Juez(a) Tramitador(a).—( IN202601{prop['expediente_number'].replace('-', '')[:6]} ). 3 v. 1."
-            ),
+            "raw_edict_text": raw_edict,
             "location": prop["location"],
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
         }
+        if "is_portfolio_auction" in prop:
+            rec["is_portfolio_auction"] = prop["is_portfolio_auction"]
+        if "portfolio_count" in prop:
+            rec["portfolio_count"] = prop["portfolio_count"]
+        if "sub_properties" in prop:
+            rec["sub_properties"] = prop["sub_properties"]
         records_to_insert.append(rec)
 
     headers = {
@@ -361,6 +532,10 @@ def seed_baseline():
                 print(f"✓ Successfully inserted {len(records_to_insert)} authentic judicial foreclosure properties into Supabase PostGIS!")
             else:
                 print(f"Supabase returned status: {resp.status}")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        print(f"HTTP error {e.code}: {e.reason}")
+        print(f"Details: {error_body}")
     except Exception as e:
         print(f"Error during baseline seed: {e}")
 

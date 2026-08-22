@@ -114,7 +114,14 @@ export function AuctionRowCard({
         <div className="lg:w-[30%] space-y-2.5">
           {/* Top category tags & badges */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+            {auction.is_portfolio_auction && auction.sub_properties ? (
+              <span className="px-2.5 py-0.5 text-[10.5px] font-black rounded-md bg-emerald-600 text-white flex items-center gap-1 shadow-sm">
+                <span>📦</span>
+                <span>{auction.sub_properties.length} {language === 'es' ? 'Fincas en Bloque' : 'Properties En-Bloc'}</span>
+              </span>
+            ) : (
+              <PropertyTypeBadge type={propertyType} language={language} size="sm" />
+            )}
             <CadastralLocationBadge
               locationType={auction.location_type}
               hasPolygon={!!auction.parcel_polygon}
@@ -140,26 +147,32 @@ export function AuctionRowCard({
           <div>
             <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
               <span className="truncate">
-                {getLocalizedPropertyTitle(auction, language)}
+                {auction.is_portfolio_auction && auction.sub_properties
+                  ? (language === 'es'
+                      ? `Portafolio de ${auction.sub_properties.length} Inmuebles en Remate Único`
+                      : `${auction.sub_properties.length}-Property Portfolio Foreclosure Package`)
+                  : getLocalizedPropertyTitle(auction, language)}
               </span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-0.5">
               <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>
-                {(() => {
-                  const cleanDist = sanitizeLocationName(auction.district);
-                  const cleanCant = sanitizeLocationName(auction.canton);
-                  if (cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central') {
-                    return `${cleanDist}, ${cleanCant}, ${auction.province}`;
-                  }
-                  if (cleanDist && cleanDist.toLowerCase() !== 'central') {
-                    return `${cleanDist}, ${auction.province}`;
-                  }
-                  if (cleanCant && cleanCant.toLowerCase() !== 'central') {
-                    return `${cleanCant}, ${auction.province}`;
-                  }
-                  return `${auction.province}, Costa Rica`;
-                })()}
+                {auction.is_portfolio_auction && auction.sub_properties
+                  ? Array.from(new Set(auction.sub_properties.map((p) => p.province))).join(' • ')
+                  : (() => {
+                      const cleanDist = sanitizeLocationName(auction.district);
+                      const cleanCant = sanitizeLocationName(auction.canton);
+                      if (cleanDist && cleanCant && cleanDist.toLowerCase() !== cleanCant.toLowerCase() && cleanCant.toLowerCase() !== 'central') {
+                        return `${cleanDist}, ${cleanCant}, ${auction.province}`;
+                      }
+                      if (cleanDist && cleanDist.toLowerCase() !== 'central') {
+                        return `${cleanDist}, ${auction.province}`;
+                      }
+                      if (cleanCant && cleanCant.toLowerCase() !== 'central') {
+                        return `${cleanCant}, ${auction.province}`;
+                      }
+                      return `${auction.province}, Costa Rica`;
+                    })()}
               </span>
             </p>
           </div>
@@ -167,7 +180,11 @@ export function AuctionRowCard({
           {/* Folio Real, Docket (Expediente) & Plaintiff (Bank) */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400 pt-0.5">
             <span className="font-mono text-[11px] bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
-              Folio: <strong className="text-slate-900 dark:text-slate-200">{auction.folio_real}</strong>
+              {auction.is_portfolio_auction && auction.sub_properties ? (
+                <>Folios: <strong className="text-slate-900 dark:text-slate-200">{auction.sub_properties.length} Fincas</strong></>
+              ) : (
+                <>Folio: <strong className="text-slate-900 dark:text-slate-200">{auction.folio_real}</strong></>
+              )}
             </span>
             <span className="font-mono text-[11px] bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
               Exp: <strong className="text-slate-900 dark:text-slate-200">{auction.expediente_number}</strong>

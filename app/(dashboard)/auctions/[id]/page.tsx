@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { Auction } from '@/lib/types/auction';
+import { Auction, SubPropertyParcel } from '@/lib/types/auction';
 import { AuctionCallLadder } from '@/components/dossier/AuctionCallLadder';
 import { PropertySpecsGrid } from '@/components/dossier/PropertySpecsGrid';
 import { CourtAccessCard } from '@/components/dossier/CourtAccessCard';
@@ -11,6 +11,7 @@ import { InvestmentYieldCalculator } from '@/components/dossier/InvestmentYieldC
 import { DueDiligenceChecklist } from '@/components/dossier/DueDiligenceChecklist';
 import { OpportunityMatrixCard } from '@/components/dossier/OpportunityMatrixCard';
 import { ParticipateAuctionModal } from '@/components/dossier/ParticipateAuctionModal';
+import { PortfolioPropertySelector } from '@/components/dossier/PortfolioPropertySelector';
 import { DealAlphaBadge } from '@/components/ui/DealAlphaBadge';
 import { CadastralLocationBadge } from '@/components/ui/CadastralLocationBadge';
 import { MapWrapper } from '@/components/map/MapWrapper';
@@ -54,6 +55,8 @@ import {
   Navigation,
   Loader2,
   Share2,
+  Package,
+  Globe,
 } from 'lucide-react';
 
 interface AuctionDetailPageProps {
@@ -65,6 +68,7 @@ interface AuctionDetailPageProps {
 export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const { t, language } = useLanguage();
   const [selectedCall, setSelectedCall] = useState<1 | 2 | 3 | null>(null);
+  const [selectedSubParcelIndex, setSelectedSubParcelIndex] = useState<number | null>(null);
   const [activeEdictTab, setActiveEdictTab] = useState<'summary' | 'raw'>('summary');
   const [copiedEdict, setCopiedEdict] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
@@ -228,6 +232,15 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
   const isNewToday = isPropertyNewToday(auction.created_at);
   const { propertyType } = detectPropertyCharacteristics(auction);
 
+  const isPortfolio = Boolean(auction.is_portfolio_auction) && Boolean(auction.sub_properties && auction.sub_properties.length > 1);
+  const activeSubProperty: SubPropertyParcel | null = isPortfolio && selectedSubParcelIndex !== null
+    ? (auction.sub_properties?.find((sp) => sp.parcel_index === selectedSubParcelIndex) || null)
+    : null;
+
+  const provincesSpanned = isPortfolio
+    ? Array.from(new Set(auction.sub_properties!.map((p) => p.province))).join(' • ')
+    : `${auction.district ? `${auction.district}, ` : ''}${auction.canton}, ${auction.province}`;
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
       {/* Top Breadcrumb & Action Toolbar */}
@@ -336,7 +349,14 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
                 {t.card.newToday || (language === 'es' ? '¡NUEVO HOY!' : 'NEW TODAY')}
               </span>
             )}
-            <PropertyTypeBadge type={propertyType} language={language} size="lg" />
+            {isPortfolio ? (
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-xs shadow-md shadow-emerald-950/40 ring-1 ring-white/20">
+                <Package className="w-3.5 h-3.5" />
+                <span>{language === 'es' ? `Portafolio de ${auction.sub_properties!.length} Inmuebles` : `${auction.sub_properties!.length}-Property Portfolio`}</span>
+              </span>
+            ) : (
+              <PropertyTypeBadge type={propertyType} language={language} size="lg" />
+            )}
             <DealAlphaBadge auction={auction} language={language} size="md" />
             <CadastralLocationBadge
               locationType={auction.location_type}
@@ -345,7 +365,7 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               size="md"
             />
             <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
-              Folio Real: {auction.folio_real}
+              {isPortfolio ? `Folios: ${auction.sub_properties!.map(p => p.folio_real).join(', ')}` : `Folio Real: ${auction.folio_real}`}
             </span>
             <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs font-mono">
               Exp: {auction.expediente_number}
@@ -373,19 +393,21 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
 
         <div className="relative z-10 space-y-3">
           <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-            {getLocalizedPropertyTitle(auction, language)}
+            {isPortfolio
+              ? (language === 'es'
+                  ? `Portafolio de ${auction.sub_properties!.length} Inmuebles en Remate Único`
+                  : `${auction.sub_properties!.length}-Property Portfolio Foreclosure Package`)
+              : getLocalizedPropertyTitle(auction, language)}
           </h1>
 
           <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs sm:text-sm text-slate-600 dark:text-slate-300 pt-1">
             <span className="flex items-center gap-1.5">
               <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>
-                {auction.district}, {auction.canton}, {auction.province}
-              </span>
+              <span>{provincesSpanned}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <Maximize2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>{formatArea(auction.area_m2)}</span>
+              <span>{formatArea(auction.area_m2)} {isPortfolio ? (language === 'es' ? '(Total Combinada)' : '(Total Combined)') : ''}</span>
             </span>
             <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
               <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -409,6 +431,19 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
         </div>
       </div>
 
+      {/* Portfolio Sub-Property Interactive Tab Selector (if multi-property auction) */}
+      {isPortfolio && auction.sub_properties && (
+        <PortfolioPropertySelector
+          subProperties={auction.sub_properties}
+          selectedParcelIndex={selectedSubParcelIndex}
+          onSelectParcel={(idx) => setSelectedSubParcelIndex(idx)}
+          language={language}
+          totalAreaM2={auction.area_m2}
+          currency={auction.currency}
+          basePrice={auction.base_price_call_1}
+        />
+      )}
+
       {/* Primary 3-Call Statutory Ladder Section */}
       <AuctionCallLadder
         auction={auction}
@@ -418,13 +453,16 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
       />
 
       {/* Detailed Property Characteristics & 4-Quadrant Linderos */}
-      <PropertySpecsGrid auction={auction} />
+      <PropertySpecsGrid
+        auction={auction}
+        selectedSubProperty={activeSubProperty}
+      />
 
       {/* Official Court Case File & Online Appraisal Access (PIN Request) */}
       <CourtAccessCard
         expediente={auction.expediente_number}
         courtName={auction.court_name}
-        fincaNumber={auction.folio_real}
+        fincaNumber={activeSubProperty ? activeSubProperty.folio_real : auction.folio_real}
       />
 
       {/* Tabbed Legal Text / Executive Summary Dossier */}
@@ -607,49 +645,61 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
               <MapPin className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                {t.dossier.geographicLocation}
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                <span>{t.dossier.geographicLocation}</span>
+                {activeSubProperty && (
+                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-bold">
+                    #{activeSubProperty.parcel_index}: {activeSubProperty.canton}
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {auction.district}, {auction.canton}, {auction.province}
+                {activeSubProperty 
+                  ? `${activeSubProperty.district ? `${activeSubProperty.district}, ` : ''}${activeSubProperty.canton}, ${activeSubProperty.province}`
+                  : provincesSpanned}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <CadastralLocationBadge
-              locationType={auction.location_type}
-              hasPolygon={!!auction.parcel_polygon}
+              locationType={activeSubProperty ? activeSubProperty.location_type : auction.location_type}
+              hasPolygon={Boolean(activeSubProperty?.parcel_polygon || auction.parcel_polygon)}
               language={language}
               size="sm"
             />
-            {auction.latitude && auction.longitude && (
-              <div className="flex items-center gap-1.5">
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${auction.latitude},${auction.longitude}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-blue-600 dark:hover:text-blue-400"
-                  title="Open exact coordinates in Google Maps"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Google Maps</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
+            {(() => {
+              const targetLat = activeSubProperty ? activeSubProperty.latitude : auction.latitude;
+              const targetLng = activeSubProperty ? activeSubProperty.longitude : auction.longitude;
+              if (!targetLat || !targetLng) return null;
+              return (
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${targetLat},${targetLng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-blue-600 dark:hover:text-blue-400"
+                    title="Open exact coordinates in Google Maps"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Google Maps</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </a>
 
-                <a
-                  href={`https://waze.com/ul?ll=${auction.latitude},${auction.longitude}&navigate=yes`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-sky-600 dark:hover:text-sky-400"
-                  title="Navigate with Waze"
-                >
-                  <Navigation className="w-3.5 h-3.5 text-sky-500" />
-                  <span>Waze</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
-              </div>
-            )}
+                  <a
+                    href={`https://waze.com/ul?ll=${targetLat},${targetLng}&navigate=yes`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-bold transition-all shadow-sm hover:text-sky-600 dark:hover:text-sky-400"
+                    title="Navigate with Waze"
+                  >
+                    <Navigation className="w-3.5 h-3.5 text-sky-500" />
+                    <span>Waze</span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </a>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -689,11 +739,17 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
             auctions={[auction]}
             selectedAuctionId={auction.id}
             center={
-              auction.latitude && auction.longitude
+              activeSubProperty && activeSubProperty.latitude && activeSubProperty.longitude
+                ? [activeSubProperty.latitude, activeSubProperty.longitude]
+                : auction.latitude && auction.longitude
                 ? [auction.latitude, auction.longitude]
                 : COSTA_RICA_CENTER
             }
-            zoom={auction.location_type === 'exact_cadastral' ? 16 : 14}
+            zoom={
+              activeSubProperty
+                ? (activeSubProperty.location_type === 'exact_cadastral' ? 16 : 14)
+                : (isPortfolio ? 8 : (auction.location_type === 'exact_cadastral' ? 16 : 14))
+            }
             height="100%"
           />
         </div>

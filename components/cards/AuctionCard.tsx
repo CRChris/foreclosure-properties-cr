@@ -108,17 +108,41 @@ export function AuctionCard({
     >
       {/* Icon-Based Category Hero Banner (Zero External Image Dependency) */}
       <div className="relative w-full">
-        <PropertyTypeBanner
-          type={propertyType}
-          language={language}
-          canton={auction.canton}
-          district={auction.district}
-          province={auction.province}
-          areaM2={auction.area_m2}
-          isCondominio={isCondominio}
-          hasConstruction={hasConstruction}
-          className="rounded-b-none border-b border-slate-200 dark:border-slate-800"
-        />
+        {auction.is_portfolio_auction && auction.sub_properties && auction.sub_properties.length > 0 ? (
+          <div className="h-44 w-full bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 p-4 flex flex-col justify-between border-b border-emerald-500/30 relative overflow-hidden">
+            <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]" />
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-mono font-bold">
+                <span>📦</span>
+                <span>{auction.sub_properties.length} {language === 'es' ? 'Fincas en Remate Único' : 'Properties En-Bloc'}</span>
+              </span>
+            </div>
+
+            <div className="relative z-10 space-y-1">
+              <p className="text-white font-extrabold text-sm line-clamp-1">
+                {language === 'es' ? 'Portafolio Multipropeidad' : 'Multi-Property Portfolio'}
+              </p>
+              <p className="text-emerald-300/90 text-xs flex items-center gap-1">
+                <span>📍 {Array.from(new Set(auction.sub_properties.map((p) => p.province))).join(' • ')}</span>
+              </p>
+              <p className="text-slate-400 text-[11px]">
+                {formatArea(auction.area_m2)} {language === 'es' ? '(Área Total Combinada)' : '(Total Combined Area)'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <PropertyTypeBanner
+            type={propertyType}
+            language={language}
+            canton={auction.canton}
+            district={auction.district}
+            province={auction.province}
+            areaM2={auction.area_m2}
+            isCondominio={isCondominio}
+            hasConstruction={hasConstruction}
+            className="rounded-b-none border-b border-slate-200 dark:border-slate-800"
+          />
+        )}
 
         {/* Floating Badges Overlay (NEW Badge, Discount Margin & Bookmark) */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-20 pointer-events-none">
@@ -171,13 +195,21 @@ export function AuctionCard({
               <span>{language === 'es' ? stageConfig.labelEs : stageConfig.labelEn}</span>
             </span>
 
-            <span className="font-mono text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold">
-              Folio: {auction.folio_real}
+            <span className="font-mono text-[10.5px] text-slate-500 dark:text-slate-400 font-semibold truncate max-w-[150px]">
+              {auction.is_portfolio_auction && auction.sub_properties
+                ? `4 Fincas`
+                : `Folio: ${auction.folio_real}`}
             </span>
           </div>
 
           {/* Quick Legal Specs Chips (Deal Alpha, Cadastral Exactness, Frontage, Priority) */}
           <div className="pt-2 flex flex-wrap items-center gap-1.5">
+            {auction.is_portfolio_auction && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                <span>📦</span>
+                <span>{language === 'es' ? 'Remate en Bloque' : 'En-Bloc Auction'}</span>
+              </span>
+            )}
             <DealAlphaBadge auction={auction} language={language} size="sm" showTitleTier={false} />
             <CadastralLocationBadge
               locationType={auction.location_type}

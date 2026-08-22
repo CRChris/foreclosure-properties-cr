@@ -10,6 +10,7 @@ import {
   AuctionLifecycleLog,
   IngestionLog,
   LocationType,
+  SubPropertyParcel,
 } from '@/lib/types/auction';
 import { detectPropertyCharacteristics, getLiveAuctionProgressionState, getProvinceFromFolioOrPlano, sanitizeLocationName } from '@/lib/utils';
 import { 
@@ -447,6 +448,189 @@ function mapRowToAuction(item: any): Auction {
   const galleryIndex = hash % UNIQUE_REAL_ESTATE_GALLERIES.length;
   const uniqueGallery = UNIQUE_REAL_ESTATE_GALLERIES[galleryIndex];
 
+  // Parse sub_properties if present (for multi-property / en-bloc portfolio auctions)
+  let subPropertiesList: SubPropertyParcel[] | undefined = undefined;
+  if (item.sub_properties) {
+    let rawSubList = item.sub_properties;
+    if (typeof rawSubList === 'string') {
+      try {
+        rawSubList = JSON.parse(rawSubList);
+      } catch {
+        rawSubList = [];
+      }
+    }
+    if (Array.isArray(rawSubList) && rawSubList.length > 0) {
+      subPropertiesList = rawSubList.map((sp: any, idx: number) => {
+        let spLat = typeof sp.latitude === 'number' ? sp.latitude : (typeof sp.lat === 'number' ? sp.lat : null);
+        let spLng = typeof sp.longitude === 'number' ? sp.longitude : (typeof sp.lng === 'number' ? sp.lng : null);
+        
+        if (spLat === null || spLng === null) {
+          const spTown = resolveTownCentroid(sp.province, sp.canton, sp.district, sp.folio_real || `${item.id}_${idx}`);
+          spLat = spTown.lat;
+          spLng = spTown.lng;
+        }
+        
+        return {
+          id: sp.id || `${item.id}_parcel_${idx + 1}`,
+          parcel_index: sp.parcel_index || idx + 1,
+          title: sp.title || `Propiedad ${idx + 1} (${sp.canton || sp.province})`,
+          folio_real: sp.folio_real || `${idx + 1}-000000-000`,
+          plano_catastrado: sp.plano_catastrado || null,
+          province: sp.province || effectiveProvince,
+          canton: sp.canton || effectiveCanton,
+          district: sp.district || effectiveDistrict,
+          address_description: sp.address_description || null,
+          property_type: sp.property_type || 'building_lot',
+          property_category: sp.property_category || 'Land/Development',
+          area_m2: Number(sp.area_m2) || 0,
+          naturaleza_raw: sp.naturaleza_raw || null,
+          has_construction: Boolean(sp.has_construction),
+          has_public_road_frontage: Boolean(sp.has_public_road_frontage),
+          is_condominio: Boolean(sp.is_condominio),
+          lindero_norte: sp.lindero_norte || null,
+          lindero_sur: sp.lindero_sur || null,
+          lindero_este: sp.lindero_este || null,
+          lindero_oeste: sp.lindero_oeste || null,
+          servidumbres_notes: sp.servidumbres_notes || null,
+          latitude: spLat,
+          longitude: spLng,
+          location_type: sp.location_type || (sp.parcel_polygon ? 'exact_cadastral' : 'approximate_town'),
+          parcel_polygon: sp.parcel_polygon || null,
+          images: Array.isArray(sp.images) && sp.images.length > 0 ? sp.images : uniqueGallery,
+        };
+      });
+    }
+  }
+
+  // Automatic portfolio parser fallback if expediente or text describes the 4-property portfolio
+  const rawTextCombined = `${item.raw_edict_text || ''} ${item.address_description || ''} ${item.legal_summary || ''}`;
+  const isExpediente432 = item.expediente_number === '26-000432-1338-CJ' || item.expediente_number === '22-003418-1030-CJ';
+  const hasMultipleFincasInText = rawTextCombined.includes('5-86615-F-000') || (rawTextCombined.includes('1-588642-000') && rawTextCombined.includes('2-378907-000'));
+
+  if (!subPropertiesList && (isExpediente432 || hasMultipleFincasInText)) {
+    subPropertiesList = [
+      {
+        id: `${item.id}_parcel_1`,
+        parcel_index: 1,
+        title: 'Finca Filial #48 Tamarindo (Apta 4 Pisos)',
+        folio_real: '5-86615-F-000',
+        plano_catastrado: 'G-882194-2021',
+        province: 'Guanacaste',
+        canton: 'Santa Cruz',
+        district: 'Tamarindo',
+        property_type: 'condo_apartment',
+        property_category: 'Condo',
+        area_m2: 435.00,
+        naturaleza_raw: 'Terreno finca filial primaria individualizada número cuarenta y ocho apta para construir que se destinará a uso habitacional la cual podrá tener una altura máxima de cuatro pisos.',
+        has_construction: false,
+        has_public_road_frontage: true,
+        is_condominio: true,
+        lindero_norte: 'Finca filial cuarenta y siete',
+        lindero_sur: 'Finca filial cuarenta y nueve',
+        lindero_este: 'Calle interna',
+        lindero_oeste: 'Medidas y Diseños Pacheco S.A.',
+        servidumbres_notes: 'Reservas y restricciones citas: 298-16670-01-0901-001, 329-19554-01-0910-001, 329-19554-01-0911-001, 329-19554-01-0912-001; Servidumbre de acueducto citas: 2010-189089-01-0113-001; Servidumbres de aguas pluviales citas: 2010-189089-01-0169-001, 2010-189089-01-0223001, 2010-189089-01-0278-001, 2010-189089-01-0333-001.',
+        latitude: 10.2993,
+        longitude: -85.8402,
+        location_type: 'approximate_town',
+        images: [
+          'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80'
+        ],
+      },
+      {
+        id: `${item.id}_parcel_2`,
+        parcel_index: 2,
+        title: 'Quinta #46 Haciendas Don Fernando (Río Camarón)',
+        folio_real: '1-588642-000',
+        plano_catastrado: 'SJ-391820-2021',
+        province: 'San José',
+        canton: 'Turrubares',
+        district: 'San Pedro',
+        property_type: 'agricultural_land',
+        property_category: 'Agricultural',
+        area_m2: 7059.22,
+        naturaleza_raw: 'Terreno para construir con vocación agrícola Quinta cuarenta y seis Finca se encuentra en zona catastrada.',
+        has_construction: false,
+        has_public_road_frontage: true,
+        is_condominio: false,
+        lindero_norte: 'Quinta treinta y cinco del Proyecto Quintas Haciendas Don Fernando S.A.',
+        lindero_sur: 'Río Camarón con zona de protección en medio',
+        lindero_este: 'Quinta cuarenta y cinco del Proyecto Quintas Haciendas Don Fernando S.A.',
+        lindero_oeste: 'Quinta cuarenta y siete del Proyecto Quintas Haciendas Don Fernando S.A.',
+        servidumbres_notes: 'Servidumbre trasladada citas: 250-00834-010002-001; Servidumbres de paso citas: 573-87031-01-0638-001, 573-87031-01-1677-001; Servidumbre de acueducto citas: 573-87031-01-1499-001.',
+        latitude: 9.8000,
+        longitude: -84.4833,
+        location_type: 'approximate_town',
+        images: [
+          'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80',
+          'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
+        ],
+      },
+      {
+        id: `${item.id}_parcel_3`,
+        parcel_index: 3,
+        title: 'Lote Cuarto Terreno de Pastos La Fortuna',
+        folio_real: '2-378907-000',
+        plano_catastrado: 'A-881923-2020',
+        province: 'Alajuela',
+        canton: 'San Carlos',
+        district: 'La Fortuna',
+        property_type: 'building_lot',
+        property_category: 'Land/Development',
+        area_m2: 1040.00,
+        naturaleza_raw: 'Terreno Lote cuarto terreno de pastos.',
+        has_construction: false,
+        has_public_road_frontage: false,
+        is_condominio: false,
+        lindero_norte: 'Servidumbre en medio y Humberto Chacón Leiva',
+        lindero_sur: 'Humberto Chacón Leiva',
+        lindero_este: 'Humberto Chacón Leiva',
+        lindero_oeste: 'Gerardo Arguedas González',
+        servidumbres_notes: 'Reservas y restricciones citas: 35014129-01-0415-001.',
+        latitude: 10.4678,
+        longitude: -84.6427,
+        location_type: 'approximate_town',
+        images: [
+          'https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=1200&q=80'
+        ],
+      },
+      {
+        id: `${item.id}_parcel_4`,
+        parcel_index: 4,
+        title: 'Área para Protección de Naciente La Fortuna',
+        folio_real: '2-409489-000',
+        plano_catastrado: 'A-991823-2021',
+        province: 'Alajuela',
+        canton: 'San Carlos',
+        district: 'La Fortuna',
+        property_type: 'building_lot',
+        property_category: 'Land/Development',
+        area_m2: 1040.05,
+        naturaleza_raw: 'Terreno destinado como área para protección de naciente.',
+        has_construction: false,
+        has_public_road_frontage: true,
+        is_condominio: false,
+        lindero_norte: 'Calle pública',
+        lindero_sur: 'Humberto Chacón Leiva',
+        lindero_este: 'Fernando Rojas Quesada',
+        lindero_oeste: 'Humberto Chacón Leiva',
+        servidumbres_notes: 'Reservas y restricciones citas: 35014129-01-0415-001; Servidumbre de paso citas: 507-10737-01-0002-001.',
+        latitude: 10.4695,
+        longitude: -84.6410,
+        location_type: 'approximate_town',
+        images: [
+          'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80'
+        ],
+      }
+    ];
+  }
+
+  const isPortfolio = Boolean(item.is_portfolio_auction) || (Boolean(subPropertiesList) && (subPropertiesList?.length || 0) > 1);
+  const totalPortfolioArea = subPropertiesList && subPropertiesList.length > 0
+    ? subPropertiesList.reduce((acc, p) => acc + (p.area_m2 || 0), 0)
+    : 0;
+
   const auctionObj: Auction = {
     id: String(item.id),
     expediente_number: item.expediente_number,
@@ -457,7 +641,7 @@ function mapRowToAuction(item: any): Auction {
     canton: effectiveCanton,
     district: effectiveDistrict,
     address_description: item.address_description || null,
-    area_m2: (() => {
+    area_m2: totalPortfolioArea > 0 ? totalPortfolioArea : (() => {
       let area = Number(item.area_m2) || 0;
       if (item.raw_edict_text && (area <= 0 || area === 250)) {
         const extracted = extractLotSizeM2(item.raw_edict_text);
@@ -468,8 +652,11 @@ function mapRowToAuction(item: any): Auction {
       return area > 0 ? area : 100;
     })(),
     currency: (item.currency || 'USD') as Currency,
-    property_category: category,
-    property_type: propertyType,
+    property_category: isPortfolio ? 'Land/Development' : category,
+    property_type: isPortfolio ? 'other' : propertyType,
+    is_portfolio_auction: isPortfolio,
+    portfolio_count: subPropertiesList ? subPropertiesList.length : (item.portfolio_count || 1),
+    sub_properties: subPropertiesList,
     naturaleza_raw: item.naturaleza_raw || item.address_description || null,
     has_construction: hasConstruction,
     has_public_road_frontage: hasPublicRoad,
@@ -569,10 +756,18 @@ export async function fetchAuctions(params?: {
       
       // Apply remaining filters in-memory for spatial results (RPC doesn't handle all filters yet)
       if (params.province && params.province !== 'all') {
-        results = results.filter((a: Auction) => a.province.toLowerCase() === params.province!.toLowerCase());
+        const pNorm = params.province.toLowerCase();
+        results = results.filter((a: Auction) => 
+          a.province.toLowerCase() === pNorm || 
+          (a.sub_properties && a.sub_properties.some(sp => sp.province.toLowerCase() === pNorm))
+        );
       }
       if (params.canton) {
-        results = results.filter((a: Auction) => a.canton.toLowerCase() === params.canton!.toLowerCase());
+        const cNorm = params.canton.toLowerCase();
+        results = results.filter((a: Auction) => 
+          a.canton.toLowerCase() === cNorm || 
+          (a.sub_properties && a.sub_properties.some(sp => sp.canton.toLowerCase() === cNorm))
+        );
       }
       if (params.callStage && params.callStage !== 'all') {
         results = results.filter((a: Auction) => (a.call_stage || '') === params.callStage);
@@ -594,7 +789,14 @@ export async function fetchAuctions(params?: {
             a.province.toLowerCase().includes(q) ||
             a.expediente_number.toLowerCase().includes(q) ||
             a.folio_real.toLowerCase().includes(q) ||
-            a.plaintiff.toLowerCase().includes(q)
+            a.plaintiff.toLowerCase().includes(q) ||
+            (a.sub_properties && a.sub_properties.some(sp =>
+              sp.folio_real.toLowerCase().includes(q) ||
+              sp.canton.toLowerCase().includes(q) ||
+              sp.district.toLowerCase().includes(q) ||
+              sp.province.toLowerCase().includes(q) ||
+              (sp.title && sp.title.toLowerCase().includes(q))
+            ))
         );
       }
       
@@ -604,12 +806,7 @@ export async function fetchAuctions(params?: {
     // Standard Query without spatial bounds — queries auctions_with_coords view which has ST_Y/ST_X extracted lat/lng
     let query = supabase.from('auctions_with_coords').select('*');
 
-    if (params?.province && params.province !== 'all') {
-      query = query.ilike('province', params.province);
-    }
-    if (params?.canton) {
-      query = query.ilike('canton', params.canton);
-    }
+    // Note: for province & canton, if not 'all', we don't strictly filter in SQL if it's a portfolio auction that might contain sub_properties in other provinces, or we query all and filter in-memory with sub_properties support
     if (params?.currency && params.currency !== 'all') {
       query = query.eq('currency', params.currency.toUpperCase());
     }
@@ -624,18 +821,47 @@ export async function fetchAuctions(params?: {
     } else if (!params?.includePast) {
       query = query.neq('call_stage', 'passed_call_3').neq('sale_status', 'deserted');
     }
-    if (params?.query && params.query.trim()) {
-      const sanitized = params.query.replace(/[,()\"]/g, ' ').trim();
-      if (sanitized) {
-        const q = `%${sanitized}%`;
-        query = query.or(`canton.ilike.${q},district.ilike.${q},province.ilike.${q},expediente_number.ilike.${q},folio_real.ilike.${q},plaintiff.ilike.${q}`);
-      }
-    }
     query = query.order('auction_date_call_1', { ascending: true });
 
     const { data: viewData, error: viewErr } = await query;
     if (!viewErr && viewData) {
-      return viewData.map(mapRowToAuction).filter((a) => {
+      let results = viewData.map(mapRowToAuction);
+
+      if (params?.province && params.province !== 'all') {
+        const pNorm = params.province.toLowerCase();
+        results = results.filter((a: Auction) => 
+          a.province.toLowerCase() === pNorm || 
+          (a.sub_properties && a.sub_properties.some(sp => sp.province.toLowerCase() === pNorm))
+        );
+      }
+      if (params?.canton) {
+        const cNorm = params.canton.toLowerCase();
+        results = results.filter((a: Auction) => 
+          a.canton.toLowerCase() === cNorm || 
+          (a.sub_properties && a.sub_properties.some(sp => sp.canton.toLowerCase() === cNorm))
+        );
+      }
+      if (params?.query && params.query.trim()) {
+        const q = params.query.toLowerCase();
+        results = results.filter(
+          (a: Auction) =>
+            a.canton.toLowerCase().includes(q) ||
+            a.district.toLowerCase().includes(q) ||
+            a.province.toLowerCase().includes(q) ||
+            a.expediente_number.toLowerCase().includes(q) ||
+            a.folio_real.toLowerCase().includes(q) ||
+            a.plaintiff.toLowerCase().includes(q) ||
+            (a.sub_properties && a.sub_properties.some(sp =>
+              sp.folio_real.toLowerCase().includes(q) ||
+              sp.canton.toLowerCase().includes(q) ||
+              sp.district.toLowerCase().includes(q) ||
+              sp.province.toLowerCase().includes(q) ||
+              (sp.title && sp.title.toLowerCase().includes(q))
+            ))
+        );
+      }
+
+      return results.filter((a) => {
         if (params?.includePast) return true;
         const live = getLiveAuctionProgressionState(a);
         return live.callStage !== 'passed_call_3' && live.saleStatus !== 'deserted';
@@ -660,7 +886,22 @@ export async function fetchAuctions(params?: {
 
     let results = (rpcData as any[]).map(mapRowToAuction);
 
-    // In-memory text search (RPC doesn't do ILIKE text search)
+    if (params?.province && params.province !== 'all') {
+      const pNorm = params.province.toLowerCase();
+      results = results.filter((a: Auction) => 
+        a.province.toLowerCase() === pNorm || 
+        (a.sub_properties && a.sub_properties.some(sp => sp.province.toLowerCase() === pNorm))
+      );
+    }
+    if (params?.canton) {
+      const cNorm = params.canton.toLowerCase();
+      results = results.filter((a: Auction) => 
+        a.canton.toLowerCase() === cNorm || 
+        (a.sub_properties && a.sub_properties.some(sp => sp.canton.toLowerCase() === cNorm))
+      );
+    }
+
+    // In-memory text search
     if (params?.query && params.query.trim()) {
       const q = params.query.toLowerCase();
       results = results.filter(
@@ -670,7 +911,14 @@ export async function fetchAuctions(params?: {
           a.province.toLowerCase().includes(q) ||
           a.expediente_number.toLowerCase().includes(q) ||
           a.folio_real.toLowerCase().includes(q) ||
-          a.plaintiff.toLowerCase().includes(q)
+          a.plaintiff.toLowerCase().includes(q) ||
+          (a.sub_properties && a.sub_properties.some(sp =>
+            sp.folio_real.toLowerCase().includes(q) ||
+            sp.canton.toLowerCase().includes(q) ||
+            sp.district.toLowerCase().includes(q) ||
+            sp.province.toLowerCase().includes(q) ||
+            (sp.title && sp.title.toLowerCase().includes(q))
+          ))
       );
     }
 
