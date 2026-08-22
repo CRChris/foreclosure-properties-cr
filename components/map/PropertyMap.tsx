@@ -220,9 +220,14 @@ export function PropertyMap({
     }
   };
 
-  // Reset minimized state whenever selected auction changes
+  // Only reset internalMinimizedPinId when selectedAuctionId ACTUALLY changes to a different auction ID
+  const prevSelectedAuctionIdRef = useRef<string | null>(selectedAuctionId ?? null);
   useEffect(() => {
-    setInternalMinimizedPinId(null);
+    const currentId = selectedAuctionId ?? null;
+    if (prevSelectedAuctionIdRef.current !== currentId) {
+      prevSelectedAuctionIdRef.current = currentId;
+      setInternalMinimizedPinId(null);
+    }
   }, [selectedAuctionId]);
 
   // Capture phase listener to handle the 'x' close button click on the marker
@@ -541,7 +546,7 @@ export function PropertyMap({
       : '';
 
     const closeButtonHtml = (isParentSelected || isSubParcelSelected)
-      ? `<button type="button" class="pin-close-btn absolute -top-3 -right-3 w-5 h-5 bg-slate-900/95 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-white dark:border-slate-800 transition-transform duration-200 hover:scale-125 active:scale-90 cursor-pointer z-30 pointer-events-auto" data-pin-key="${pinKey}" data-auction-id="${auction.id}" title="${language === 'es' ? 'Mover marcador a un lado para ver linderos' : 'Move pin aside to view property borders'}">✕</button>`
+      ? `<button type="button" class="pin-close-btn absolute -top-3 -right-3 w-5 h-5 bg-slate-900/95 hover:bg-rose-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-xl border-2 border-white dark:border-slate-800 transition-transform duration-200 hover:scale-125 active:scale-90 cursor-pointer z-50 pointer-events-auto" data-pin-key="${pinKey}" data-auction-id="${auction.id}" onmousedown="event.stopPropagation();" onclick="event.stopPropagation(); event.preventDefault();" title="${language === 'es' ? 'Mover marcador a un lado para ver linderos' : 'Move pin aside to view property borders'}">✕</button>`
       : '';
 
     const iconHtml = `
@@ -774,6 +779,11 @@ export function PropertyMap({
             ? isAuctionCoLocatedWithSelected(auction, selectedAuction)
             : false;
 
+          // If this auction is not the selected auction and it is co-located with any parcel of the selected auction, hide it
+          if (!isSelected && isCoLocated) {
+            return null;
+          }
+
           // If this is a portfolio auction with multiple sub-properties across Costa Rica:
           if (auction.is_portfolio_auction && auction.sub_properties && auction.sub_properties.length > 0) {
             const subPropsWithCoords = auction.sub_properties.filter(
@@ -807,7 +817,12 @@ export function PropertyMap({
                 {subPropsWithCoords.map((sp) => {
                   const isSubSelected = selectedSubParcelIndex === sp.parcel_index;
                   const pinKey = `${auction.id}_sub_${sp.parcel_index}`;
-                  const isSubMinimized = activeMinimizedPinId === pinKey;
+                  const isSubMinimized = Boolean(
+                    activeMinimizedPinId &&
+                    (activeMinimizedPinId === pinKey ||
+                     (activeMinimizedPinId === auction.id && isSubSelected) ||
+                     (activeMinimizedPinId.startsWith(`${auction.id}_sub_`) && activeMinimizedPinId === pinKey))
+                  );
 
                   if (isSubMinimized) {
                     const minimizedPos = getSubPropertyMinimizedPosition(sp);
@@ -847,7 +862,8 @@ export function PropertyMap({
                           position={minimizedPos}
                           icon={createSubPropertyMinimizedIcon(auction, sp)}
                           eventHandlers={{
-                            click: () => {
+                            click: (e) => {
+                              L.DomEvent.stopPropagation(e as any);
                               setMinimizedPinId(null);
                             },
                           }}
@@ -862,7 +878,11 @@ export function PropertyMap({
                       position={[sp.latitude, sp.longitude]}
                       icon={createSubPropertyIcon(auction, sp, isSelected, isSubSelected)}
                       eventHandlers={{
-                        click: () => {
+                        click: (e) => {
+                          const target = (e as any).originalEvent?.target as HTMLElement;
+                          if (target && target.closest('.pin-close-btn')) {
+                            return;
+                          }
                           if (onSelectAuction) onSelectAuction(auction);
                           if (onSelectSubProperty) onSelectSubProperty(auction, sp);
                         },
