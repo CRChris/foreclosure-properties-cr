@@ -40,6 +40,7 @@ export default function MapExplorerPage() {
   const [selectedAuction, setSelectedAuction] = useState<Auction | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProvince, setSelectedProvince] = useState<CostaRicaProvince | 'all'>('all');
+  const [selectedSubParcelIndex, setSelectedSubParcelIndex] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -142,7 +143,10 @@ export default function MapExplorerPage() {
                 return (
                   <div
                     key={auction.id}
-                    onClick={() => setSelectedAuction(auction)}
+                    onClick={() => {
+                      setSelectedAuction(auction);
+                      setSelectedSubParcelIndex(null);
+                    }}
                     className={`p-3 rounded-xl cursor-pointer transition-all border-2 ${
                       isSelected
                         ? stageConfig.selectedBorderClass
@@ -151,7 +155,9 @@ export default function MapExplorerPage() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {auction.district ? `${auction.district}, ` : ''}{auction.canton}
+                        {auction.is_portfolio_auction && auction.sub_properties
+                          ? `📦 Portafolio (${auction.sub_properties.length} Fincas)`
+                          : `${auction.district ? `${auction.district}, ` : ''}${auction.canton}`}
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${stageConfig.tagClass}`}>
@@ -181,22 +187,11 @@ export default function MapExplorerPage() {
                         </span>
                       )}
                     </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800/60">
-                      <span className="flex items-center gap-1">
-                        <Maximize2 className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                        {formatArea(auction.area_m2)}
-                      </span>
-                      <span className="font-mono text-slate-500 dark:text-slate-400 text-[10.5px]">
-                        Folio: {auction.folio_real}
-                      </span>
-                    </div>
                   </div>
                 );
               })
             ) : (
-              <div className="p-6 text-center space-y-2.5 text-slate-400">
-                <Scale className="w-6 h-6 mx-auto text-slate-400 dark:text-slate-500" />
+              <div className="text-center py-12 px-4 space-y-2">
                 <p className="text-xs font-semibold text-slate-900 dark:text-white">
                   {searchQuery.trim() || selectedProvince !== 'all' || auctions.length > 0
                     ? t.empty.noResultsTitle
@@ -230,9 +225,17 @@ export default function MapExplorerPage() {
           <MapWrapper
             auctions={filteredAuctions}
             selectedAuctionId={selectedAuction?.id}
-            onSelectAuction={(auction) => setSelectedAuction(auction)}
+            selectedSubParcelIndex={selectedSubParcelIndex}
+            onSelectAuction={(auction) => {
+              setSelectedAuction(auction);
+              setSelectedSubParcelIndex(null);
+            }}
+            onSelectSubProperty={(auction, subProp) => {
+              setSelectedAuction(auction);
+              setSelectedSubParcelIndex(subProp.parcel_index);
+            }}
             center={centerCoordinates}
-            zoom={selectedAuction ? 14 : COSTA_RICA_DEFAULT_ZOOM}
+            zoom={selectedAuction ? (selectedAuction.is_portfolio_auction ? 8 : 14) : COSTA_RICA_DEFAULT_ZOOM}
             height="100%"
           />
 
@@ -240,13 +243,18 @@ export default function MapExplorerPage() {
           {selectedAuction && (() => {
             const selectedLive = getLiveAuctionProgressionState(selectedAuction);
             const selectedStage = getCallStageConfig(selectedLive);
-            const lat = selectedAuction.latitude;
-            const lng = selectedAuction.longitude;
+            const isPortfolio = Boolean(selectedAuction.is_portfolio_auction && selectedAuction.sub_properties);
+            const activeSub = isPortfolio && selectedSubParcelIndex !== null
+              ? selectedAuction.sub_properties?.find((sp) => sp.parcel_index === selectedSubParcelIndex) || null
+              : null;
+
+            const lat = activeSub ? activeSub.latitude : selectedAuction.latitude;
+            const lng = activeSub ? activeSub.longitude : selectedAuction.longitude;
             const googleMapsUrl = lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : null;
             const wazeUrl = lat && lng ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` : null;
 
             return (
-              <div className={`absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-88 bg-white/95 dark:bg-slate-950/95 border-2 ${selectedStage.borderClass} rounded-2xl p-4 shadow-2xl backdrop-blur-md z-[1000] space-y-2.5`}>
+              <div className={`absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 bg-white/95 dark:bg-slate-950/95 border-2 ${selectedStage.borderClass} rounded-2xl p-4 shadow-2xl backdrop-blur-md z-[1000] space-y-2.5`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1.5 pb-1">
@@ -255,32 +263,61 @@ export default function MapExplorerPage() {
                         <span>{language === 'es' ? selectedStage.shortLabelEs : selectedStage.shortLabelEn}</span>
                       </span>
                       <CadastralLocationBadge
-                        locationType={selectedAuction.location_type}
-                        hasPolygon={!!selectedAuction.parcel_polygon}
+                        locationType={activeSub ? activeSub.location_type : selectedAuction.location_type}
+                        hasPolygon={Boolean(activeSub?.parcel_polygon || selectedAuction.parcel_polygon)}
                         language={language}
                         size="xs"
                       />
                     </div>
                     <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
-                      {getLocalizedPropertyTitle(selectedAuction, language)}
+                      {activeSub ? activeSub.title : getLocalizedPropertyTitle(selectedAuction, language)}
                     </p>
                     <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                      {selectedAuction.district ? `${selectedAuction.district}, ` : ''}{selectedAuction.canton}, {selectedAuction.province}
+                      {activeSub
+                        ? `${activeSub.district ? `${activeSub.district}, ` : ''}${activeSub.canton}, ${activeSub.province}`
+                        : `${selectedAuction.district ? `${selectedAuction.district}, ` : ''}${selectedAuction.canton}, ${selectedAuction.province}`}
                     </p>
                   </div>
                 </div>
 
+                {isPortfolio && selectedAuction.sub_properties && (
+                  <div className="pt-1 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide block">
+                      {language === 'es' ? 'Fincas en este Remate:' : 'Parcels in this Foreclosure:'}
+                    </span>
+                    <div className="grid grid-cols-2 gap-1">
+                      {selectedAuction.sub_properties.map((sp) => {
+                        const isSubActive = selectedSubParcelIndex === sp.parcel_index;
+                        return (
+                          <button
+                            key={sp.parcel_index}
+                            type="button"
+                            onClick={() => setSelectedSubParcelIndex(sp.parcel_index)}
+                            className={`text-[10px] p-1.5 rounded-lg font-bold truncate text-left transition-all border ${
+                              isSubActive
+                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                                : 'bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
+                            }`}
+                          >
+                            <span>#{sp.parcel_index}: {sp.canton}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-baseline justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase font-bold block">
-                      {language === 'es' ? selectedStage.shortLabelEs : selectedStage.shortLabelEn}
+                      {isPortfolio ? (language === 'es' ? 'Base Paquete (4 Fincas)' : 'Package Base') : (language === 'es' ? selectedStage.shortLabelEs : selectedStage.shortLabelEn)}
                     </span>
                     <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
                       {formatCurrency(selectedLive.currentBasePrice, selectedAuction.currency)}
                     </span>
                   </div>
                   <span className="text-xs text-slate-600 dark:text-slate-300 font-mono">
-                    {formatArea(selectedAuction.area_m2)}
+                    {formatArea(activeSub ? activeSub.area_m2 : selectedAuction.area_m2)}
                   </span>
                 </div>
 

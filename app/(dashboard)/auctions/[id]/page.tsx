@@ -738,6 +738,10 @@ export default function AuctionDetailPage({ params }: AuctionDetailPageProps) {
           <MapWrapper
             auctions={[auction]}
             selectedAuctionId={auction.id}
+            selectedSubParcelIndex={selectedSubParcelIndex}
+            onSelectSubProperty={(auc, subProp) => {
+              setSelectedSubParcelIndex(subProp.parcel_index);
+            }}
             center={
               activeSubProperty && activeSubProperty.latitude && activeSubProperty.longitude
                 ? [activeSubProperty.latitude, activeSubProperty.longitude]

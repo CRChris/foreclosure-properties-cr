@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, GeoJSON, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Auction, SubPropertyParcel } from '@/lib/types/auction';
 import { 
   getLiveAuctionProgressionState,
+  formatCurrency,
+  formatArea,
+  getLocalizedPropertyTitle,
 } from '@/lib/utils';
 import Link from 'next/link';
 import { 
@@ -17,6 +20,10 @@ import {
   Loader2,
   Compass,
   Package,
+  MapPin,
+  ArrowRight,
+  Navigation,
+  ExternalLink,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { useTheme } from '@/lib/theme/ThemeContext';
@@ -28,6 +35,8 @@ export interface PropertyMapProps {
   auctions: Auction[];
   selectedAuctionId?: string | null;
   onSelectAuction?: (auction: Auction | null) => void;
+  selectedSubParcelIndex?: number | null;
+  onSelectSubProperty?: (auction: Auction, subProperty: SubPropertyParcel) => void;
   center?: [number, number];
   zoom?: number;
   height?: string;
@@ -132,6 +141,8 @@ export function PropertyMap({
   auctions,
   selectedAuctionId,
   onSelectAuction,
+  selectedSubParcelIndex,
+  onSelectSubProperty,
   center = COSTA_RICA_CENTER, // Whole country Costa Rica center
   zoom = COSTA_RICA_DEFAULT_ZOOM, // Zoomed out to view entire country
   height = '100%',
@@ -369,17 +380,22 @@ export function PropertyMap({
   const createSubPropertyIcon = (
     auction: Auction,
     subProperty: SubPropertyParcel,
-    isSelected: boolean
+    isParentSelected: boolean,
+    isSubParcelSelected: boolean
   ) => {
     const liveState = getLiveAuctionProgressionState(auction);
     const isExact = subProperty.location_type === 'exact_cadastral';
     const parcelIdx = subProperty.parcel_index;
 
     let colorClass = 'bg-emerald-700 border-emerald-300 text-white shadow-emerald-950/70';
-    let ringClass = isSelected
+    let ringClass = isSubParcelSelected
       ? isDark
-        ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50'
-        : 'ring-4 ring-emerald-500 ring-offset-2 ring-offset-white scale-125 z-50'
+        ? 'ring-4 ring-emerald-400 ring-offset-2 ring-offset-slate-950 scale-135 z-50 animate-pulse'
+        : 'ring-4 ring-emerald-500 ring-offset-2 ring-offset-white scale-135 z-50 animate-pulse'
+      : isParentSelected
+      ? isDark
+        ? 'ring-3 ring-emerald-400/80 ring-offset-1 ring-offset-slate-950 scale-120 z-40'
+        : 'ring-3 ring-emerald-500/80 ring-offset-1 ring-offset-white scale-120 z-40'
       : 'hover:scale-115';
 
     if (liveState.callStage === 'call_3') {
@@ -395,7 +411,7 @@ export function PropertyMap({
     const iconHtml = `
       <div class="relative flex items-center justify-center cursor-pointer transition-all duration-300 ${ringClass}">
         <div class="flex flex-col items-center justify-center w-11 h-11 rounded-full border-2 shadow-xl ${colorClass} text-[10px] font-black tracking-tight leading-tight">
-          <span class="text-[7.5px] opacity-80 leading-none">📦 #${parcelIdx}</span>
+          <span class="text-[7.5px] opacity-85 leading-none">📦 #${parcelIdx}</span>
           <span class="text-[9px] leading-none">${subProperty.canton.slice(0, 5)}</span>
         </div>
         ${exactBadgeDot}
@@ -637,19 +653,108 @@ export function PropertyMap({
                   );
                 })}
 
-                {/* 4 Distinct Sub-Property Pins */}
-                {subPropsWithCoords.map((sp) => (
-                  <Marker
-                    key={`portfolio-pin-${auction.id}-sub-${sp.parcel_index}`}
-                    position={[sp.latitude, sp.longitude]}
-                    icon={createSubPropertyIcon(auction, sp, isSelected)}
-                    eventHandlers={{
-                      click: () => {
-                        if (onSelectAuction) onSelectAuction(auction);
-                      },
-                    }}
-                  />
-                ))}
+                {/* 4 Distinct Sub-Property Pins with Interactive Popups & Select Callbacks */}
+                {subPropsWithCoords.map((sp) => {
+                  const isSubSelected = selectedSubParcelIndex === sp.parcel_index;
+                  return (
+                    <Marker
+                      key={`portfolio-pin-${auction.id}-sub-${sp.parcel_index}`}
+                      position={[sp.latitude, sp.longitude]}
+                      icon={createSubPropertyIcon(auction, sp, isSelected, isSubSelected)}
+                      eventHandlers={{
+                        click: () => {
+                          if (onSelectAuction) onSelectAuction(auction);
+                          if (onSelectSubProperty) onSelectSubProperty(auction, sp);
+                        },
+                      }}
+                    >
+                      <Popup className="custom-leaflet-popup" autoPan={true} autoPanPadding={[50, 50]}>
+                        <div className="p-3 max-w-[290px] space-y-2.5 font-sans">
+                          <div className="flex items-center justify-between gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10.5px] font-mono font-bold">
+                              <span>📦</span>
+                              <span>Finca #{sp.parcel_index} de {auction.portfolio_count || 4}</span>
+                            </span>
+                            <span className="font-mono text-[10.5px] text-slate-700 dark:text-slate-300 font-bold">
+                              {sp.folio_real}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-extrabold text-slate-900 dark:text-white leading-tight">
+                              {sp.title || `Inmueble #${sp.parcel_index}`}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1">
+                              <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>{sp.district ? `${sp.district}, ` : ''}{sp.canton}, {sp.province}</span>
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-950/60 p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px]">
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase font-bold block">{language === 'es' ? 'Área Finca' : 'Parcel Area'}</span>
+                              <span className="font-mono font-black text-slate-900 dark:text-white">{formatArea(sp.area_m2)}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 uppercase font-bold block">{language === 'es' ? 'Base Paquete' : 'Package Base'}</span>
+                              <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(auction.base_price_call_1, auction.currency)}</span>
+                            </div>
+                          </div>
+
+                          {sp.naturaleza_raw && (
+                            <p className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-2 italic bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg border border-slate-200/60 dark:border-slate-800">
+                              "{sp.naturaleza_raw}"
+                            </p>
+                          )}
+
+                          <div className="pt-1 flex flex-col gap-1.5">
+                            {onSelectSubProperty && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectSubProperty(auction, sp);
+                                }}
+                                className="w-full py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                              >
+                                <span>{language === 'es' ? '🔍 Inspeccionar en Expediente' : '🔍 Inspect in Dossier'}</span>
+                              </button>
+                            )}
+
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${sp.latitude},${sp.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 py-1 px-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold text-center flex items-center justify-center gap-1 shadow-sm"
+                              >
+                                <MapPin className="w-3 h-3 text-blue-500" />
+                                <span>Maps</span>
+                              </a>
+                              <a
+                                href={`https://waze.com/ul?ll=${sp.latitude},${sp.longitude}&navigate=yes`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 py-1 px-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold text-center flex items-center justify-center gap-1 shadow-sm"
+                              >
+                                <Navigation className="w-3 h-3 text-sky-500" />
+                                <span>Waze</span>
+                              </a>
+                            </div>
+
+                            <Link
+                              href={`/auctions/${auction.id}`}
+                              className="w-full py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              <span>{language === 'es' ? 'Ver Expediente Completo' : 'View Full Dossier'}</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </Link>
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               </React.Fragment>
             );
           }
@@ -720,7 +825,74 @@ export function PropertyMap({
                   if (onSelectAuction) onSelectAuction(auction);
                 },
               }}
-            />
+            >
+              <Popup className="custom-leaflet-popup" autoPan={true} autoPanPadding={[50, 50]}>
+                <div className="p-3 max-w-[280px] space-y-2.5 font-sans">
+                  <div className="flex items-center justify-between gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
+                    <span className="font-mono text-[10.5px] text-slate-700 dark:text-slate-300 font-bold">
+                      Folio: {auction.folio_real}
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-400 truncate max-w-[120px]">
+                      Exp: {auction.expediente_number}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-extrabold text-slate-900 dark:text-white leading-tight">
+                      {getLocalizedPropertyTitle(auction, language)}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1">
+                      <MapPin className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>{auction.district ? `${auction.district}, ` : ''}{auction.canton}, {auction.province}</span>
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-950/60 p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px]">
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block">{language === 'es' ? 'Área' : 'Area'}</span>
+                      <span className="font-mono font-black text-slate-900 dark:text-white">{formatArea(auction.area_m2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 uppercase font-bold block">{language === 'es' ? 'Base Actual' : 'Current Base'}</span>
+                      <span className="font-mono font-black text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(auction.current_base_price || auction.base_price_call_1, auction.currency)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-1 px-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold text-center flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <MapPin className="w-3 h-3 text-blue-500" />
+                        <span>Maps</span>
+                      </a>
+                      <a
+                        href={`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-1 px-2 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 text-[10px] font-bold text-center flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <Navigation className="w-3 h-3 text-sky-500" />
+                        <span>Waze</span>
+                      </a>
+                    </div>
+
+                    <Link
+                      href={`/auctions/${auction.id}`}
+                      className="w-full py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <span>{language === 'es' ? 'Ver Expediente Completo' : 'View Full Dossier'}</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
           );
         })}
       </MapContainer>
