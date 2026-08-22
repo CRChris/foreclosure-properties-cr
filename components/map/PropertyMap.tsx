@@ -95,10 +95,10 @@ function MapController({
                 const bounds = geoJsonLayer.getBounds();
                 if (bounds.isValid()) {
                   map.fitBounds(bounds, {
-                    padding: [50, 50],
+                    padding: [45, 45],
                     maxZoom: 18,
                     animate: true,
-                    duration: 1.0,
+                    duration: 0.9,
                   });
                   return;
                 }
@@ -107,40 +107,49 @@ function MapController({
               }
             }
 
-            // High-resolution property level point zoom
-            const targetZoom = subProp.location_type === 'exact_cadastral' ? 17 : 15;
-            map.flyTo([subProp.latitude, subProp.longitude], targetZoom, {
-              duration: 1.0,
+            // High-resolution property level point zoom (zoom 18 shows full parcel borders)
+            map.flyTo([subProp.latitude, subProp.longitude], 18, {
+              duration: 0.9,
               easeLinearity: 0.25,
             });
             return;
           }
         }
 
-        // B. If portfolio auction is selected without a specific sub-parcel, frame all 4 across the country
+        // B. If portfolio auction is selected without a specific sub-parcel, zoom directly to first parcel or frame
         if (
           selectedAuction.is_portfolio_auction &&
           selectedAuction.sub_properties &&
-          selectedAuction.sub_properties.length > 1
+          selectedAuction.sub_properties.length > 0
         ) {
-          const validPoints: [number, number][] = selectedAuction.sub_properties
-            .filter((sp): sp is SubPropertyParcel & { latitude: number; longitude: number } =>
-              typeof sp.latitude === 'number' && typeof sp.longitude === 'number' && !isNaN(sp.latitude) && !isNaN(sp.longitude)
-            )
-            .map((sp) => [sp.latitude, sp.longitude]);
-          if (validPoints.length > 0) {
-            const bounds = L.latLngBounds(validPoints);
-            map.fitBounds(bounds, {
-              padding: [60, 60],
-              maxZoom: 14,
-              animate: true,
-              duration: 1.0,
+          const firstProp = selectedAuction.sub_properties[0];
+          if (firstProp && firstProp.latitude && firstProp.longitude) {
+            if (firstProp.parcel_polygon) {
+              try {
+                const geoJsonLayer = L.geoJSON(firstProp.parcel_polygon as any);
+                const bounds = geoJsonLayer.getBounds();
+                if (bounds.isValid()) {
+                  map.fitBounds(bounds, {
+                    padding: [45, 45],
+                    maxZoom: 18,
+                    animate: true,
+                    duration: 0.9,
+                  });
+                  return;
+                }
+              } catch {
+                // ignore
+              }
+            }
+            map.flyTo([firstProp.latitude, firstProp.longitude], 18, {
+              duration: 0.9,
+              easeLinearity: 0.25,
             });
             return;
           }
         }
 
-        // C. Standard single property auction: zoom in directly to property level
+        // C. Standard single property auction: zoom in directly to property level (zoom 18)
         if (selectedAuction.latitude && selectedAuction.longitude) {
           if (selectedAuction.parcel_polygon) {
             try {
@@ -148,10 +157,10 @@ function MapController({
               const bounds = geoJsonLayer.getBounds();
               if (bounds.isValid()) {
                 map.fitBounds(bounds, {
-                  padding: [50, 50],
+                  padding: [45, 45],
                   maxZoom: 18,
                   animate: true,
-                  duration: 1.0,
+                  duration: 0.9,
                 });
                 return;
               }
@@ -160,10 +169,9 @@ function MapController({
             }
           }
 
-          // Fallback property-level zoom
-          const targetZoom = selectedAuction.location_type === 'exact_cadastral' ? 17 : 15;
-          map.flyTo([selectedAuction.latitude, selectedAuction.longitude], targetZoom, {
-            duration: 1.0,
+          // Full property-level zoom
+          map.flyTo([selectedAuction.latitude, selectedAuction.longitude], 18, {
+            duration: 0.9,
             easeLinearity: 0.25,
           });
         }
@@ -557,9 +565,27 @@ export function PropertyMap({
     });
   };
 
-  const validAuctions = auctions.filter(
-    (a) => a.latitude !== null && a.longitude !== null && !isNaN(a.latitude) && !isNaN(a.longitude)
-  );
+  const validAuctions = React.useMemo(() => {
+    const seenIds = new Set<string>();
+    const seenExp = new Set<string>();
+    const list: Auction[] = [];
+
+    for (const a of auctions) {
+      if (a.latitude === null || a.longitude === null || isNaN(a.latitude) || isNaN(a.longitude)) {
+        continue;
+      }
+      if (seenIds.has(a.id)) continue;
+      seenIds.add(a.id);
+
+      if (a.is_portfolio_auction && a.expediente_number) {
+        if (seenExp.has(a.expediente_number)) continue;
+        seenExp.add(a.expediente_number);
+      }
+
+      list.push(a);
+    }
+    return list;
+  }, [auctions]);
 
   const selectedAuction = validAuctions.find((a) => a.id === selectedAuctionId) || null;
 
@@ -600,7 +626,6 @@ export function PropertyMap({
           <Satellite className="w-3.5 h-3.5" />
           <span>{language === 'es' ? 'Satélite' : 'Satellite'}</span>
         </button>
-
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
 
         <button
@@ -617,22 +642,24 @@ export function PropertyMap({
         </button>
       </div>
 
-
-      {/* Town Center / Approximate / In-Process Status Banner (Only shown when exact location is unknown) */}
+      {/* Floating Cadastral Accuracy Banner (Top-Left under zoom controls) */}
       {selectedAuction && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] max-w-xs sm:max-w-md pointer-events-auto hidden sm:block">
-          {selectedAuction.location_type === 'pending_mapping' ? (
-            <div className="bg-sky-950/95 text-sky-100 backdrop-blur-md border border-sky-500/50 rounded-xl px-3.5 py-2 text-[11px] shadow-xl flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-sky-400 shrink-0 animate-spin" />
+        <div className="absolute top-3 left-14 z-[400] pointer-events-auto max-w-[280px] sm:max-w-xs transition-all duration-300">
+          {selectedAuction.location_type === 'exact_cadastral' ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/90 text-emerald-200 border border-emerald-500/40 text-[11px] shadow-lg backdrop-blur-md">
+              <span className="flex h-2 w-2 relative shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
               <p className="leading-tight font-medium">
                 {language === 'en'
-                  ? '⏳ Map location in process...'
-                  : '⏳ Georreferenciación en proceso...'}
+                  ? '🎯 Official Cadastral Match — Exact property boundary from SNIT.'
+                  : '🎯 Plano Catastrado Oficial — Linderos exactos del SNIT.'}
               </p>
             </div>
-          ) : (!selectedAuction.parcel_polygon && selectedAuction.location_type !== 'exact_cadastral') ? (
-            <div className="bg-amber-950/95 dark:bg-amber-950/95 backdrop-blur-md border border-amber-500/60 rounded-xl px-3.5 py-2 text-[11px] text-amber-100 shadow-xl flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          ) : selectedAuction.location_type === 'approximate_town' ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/90 text-amber-200 border border-amber-500/40 text-[11px] shadow-lg backdrop-blur-md">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <p className="leading-tight font-medium">
                 {language === 'en'
                   ? '📍 General vicinity — exact location is unknown (Town center fallback).'
@@ -754,24 +781,8 @@ export function PropertyMap({
                 typeof sp.latitude === 'number' && typeof sp.longitude === 'number' && !isNaN(sp.latitude) && !isNaN(sp.longitude)
             );
 
-            // Connect portfolio parcels with dashed route
-            const linePositions: [number, number][] = subPropsWithCoords.map((sp) => [sp.latitude, sp.longitude]);
-
             return (
               <React.Fragment key={`portfolio-group-${auction.id}`}>
-                {/* Connecting portfolio dashed flight path line */}
-                {linePositions.length > 1 && (
-                  <Polyline
-                    positions={linePositions}
-                    pathOptions={{
-                      color: isSelected ? '#10b981' : '#0d9488',
-                      dashArray: '4, 6',
-                      weight: isSelected ? 3 : 1.75,
-                      opacity: isSelected ? 0.9 : 0.45,
-                    }}
-                  />
-                )}
-
                 {/* Sub-property parcel polygons if available */}
                 {subPropsWithCoords.map((sp) => {
                   if (!sp.parcel_polygon) return null;
@@ -796,7 +807,7 @@ export function PropertyMap({
                 {subPropsWithCoords.map((sp) => {
                   const isSubSelected = selectedSubParcelIndex === sp.parcel_index;
                   const pinKey = `${auction.id}_sub_${sp.parcel_index}`;
-                  const isSubMinimized = activeMinimizedPinId === pinKey || (activeMinimizedPinId === auction.id && isSubSelected);
+                  const isSubMinimized = activeMinimizedPinId === pinKey;
 
                   if (isSubMinimized) {
                     const minimizedPos = getSubPropertyMinimizedPosition(sp);

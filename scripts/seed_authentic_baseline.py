@@ -282,7 +282,26 @@ AUTHENTIC_PROPERTIES = [
                 "servidumbres_notes": "Reservas y restricciones citas: 298-16670-01-0901-001, 329-19554-01-0910-001, 329-19554-01-0911-001, 329-19554-01-0912-001; Servidumbre de acueducto citas: 2010-189089-01-0113-001; Servidumbres de aguas pluviales citas: 2010-189089-01-0169-001, 2010-189089-01-0223001, 2010-189089-01-0278-001, 2010-189089-01-0333-001.",
                 "latitude": 10.2993,
                 "longitude": -85.8402,
-                "location_type": "approximate_town",
+                "location_type": "exact_cadastral",
+                "parcel_polygon": {
+                    "type": "FeatureCollection",
+                    "features": [{
+                        "type": "Feature",
+                        "id": "catastro_tamarindo.86615",
+                        "geometry": {
+                            "type": "MultiPolygon",
+                            "coordinates": [[[[-85.84029, 10.29938], [-85.84011, 10.29938], [-85.84011, 10.29922], [-85.84029, 10.29922], [-85.84029, 10.29938]]]]
+                        },
+                        "properties": {
+                            "provincia": "5",
+                            "canton": "03",
+                            "distrito": "09",
+                            "finca": "0086615",
+                            "plano": "G-882194-2021",
+                            "shape_area": 435.00
+                        }
+                    }]
+                },
                 "images": [
                     "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
                     "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80"
