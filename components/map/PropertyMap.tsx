@@ -824,143 +824,137 @@ export function PropertyMap({
                      (activeMinimizedPinId.startsWith(`${auction.id}_sub_`) && activeMinimizedPinId === pinKey))
                   );
 
-                  if (isSubMinimized) {
-                    const minimizedPos = getSubPropertyMinimizedPosition(sp);
-                    const leaderColor = getLeaderColor(auction);
-
-                    return (
-                      <React.Fragment key={`minimized-frag-${pinKey}`}>
-                        {/* Connecting Dashed Leader Line from Parcel Center to Minimized Side Pin */}
-                        <Polyline
-                          key={`leader-${pinKey}`}
-                          positions={[
-                            [sp.latitude, sp.longitude],
-                            minimizedPos,
-                          ]}
-                          pathOptions={{
-                            color: leaderColor,
-                            dashArray: '3, 4',
-                            weight: 2,
-                            opacity: 0.85,
-                          }}
-                        />
-                        {/* Center Anchor Dot */}
-                        <CircleMarker
-                          key={`anchor-${pinKey}`}
-                          center={[sp.latitude, sp.longitude]}
-                          radius={4}
-                          pathOptions={{
-                            color: '#ffffff',
-                            fillColor: leaderColor,
-                            fillOpacity: 1,
-                            weight: 2,
-                          }}
-                        />
-                        {/* Minimized Small Circle Pin on the Side */}
-                        <Marker
-                          key={`min-marker-${pinKey}`}
-                          position={minimizedPos}
-                          icon={createSubPropertyMinimizedIcon(auction, sp)}
-                          eventHandlers={{
-                            click: (e) => {
-                              L.DomEvent.stopPropagation(e as any);
-                              setMinimizedPinId(null);
-                            },
-                          }}
-                        />
-                      </React.Fragment>
-                    );
-                  }
+                  const minimizedPos = getSubPropertyMinimizedPosition(sp);
+                  const leaderColor = getLeaderColor(auction);
 
                   return (
-                    <Marker
-                      key={`portfolio-pin-${auction.id}-sub-${sp.parcel_index}`}
-                      position={[sp.latitude, sp.longitude]}
-                      icon={createSubPropertyIcon(auction, sp, isSelected, isSubSelected)}
-                      eventHandlers={{
-                        click: (e) => {
-                          const target = (e as any).originalEvent?.target as HTMLElement;
-                          if (target && target.closest('.pin-close-btn')) {
-                            return;
-                          }
-                          if (onSelectAuction) onSelectAuction(auction);
-                          if (onSelectSubProperty) onSelectSubProperty(auction, sp);
-                        },
-                      }}
-                    />
+                    <React.Fragment key={`sub-parcel-group-${pinKey}`}>
+                      {/* Connecting Dashed Leader Line & Center Anchor Dot when minimized */}
+                      {isSubMinimized && (
+                        <>
+                          <Polyline
+                            key={`leader-${pinKey}`}
+                            positions={[
+                              [sp.latitude, sp.longitude],
+                              minimizedPos,
+                            ]}
+                            pathOptions={{
+                              color: leaderColor,
+                              dashArray: '3, 4',
+                              weight: 2,
+                              opacity: 0.85,
+                            }}
+                          />
+                          <CircleMarker
+                            key={`anchor-${pinKey}`}
+                            center={[sp.latitude, sp.longitude]}
+                            radius={4}
+                            pathOptions={{
+                              color: '#ffffff',
+                              fillColor: leaderColor,
+                              fillOpacity: 1,
+                              weight: 2,
+                            }}
+                          />
+                        </>
+                      )}
+
+                      {/* Unified single Marker for this sub-property */}
+                      <Marker
+                        key={`marker-${pinKey}`}
+                        position={isSubMinimized ? minimizedPos : [sp.latitude, sp.longitude]}
+                        icon={
+                          isSubMinimized
+                            ? createSubPropertyMinimizedIcon(auction, sp)
+                            : createSubPropertyIcon(auction, sp, isSelected, isSubSelected)
+                        }
+                        eventHandlers={{
+                          click: (e) => {
+                            if (isSubMinimized) {
+                              L.DomEvent.stopPropagation(e as any);
+                              setMinimizedPinId(null);
+                              return;
+                            }
+                            const target = (e as any).originalEvent?.target as HTMLElement;
+                            if (target && target.closest('.pin-close-btn')) {
+                              return;
+                            }
+                            if (onSelectAuction) onSelectAuction(auction);
+                            if (onSelectSubProperty) onSelectSubProperty(auction, sp);
+                          },
+                        }}
+                      />
+                    </React.Fragment>
                   );
                 })}
               </React.Fragment>
             );
           }
 
-          // When the selected standard single property pin is minimized:
-          if (isThisAuctionMinimized && isSelected) {
-            const minimizedPos = getMinimizedPosition(auction);
-            const leaderColor = getLeaderColor(auction);
-
-            return (
-              <React.Fragment key={`minimized-frag-${auction.id}`}>
-                {/* Connecting Dashed Leader Line from Property Center to Minimized Side Pin */}
-                <Polyline
-                  key={`leader-${auction.id}`}
-                  positions={[
-                    [auction.latitude!, auction.longitude!],
-                    minimizedPos,
-                  ]}
-                  pathOptions={{
-                    color: leaderColor,
-                    dashArray: '3, 4',
-                    weight: 2,
-                    opacity: 0.85,
-                  }}
-                />
-                {/* Center Anchor Dot */}
-                <CircleMarker
-                  key={`anchor-${auction.id}`}
-                  center={[auction.latitude!, auction.longitude!]}
-                  radius={4}
-                  pathOptions={{
-                    color: '#ffffff',
-                    fillColor: leaderColor,
-                    fillOpacity: 1,
-                    weight: 2,
-                  }}
-                />
-                {/* Minimized Small Circle Pin on the Side */}
-                <Marker
-                  key={`min-marker-${auction.id}`}
-                  position={minimizedPos}
-                  icon={createMinimizedIcon(auction)}
-                  eventHandlers={{
-                    click: () => {
-                      setMinimizedPinId(null);
-                    },
-                  }}
-                />
-              </React.Fragment>
-            );
-          }
-
-          // If ANY pin is minimized, hide any other overlapping / co-located auction pins so parcel is 100% visible
-          if (isAnyMinimized && isCoLocated) {
-            return null;
-          }
-
+          // Single standard auction:
+          const isThisAuctionMinimizedAndSelected = Boolean(isThisAuctionMinimized && isSelected);
+          const minimizedPos = getMinimizedPosition(auction);
+          const leaderColor = getLeaderColor(auction);
           const lat = auction.latitude!;
           const lng = auction.longitude!;
 
           return (
-            <Marker
-              key={`auction-pin-${auction.id}`}
-              position={[lat, lng]}
-              icon={createColorCodedIcon(auction, isSelected)}
-              eventHandlers={{
-                click: () => {
-                  if (onSelectAuction) onSelectAuction(auction);
-                },
-              }}
-            />
+            <React.Fragment key={`auction-group-${auction.id}`}>
+              {/* Connecting Dashed Leader Line & Center Anchor Dot when minimized */}
+              {isThisAuctionMinimizedAndSelected && (
+                <>
+                  <Polyline
+                    key={`leader-${auction.id}`}
+                    positions={[
+                      [lat, lng],
+                      minimizedPos,
+                    ]}
+                    pathOptions={{
+                      color: leaderColor,
+                      dashArray: '3, 4',
+                      weight: 2,
+                      opacity: 0.85,
+                    }}
+                  />
+                  <CircleMarker
+                    key={`anchor-${auction.id}`}
+                    center={[lat, lng]}
+                    radius={4}
+                    pathOptions={{
+                      color: '#ffffff',
+                      fillColor: leaderColor,
+                      fillOpacity: 1,
+                      weight: 2,
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Unified single Marker for this auction */}
+              <Marker
+                key={`marker-${auction.id}`}
+                position={isThisAuctionMinimizedAndSelected ? minimizedPos : [lat, lng]}
+                icon={
+                  isThisAuctionMinimizedAndSelected
+                    ? createMinimizedIcon(auction)
+                    : createColorCodedIcon(auction, isSelected)
+                }
+                eventHandlers={{
+                  click: (e) => {
+                    if (isThisAuctionMinimizedAndSelected) {
+                      L.DomEvent.stopPropagation(e as any);
+                      setMinimizedPinId(null);
+                      return;
+                    }
+                    const target = (e as any).originalEvent?.target as HTMLElement;
+                    if (target && target.closest('.pin-close-btn')) {
+                      return;
+                    }
+                    if (onSelectAuction) onSelectAuction(auction);
+                  },
+                }}
+              />
+            </React.Fragment>
           );
         })}
       </MapContainer>
